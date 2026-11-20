@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
 import { detectTextLanguage, LANG_NAMES, type Lang } from "@/lib/lang";
-import type { ClientAction, Reminder } from "@/lib/tools/types";
+import type { ClientAction, Reminder, Title, VoiceStyle } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 
 type Phase = "idle" | "listening" | "thinking" | "speaking";
@@ -39,6 +39,7 @@ export default function Assistant() {
   const [callAction, setCallAction] = useState<CallAction | null>(null);
   const [alarm, setAlarm] = useState<Reminder | null>(null);
   const [panel, setPanel] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { device, update } = useDevice();
   const deviceRef = useRef(device);
   useEffect(() => {
@@ -90,11 +91,11 @@ export default function Assistant() {
   }, []);
 
   const speak = useCallback(
-    async (text: string, l: Lang) => {
+    async (text: string, l: Lang, voice?: VoiceStyle) => {
       const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, lang: l }),
+        body: JSON.stringify({ text, lang: l, voice: voice ?? deviceRef.current.settings?.voice ?? "jarvis" }),
       }).catch(() => null);
       if (!res?.ok) {
         setNotice(UI[l].voiceOffline);
@@ -361,7 +362,49 @@ export default function Assistant() {
         <button className="pill" onClick={() => setPanel((v) => !v)} aria-expanded={panel}>
           <span aria-hidden>🧠</span> {t.memory}
         </button>
+        <button className="pill" onClick={() => setSettingsOpen((v) => !v)} aria-expanded={settingsOpen}>
+          <span aria-hidden>⚙</span> {t.settings}
+        </button>
       </footer>
+
+      {settingsOpen && (
+        <section className="panel" aria-label={t.settings}>
+          <h2>
+            <span aria-hidden>🔊</span> {t.voice}
+          </h2>
+          <div className="choices">
+            {(["jarvis", "friday"] as const).map((v) => (
+              <button
+                key={v}
+                className="pill"
+                aria-pressed={(device.settings?.voice ?? "jarvis") === v}
+                disabled={phase !== "idle"}
+                onClick={() => {
+                  update((d) => ({ ...d, settings: { ...d.settings, voice: v } }));
+                  void speak(t.voiceSample, lang, v);
+                }}
+              >
+                {v === "jarvis" ? t.voiceJarvis : t.voiceFriday}
+              </button>
+            ))}
+          </div>
+          <h2>
+            <span aria-hidden>🎩</span> {t.address}
+          </h2>
+          <div className="choices">
+            {(["mr", "mrs", ""] as Title[]).map((v) => (
+              <button
+                key={v || "none"}
+                className="pill"
+                aria-pressed={(device.settings?.title ?? "") === v}
+                onClick={() => update((d) => ({ ...d, settings: { ...d.settings, title: v } }))}
+              >
+                {v === "mr" ? t.addressMr : v === "mrs" ? t.addressMrs : t.addressNone}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {panel && (
         <section className="panel" aria-label={t.memory}>

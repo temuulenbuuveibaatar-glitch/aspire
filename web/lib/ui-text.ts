@@ -28,6 +28,15 @@ export const UI: Record<
     call: string;
     reminderNow: string;
     close: string;
+    settings: string;
+    voice: string;
+    voiceJarvis: string;
+    voiceFriday: string;
+    address: string;
+    addressMr: string;
+    addressMrs: string;
+    addressNone: string;
+    voiceSample: string;
   }
 > = {
   mn: {
@@ -55,6 +64,15 @@ export const UI: Record<
     call: "Залгах",
     reminderNow: "Сануулга",
     close: "Хаах",
+    settings: "Тохиргоо",
+    voice: "Дуу хоолой",
+    voiceJarvis: "Jarvis (эрэгтэй)",
+    voiceFriday: "Friday (эмэгтэй)",
+    address: "Хэрхэн хандах",
+    addressMr: "Ноён",
+    addressMrs: "Хатагтай",
+    addressNone: "Хэлэхгүй",
+    voiceSample: "Таны үйлчилгээнд бэлэн байна.",
   },
   zh: {
     idle: "按下说话",
@@ -81,6 +99,15 @@ export const UI: Record<
     call: "拨打",
     reminderNow: "提醒",
     close: "关闭",
+    settings: "设置",
+    voice: "声音",
+    voiceJarvis: "Jarvis（男声）",
+    voiceFriday: "Friday（女声）",
+    address: "称呼",
+    addressMr: "先生",
+    addressMrs: "女士",
+    addressNone: "不用称呼",
+    voiceSample: "随时为您效劳。",
   },
   en: {
     idle: "Press and speak",
@@ -107,6 +134,15 @@ export const UI: Record<
     call: "Call",
     reminderNow: "Reminder",
     close: "Close",
+    settings: "Settings",
+    voice: "Voice",
+    voiceJarvis: "Jarvis (male)",
+    voiceFriday: "Friday (female)",
+    address: "Call me",
+    addressMr: "Mr.",
+    addressMrs: "Mrs.",
+    addressNone: "No title",
+    voiceSample: "At your service.",
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -133,6 +169,15 @@ export const UI: Record<
     call: "Позвонить",
     reminderNow: "Напоминание",
     close: "Закрыть",
+    settings: "Настройки",
+    voice: "Голос",
+    voiceJarvis: "Jarvis (мужской)",
+    voiceFriday: "Friday (женский)",
+    address: "Обращение",
+    addressMr: "Господин",
+    addressMrs: "Госпожа",
+    addressNone: "Без обращения",
+    voiceSample: "К вашим услугам.",
   },
   de: {
     idle: "Drücken und sprechen",
@@ -159,5 +204,14 @@ export const UI: Record<
     call: "Anrufen",
     reminderNow: "Erinnerung",
     close: "Schließen",
+    settings: "Einstellungen",
+    voice: "Stimme",
+    voiceJarvis: "Jarvis (männlich)",
+    voiceFriday: "Friday (weiblich)",
+    address: "Anrede",
+    addressMr: "Herr",
+    addressMrs: "Frau",
+    addressNone: "Ohne Anrede",
+    voiceSample: "Stets zu Diensten.",
   },
 };

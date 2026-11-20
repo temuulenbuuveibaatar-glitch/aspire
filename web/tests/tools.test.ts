@@ -83,12 +83,13 @@ describe("trip planner", () => {
 
 describe("world tools (network mocked)", () => {
   it("weather for Erdenet without geocoding, failures marked in steps", async () => {
-    const fetchMock = vi.fn(async (_url: string) =>
-      Response.json({
+    const fetchMock = vi.fn(async (url: string) => {
+      void url;
+      return Response.json({
         current: { temperature_2m: -24, apparent_temperature: -31, weather_code: 71, wind_speed_10m: 12, relative_humidity_2m: 70 },
         daily: { time: ["2026-11-20"], temperature_2m_max: [-15], temperature_2m_min: [-28], weather_code: [3], precipitation_probability_max: [10] },
-      }),
-    );
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
     const { out, steps } = await run("get_weather", { place: "" });
     expect(out.now).toMatchObject({ temperatureC: -24, feelsLikeC: -31, conditions: "light snow" });

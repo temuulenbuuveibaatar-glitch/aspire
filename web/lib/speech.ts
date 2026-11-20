@@ -1,12 +1,15 @@
 // Speech: listening (speech-to-text + language) and talking (text-to-speech).
 //
-// Two engines:
-//  - "gemini"    Google Gemini API (free tier): no server to run. Default when
-//                GEMINI_API_KEY is set and SPEECH_URL is not.
+// Three engines, tried in order (the next one is used if one fails):
 //  - "omnivoice" our own engine (speech/ folder: Whisper + OmniVoice) on a GPU box.
+//  - "azure"     Azure Speech (free F0 tier: 500k voice characters + 5 h listening
+//                a month). Neural voices for all 5 languages incl. Mongolian.
+//  - "gemini"    Google Gemini API.
+// SPEECH_PROVIDER=azure|gemini|omnivoice puts one engine first.
 // There is deliberately no browser speech fallback.
 
-import { isLang, LANG_NAMES, type Lang } from "@/lib/lang";
+import { detectTextLanguage, greetingLanguage, isLang, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
+import type { VoiceStyle } from "@/lib/tools/types";
 
 export class SpeechOffline extends Error {
   constructor(msg = "Speech engine is not configured or not reachable") {
@@ -24,29 +27,228 @@ export interface Audio {
   contentType: string;
 }
 
-type Engine = "gemini" | "omnivoice";
+type Engine = "omnivoice" | "azure" | "gemini";
+
+const configured: Record<Engine, () => boolean> = {
+  omnivoice: () => !!process.env.SPEECH_URL,
+  azure: () => !!process.env.AZURE_SPEECH_KEY && !!(process.env.AZURE_SPEECH_REGION || process.env.AZURE_SPEECH_ENDPOINT),
+  gemini: () => !!process.env.GEMINI_API_KEY,
+};
+
+/** Configured engines, best first. */
+export function speechEngines(): Engine[] {
+  const forced = process.env.SPEECH_PROVIDER?.toLowerCase() as Engine | undefined;
+  const order: Engine[] = ["omnivoice", "azure", "gemini"];
+  if (forced && order.includes(forced)) order.sort((a, b) => Number(b === forced) - Number(a === forced));
+  return order.filter((e) => configured[e]());
+}
 
 export function speechEngine(): Engine | null {
-  const forced = process.env.SPEECH_PROVIDER?.toLowerCase();
-  if (forced === "gemini") return process.env.GEMINI_API_KEY ? "gemini" : null;
-  if (forced === "omnivoice") return process.env.SPEECH_URL ? "omnivoice" : null;
-  if (process.env.SPEECH_URL) return "omnivoice";
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  return null;
+  return speechEngines()[0] ?? null;
+}
+
+async function firstWorking<T>(what: string, run: Record<Engine, () => Promise<T>>): Promise<T> {
+  let lastError: unknown = new SpeechOffline();
+  for (const engine of speechEngines()) {
+    try {
+      return await run[engine]();
+    } catch (e) {
+      lastError = e;
+      console.error(`${what}: ${engine} failed:`, e instanceof Error ? e.message.slice(0, 200) : e);
+    }
+  }
+  throw lastError instanceof SpeechOffline ? lastError : new SpeechOffline(String(lastError));
 }
 
 export async function transcribe(audio: Blob): Promise<SttResult> {
-  const engine = speechEngine();
-  if (engine === "gemini") return geminiTranscribe(audio);
-  if (engine === "omnivoice") return omnivoiceTranscribe(audio);
-  throw new SpeechOffline();
+  return firstWorking("listen", {
+    omnivoice: () => omnivoiceTranscribe(audio),
+    azure: () => azureTranscribe(audio),
+    gemini: () => geminiTranscribe(audio),
+  });
 }
 
-export async function synthesize(text: string, lang: Lang): Promise<Audio> {
-  const engine = speechEngine();
-  if (engine === "gemini") return geminiSpeak(text, lang);
-  if (engine === "omnivoice") return omnivoiceSpeak(text, lang);
-  throw new SpeechOffline();
+export async function synthesize(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): Promise<Audio> {
+  return firstWorking("speak", {
+    omnivoice: () => omnivoiceSpeak(text, lang),
+    azure: () => azureSpeak(text, lang, voice),
+    gemini: () => geminiSpeak(text, lang, voice),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Azure Speech (REST: fast transcription + neural text-to-speech)
+
+const AZURE_LOCALES: Record<Lang, string> = { mn: "mn-MN", zh: "zh-CN", en: "en-US", ru: "ru-RU", de: "de-DE" };
+// "jarvis" = calm male butler voices (British English, like the films);
+// "friday" = female voices (Irish English, like FRIDAY). Override with
+// AZURE_VOICE_JARVIS_MN, AZURE_VOICE_FRIDAY_EN, ...
+export const AZURE_VOICES: Record<VoiceStyle, Record<Lang, string>> = {
+  jarvis: {
+    mn: "mn-MN-BataaNeural",
+    zh: "zh-CN-YunyangNeural",
+    en: "en-GB-RyanNeural",
+    ru: "ru-RU-DmitryNeural",
+    de: "de-DE-ConradNeural",
+  },
+  friday: {
+    mn: "mn-MN-YesuiNeural",
+    zh: "zh-CN-XiaoxiaoNeural",
+    en: "en-IE-EmilyNeural",
+    ru: "ru-RU-SvetlanaNeural",
+    de: "de-DE-KatjaNeural",
+  },
+};
+const azureVoice = (lang: Lang, voice: VoiceStyle) =>
+  process.env[`AZURE_VOICE_${voice.toUpperCase()}_${lang.toUpperCase()}`] || AZURE_VOICES[voice][lang];
+const AZURE_RATE = () => process.env.AZURE_SPEECH_RATE ?? "0%";
+const azureAudioCache = new Map<string, Uint8Array<ArrayBuffer>>();
+
+function azureSttUrl() {
+  const base = process.env.AZURE_SPEECH_ENDPOINT?.replace(/\/$/, "") || `https://${process.env.AZURE_SPEECH_REGION}.api.cognitive.microsoft.com`;
+  return `${base}/speechtotext/transcriptions:transcribe?api-version=2025-10-15`;
+}
+
+class NoLanguageHeard extends Error {}
+
+interface AzurePass {
+  text: string;
+  phrases: Array<{ text?: string; locale?: string; confidence?: number }>;
+}
+
+/** One fast-transcription request; retries briefly when the free tier says "too many requests". */
+async function azureRequest(audio: Blob, locales: string[]): Promise<AzurePass> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await azureFetch(audio, locales);
+    if (res.status === 429 && attempt < 2) {
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+      continue;
+    }
+    if (res.status === 422) throw new NoLanguageHeard();
+    if (!res.ok) throw new SpeechOffline(`Azure listening error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const r = (await res.json()) as { combinedPhrases?: Array<{ text?: string }>; phrases?: AzurePass["phrases"] };
+    return { text: (r.combinedPhrases ?? []).map((p) => p.text ?? "").join(" ").trim(), phrases: r.phrases ?? [] };
+  }
+}
+
+/** Short clips ("hi", "ni hao") are too short for Azure's language detection,
+ *  so each language transcribes them and the one whose words fit its own
+ *  language wins (greetings first, then script/words, then confidence). */
+export function pickShortClip(
+  tries: Array<{ lang: Lang; text: string; confidence: number }>,
+  detected: Lang | null,
+): { lang: Lang; text: string } | null {
+  const valid = tries.filter((t) => t.text.trim());
+  // Chinese recognition maps almost any short sound to characters with high confidence.
+  const score = (t: { lang: Lang; confidence: number }) => t.confidence - (t.lang === "zh" ? 0.25 : 0);
+  const best = <T extends { lang: Lang; confidence: number }>(list: T[]) => list.sort((a, b) => score(b) - score(a))[0];
+  return (
+    best(valid.filter((t) => greetingLanguage(t.text) === t.lang)) ??
+    valid.find((t) => t.lang === detected && detectTextLanguage(t.text) === t.lang) ??
+    best(valid.filter((t) => detectTextLanguage(t.text) === t.lang)) ??
+    best(valid) ??
+    null
+  );
+}
+
+const isShort = (text: string) => text.replace(/[\p{P}\p{S}\s]/gu, "").length <= 12;
+
+async function azureTranscribe(audio: Blob): Promise<SttResult> {
+  let lid: AzurePass | null = null;
+  try {
+    lid = await azureRequest(audio, Object.values(AZURE_LOCALES));
+  } catch (e) {
+    if (!(e instanceof NoLanguageHeard)) throw e;
+  }
+  if (lid && !isShort(lid.text)) return lidResult(lid);
+
+  const detected = lid ? (lidResult(lid).language as Lang) : null;
+  const tries = await Promise.all(
+    LANGS.map(async (lang) => {
+      try {
+        const r = await azureRequest(audio, [AZURE_LOCALES[lang]]);
+        const c = r.phrases.map((p) => p.confidence ?? 0);
+        return { lang, text: r.text, confidence: c.length ? c.reduce((a, b) => a + b, 0) / c.length : 0 };
+      } catch {
+        return { lang, text: "", confidence: 0 };
+      }
+    }),
+  );
+  const pick = pickShortClip(tries, isLang(detected) ? detected : null);
+  if (!pick) return lid ? lidResult(lid) : { text: "", language: "", probs: {} };
+  return { text: pick.text, language: pick.lang, probs: { [pick.lang]: 0.9 } };
+}
+
+function azureFetch(audio: Blob, locales: string[]): Promise<Response> {
+  const form = new FormData();
+  const ext = { "audio/mpeg": "mp3", "audio/wav": "wav", "audio/ogg": "ogg", "audio/mp4": "m4a" }[(audio.type || "").split(";")[0]] ?? "webm";
+  form.append("audio", audio, `speech.${ext}`);
+  form.append("definition", JSON.stringify({ locales, profanityFilterMode: "None" }));
+  return fetch(azureSttUrl(), {
+    method: "POST",
+    headers: { "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "" },
+    body: form,
+    signal: AbortSignal.timeout(20_000),
+  }).catch((e) => {
+    throw new SpeechOffline(String(e));
+  });
+}
+
+function lidResult(r: AzurePass): SttResult {
+  const text = r.text;
+  // Weight each detected locale by how much text it covered.
+  const probs: Record<string, number> = {};
+  let total = 0;
+  for (const p of r.phrases ?? []) {
+    const lang = p.locale?.slice(0, 2).toLowerCase();
+    const n = (p.text ?? "").length;
+    if (!lang || !n) continue;
+    probs[lang] = (probs[lang] ?? 0) + n;
+    total += n;
+  }
+  for (const k of Object.keys(probs)) probs[k] = probs[k] / total;
+  const language = Object.entries(probs).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  return { text, language, probs };
+}
+
+const xml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+export function azureSsml(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): string {
+  const name = azureVoice(lang, voice);
+  const locale = /^[a-z]{2,3}-[A-Z]{2}/.exec(name)?.[0] ?? AZURE_LOCALES[lang];
+  return (
+    `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${locale}">` +
+    `<voice name="${xml(name)}"><prosody rate="${xml(AZURE_RATE())}">${xml(text)}</prosody></voice></speak>`
+  );
+}
+
+async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<Audio> {
+  const key = `${voice}:${lang}:${text}`;
+  const cached = azureAudioCache.get(key);
+  if (cached) return { body: cached, contentType: "audio/mpeg" };
+  const region = process.env.AZURE_SPEECH_REGION;
+  const url = region
+    ? `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`
+    : `${process.env.AZURE_SPEECH_ENDPOINT!.replace(/\/$/, "")}/tts/cognitiveservices/v1`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
+      "Content-Type": "application/ssml+xml",
+      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+      "User-Agent": "emee-tovch",
+    },
+    body: azureSsml(text, lang, voice),
+    signal: AbortSignal.timeout(20_000),
+  }).catch((e) => {
+    throw new SpeechOffline(String(e));
+  });
+  if (!res.ok) throw new SpeechOffline(`Azure voice error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const mp3 = new Uint8Array(await res.arrayBuffer());
+  if (!mp3.length) throw new SpeechOffline("Azure returned no audio");
+  if (azureAudioCache.size > 300) azureAudioCache.delete(azureAudioCache.keys().next().value!);
+  azureAudioCache.set(key, mp3);
+  return { body: mp3, contentType: "audio/mpeg" };
 }
 
 // ---------------------------------------------------------------------------
@@ -70,9 +272,14 @@ const TTS_MODELS = () =>
     .filter(Boolean);
 // Same sentence -> same audio: reuse it instead of spending quota again.
 const ttsCache = new Map<string, Uint8Array<ArrayBuffer>>();
-const TTS_VOICE = () => process.env.GEMINI_TTS_VOICE ?? "Sulafat"; // "Warm"
-const TTS_STYLE =
-  process.env.GEMINI_TTS_STYLE ?? "warm, gentle and caring, like a kind grandchild; speaking slowly and clearly";
+const TTS_VOICES: Record<VoiceStyle, () => string> = {
+  jarvis: () => process.env.GEMINI_TTS_VOICE_JARVIS ?? "Charon", // "Informative"
+  friday: () => process.env.GEMINI_TTS_VOICE_FRIDAY ?? "Sulafat", // "Warm"
+};
+const TTS_STYLES: Record<VoiceStyle, string> = {
+  jarvis: "calm, confident and polished, like a refined AI butler; clear, natural pace",
+  friday: "warm, bright and friendly AI assistant; clear, natural pace",
+};
 
 interface InteractionContent {
   type?: string;
@@ -145,8 +352,8 @@ async function geminiTranscribe(audio: Blob): Promise<SttResult> {
   return { text, language, probs: isLang(language) ? { [language]: 0.9 } : {} };
 }
 
-async function geminiSpeak(text: string, lang: Lang): Promise<Audio> {
-  const key = `${lang}:${text}`;
+async function geminiSpeak(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): Promise<Audio> {
+  const key = `${voice}:${lang}:${text}`;
   const cached = ttsCache.get(key);
   if (cached) return { body: cached, contentType: "audio/wav" };
 
@@ -163,13 +370,13 @@ async function geminiSpeak(text: string, lang: Lang): Promise<Audio> {
                 {
                   type: "text",
                   text,
-                  annotations: [{ type: "speech_metadata", style: `${TTS_STYLE}; ${LANG_NAMES[lang].english}` }],
+                  annotations: [{ type: "speech_metadata", style: `${TTS_STYLES[voice]}; ${LANG_NAMES[lang].english}` }],
                 },
               ],
             },
           ],
           response_format: { type: "audio" },
-          generation_config: { speech_config: [{ voice: TTS_VOICE() }] },
+          generation_config: { speech_config: [{ voice: TTS_VOICES[voice]() }] },
         },
         30_000,
       );

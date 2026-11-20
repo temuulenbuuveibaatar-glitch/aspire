@@ -71,3 +71,16 @@ describe("brain chain (any AI)", () => {
     expect(localBodies[0].messages[0].content).toContain("Reply only in Mongolian");
   });
 });
+
+describe("Mr / Mrs address", () => {
+  it("tells the AI which courtesy title to use, in the reply language", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const run = (title: "mr" | "mrs" | "") => ({
+      ctx: { now: new Date(), device: { memory: {}, reminders: [], settings: { title } }, actions: [] },
+      steps: [],
+    });
+    expect(contextNote("mn", run("mr"))).toContain("Ноён");
+    expect(contextNote("de", run("mrs"))).toContain("Frau");
+    expect(contextNote("en", run(""))).toContain("polite form without a gendered title");
+  });
+});

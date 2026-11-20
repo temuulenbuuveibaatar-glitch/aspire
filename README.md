@@ -16,6 +16,7 @@ It knows when the next bus comes and looks up anything else on the web.
 | Provider | Env | Notes |
 |---|---|---|
 | Claude (`claude-opus-5-5`) | `ANTHROPIC_API_KEY` | Web search + bus tool; Anthropic refusal fallback on |
+| DeepSeek (`deepseek-chat`) | `DEEPSEEK_API_KEY` | Same agent tools (OpenAI-compatible) |
 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY` | Google Search + bus tool |
 | Local / self-hosted (Qwen2.5 via Ollama, LM Studio, vLLM) | `LOCAL_LLM_URL` | Any OpenAI-compatible server; bus tool, no web search |
 
@@ -29,7 +30,9 @@ npm run dev                  # http://localhost:3000
 npm test                     # language detection + bus timetable tests
 ```
 
-**Voice, free:** with just `GEMINI_API_KEY`, Gemini does the listening (speech-to-text + language) and the talking (warm "Sulafat" voice; Halh Mongolian, Chinese, English, Russian, German). No server to run. Set `SPEECH_URL` instead to use the self-hosted OmniVoice engine. There is no browser voice fallback.
+**Voice (default): Azure Speech**, free F0 tier. Set `AZURE_SPEECH_KEY` + `AZURE_SPEECH_REGION`. Two voice styles you pick in ⚙ Settings: **Jarvis** (male: Bataa for Mongolian, Ryan en-GB, Yunyang, Dmitry, Conrad) and **Friday** (female: Yesui, Emily en-IE, Xiaoxiao, Svetlana, Katja). The assistant calls you Mr. or Mrs. in your language if you choose it. Short greetings ("hi", "ni hao") are checked in all 5 languages so the right one wins.
+
+**Voice, alternative:** with just `GEMINI_API_KEY`, Gemini does the listening (speech-to-text + language) and the talking (warm "Sulafat" voice; Halh Mongolian, Chinese, English, Russian, German). No server to run. Set `SPEECH_URL` instead to use the self-hosted OmniVoice engine. There is no browser voice fallback.
 
 One free Gemini key from https://aistudio.google.com/apikey runs the whole app (brain + ears + voice).
 

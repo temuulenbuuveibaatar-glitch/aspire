@@ -15,10 +15,20 @@ export interface Reminder {
   repeatDaily: boolean;
 }
 
+export type VoiceStyle = "jarvis" | "friday";
+export type Title = "mr" | "mrs" | "";
+
+/** The person's choices from the settings panel. */
+export interface Settings {
+  voice?: VoiceStyle;
+  title?: Title;
+}
+
 /** What the device tells us about the person (stored only on their device). */
 export interface DeviceContext {
   memory: Record<string, string>;
   reminders: Reminder[];
+  settings?: Settings;
 }
 
 export interface ToolContext {

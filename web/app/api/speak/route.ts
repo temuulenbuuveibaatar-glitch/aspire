@@ -5,17 +5,17 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
-// POST { text, lang } -> audio/wav from our own voice engine
+// POST { text, lang, voice?: "jarvis" | "friday" } -> audio
 export async function POST(req: Request) {
   const limited = rateLimit(req, "speak", 30);
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => null)) as { text?: unknown; lang?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { text?: unknown; lang?: unknown; voice?: unknown } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 600) : "";
   if (!text || !isLang(body?.lang)) return Response.json({ error: "text and lang are required" }, { status: 400 });
 
   try {
-    const audio = await synthesize(text, body.lang);
+    const audio = await synthesize(text, body.lang, body.voice === "friday" ? "friday" : "jarvis");
     return new Response(audio.body, {
       headers: { "Content-Type": audio.contentType, "Cache-Control": "no-store" },
     });

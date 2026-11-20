@@ -4,21 +4,21 @@ import type { Lang } from "@/lib/lang";
 import type { ClientAction, DeviceContext, ToolStep } from "@/lib/tools";
 import { claude } from "./claude";
 import { gemini } from "./gemini";
-import { local } from "./local";
+import { deepseek, local } from "./local";
 import type { AgentRun, Brain, Turn } from "./shared";
 
 export type { Turn } from "./shared";
 
-const ALL: Record<string, Brain> = { claude, gemini, local };
+const ALL: Record<string, Brain> = { claude, deepseek, gemini, local };
 
 export class NoBrainConfigured extends Error {
   constructor() {
-    super("No AI provider is configured (set ANTHROPIC_API_KEY, GEMINI_API_KEY or LOCAL_LLM_URL)");
+    super("No AI provider is configured (set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY or LOCAL_LLM_URL)");
   }
 }
 
 export function activeBrains(): Brain[] {
-  const order = (process.env.BRAIN_ORDER ?? "claude,gemini,local")
+  const order = (process.env.BRAIN_ORDER ?? "claude,deepseek,gemini,local")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter((s) => s in ALL);

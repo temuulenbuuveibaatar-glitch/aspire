@@ -38,7 +38,7 @@ export function applyActions(d: DeviceContext, actions: ClientAction[]): DeviceC
     if (a.type === "cancel_reminder") reminders = reminders.filter((r) => r.id !== a.id);
   }
   reminders.sort((a, b) => a.at.localeCompare(b.at));
-  return { memory, reminders };
+  return { ...d, memory, reminders };
 }
 
 /** Reminders that are due now, and the list with them rescheduled (daily) or removed. */
