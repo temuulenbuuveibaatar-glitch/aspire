@@ -9,6 +9,9 @@ The code in this repository is MIT-licensed. It uses, but does not include, the 
 | [Anthropic Claude API](https://www.anthropic.com/legal) | Brain + web search | Anthropic's commercial terms |
 | [Google Gemini API](https://ai.google.dev/gemini-api/terms) | Brain, speech recognition and voice (default speech engine) | Gemini API terms. On the free tier Google may use content to improve its products |
 | Qwen2.5 via Ollama (optional, local) | Offline brain | Qwen license (see model card) |
+| [Open-Meteo](https://open-meteo.com) | Weather and air quality | Free for non-commercial use, CC BY 4.0 data |
+| [Wikipedia](https://www.wikipedia.org) | Encyclopedia tool | CC BY-SA text |
+| [ExchangeRate-API open access](https://www.exchangerate-api.com/docs/free) | Exchange rates | Free with attribution |
 | Next.js, React | Web app | MIT |
 | Nunito, Orbitron fonts | UI | SIL Open Font License |
 

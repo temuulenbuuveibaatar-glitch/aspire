@@ -35,6 +35,19 @@ export default function Privacy() {
           Тиймээс нэр, хаяг, утасны дугаар зэрэг хувийн мэдээллээ бүү хэлээрэй. Сайтыг Vercel дээр байршуулдаг.
         </p>
 
+        <h2>Санах ой ба сануулга</h2>
+        <p>
+          Таны хэлсэн мэдээлэл (жишээ нь, ойр байдаг буудал, гэр бүлийн гишүүний утас) болон сануулгууд зөвхөн{" "}
+          <b>таны төхөөрөмж дээр</b> хадгалагдана. Асуулт асуух үед хариулт гаргахын тулд түр илгээгдэх боловч бид
+          хадгалдаггүй. &quot;Санах ой&quot; товчоор хэзээ ч харж, устгах боломжтой. Нууц үг, картын дугаар, ПИН кодыг
+          туслах хадгалахаас татгалзана.
+        </p>
+        <h2>Бусад нээлттэй үйлчилгээ</h2>
+        <p>
+          Цаг агаар, агаарын бохирдлыг Open-Meteo, мэдлэгийг Wikipedia, валютын ханшийг open.er-api.com-оос авна. Эдгээрт
+          зөвхөн хотын нэр, хайх үг илгээгдэнэ; таны нэр эсвэл байршил илгээгдэхгүй.
+        </p>
+
         <h2>Таны эрх</h2>
         <p>
           Монгол Улсын Хувь хүний мэдээлэл хамгаалах тухай хуулийн дагуу та өөрийн мэдээллийн талаар асуух, устгуулах эрхтэй. Бид
@@ -77,6 +90,19 @@ export default function Privacy() {
             review them.
           </b>{" "}
           So please don&apos;t say personal details such as your name, address or phone number. The site is hosted on Vercel.
+        </p>
+
+        <h2>Memory and reminders</h2>
+        <p>
+          Things you ask the assistant to remember (for example your usual bus stop or a family member&apos;s phone number)
+          and your reminders are stored <b>only on your device</b>. They are sent along with a question so it can be
+          answered, and we don&apos;t keep them. You can see and delete them any time with the &quot;Memory&quot; button. The
+          assistant refuses to store passwords, card numbers or PIN codes.
+        </p>
+        <h2>Other open services</h2>
+        <p>
+          Weather and air quality come from Open-Meteo, encyclopedia answers from Wikipedia, and exchange rates from
+          open.er-api.com. Only a place name or search words are sent to them, never your name or location.
         </p>
 
         <h2>Your rights</h2>

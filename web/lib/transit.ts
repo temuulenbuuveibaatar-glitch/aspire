@@ -130,3 +130,51 @@ export function stopDirectory(tt: Timetable = timetable): string {
   );
   return `City: ${tt.city}${tt.sample ? " (SAMPLE timetable for the demo)" : ""}\nStops:\n${lines.join("\n")}\nRoutes:\n${routes.join("\n")}`;
 }
+
+export interface TripOption {
+  route: string;
+  departs: string; // at the start stop
+  arrives: string; // at the destination
+  waitMinutes: number;
+  rideMinutes: number;
+}
+
+/** Direct trips between two stops (no transfers), soonest first. */
+export function planTrip(
+  fromQuery: string,
+  toQuery: string,
+  nowMin: number,
+  tt: Timetable = timetable,
+): { from: Stop; to: Stop; options: TripOption[]; sampleData: boolean } | { error: string; knownStops: string[] } {
+  const from = findStop(fromQuery, tt);
+  const to = findStop(toQuery, tt);
+  if (!from || !to) {
+    return {
+      error: `Unknown stop "${!from ? fromQuery : toQuery}"`,
+      knownStops: tt.stops.map((s) => `${s.id}: ${s.names.mn} / ${s.names.en}`),
+    };
+  }
+  const options: TripOption[] = [];
+  for (const r of tt.routes) {
+    const a = r.stops.find((s) => s.stop === from.id);
+    const b = r.stops.find((s) => s.stop === to.id);
+    if (!a || !b || b.offsetMin <= a.offsetMin) continue;
+    const first = toMin(r.firstDeparture);
+    const last = toMin(r.lastDeparture);
+    for (let dep = first; dep <= last; dep += r.headwayMin) {
+      const at = dep + a.offsetMin;
+      if (at >= nowMin) {
+        options.push({
+          route: r.id,
+          departs: fmt(at),
+          arrives: fmt(dep + b.offsetMin),
+          waitMinutes: at - nowMin,
+          rideMinutes: b.offsetMin - a.offsetMin,
+        });
+        break;
+      }
+    }
+  }
+  options.sort((x, y) => x.waitMinutes - y.waitMinutes);
+  return { from, to, options, sampleData: tt.sample };
+}

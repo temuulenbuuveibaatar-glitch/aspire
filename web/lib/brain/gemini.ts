@@ -1,6 +1,6 @@
 // Google Gemini via the generateContent REST API (function calling + Google Search).
 import type { Lang } from "@/lib/lang";
-import { type Brain, forSpeech, languageNote, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
+import { type Brain, contextNote, forSpeech, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
 const ENDPOINT = (model: string) =>
@@ -18,12 +18,7 @@ interface Content {
   parts: Part[];
 }
 
-// Gemini's schema dialect does not accept `additionalProperties`.
-const declarations = TOOL_SPECS.map((t) => {
-  const { additionalProperties: _drop, ...schema } = t.parameters;
-  void _drop;
-  return { name: t.name, description: t.description, parameters: schema };
-});
+const declarations = TOOL_SPECS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
 
 let searchSupported = process.env.GEMINI_SEARCH !== "0";
 
@@ -63,10 +58,10 @@ export const gemini: Brain = {
   name: "gemini",
   configured: () => Boolean(process.env.GEMINI_API_KEY),
 
-  async ask(text, lang: Lang, history) {
+  async ask(text, lang: Lang, history, run) {
     const contents: Content[] = [
       ...history.map((t): Content => ({ role: t.role === "user" ? "user" : "model", parts: [{ text: t.text }] })),
-      { role: "user", parts: [{ text: `(${languageNote(lang)})\n\n${text}` }] },
+      { role: "user", parts: [{ text: `${text}\n\n(${contextNote(lang, run)})` }] },
     ];
 
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -85,12 +80,14 @@ export const gemini: Brain = {
       contents.push({ role: "model", parts: content.parts });
       contents.push({
         role: "user",
-        parts: calls.map((p) => ({
-          functionResponse: {
-            name: p.functionCall!.name,
-            response: { result: runTool(p.functionCall!.name, p.functionCall!.args ?? {}) },
-          },
-        })),
+        parts: await Promise.all(
+          calls.map(async (p) => ({
+            functionResponse: {
+              name: p.functionCall!.name,
+              response: { result: await runTool(p.functionCall!.name, p.functionCall!.args ?? {}, run) },
+            },
+          })),
+        ),
       });
     }
     throw new Error("Gemini did not finish within the step limit");

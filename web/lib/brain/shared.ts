@@ -1,81 +1,65 @@
-// Shared by every AI provider: instructions, tools and their implementations.
+// Shared by every AI provider: instructions, context and the agent run state.
 import { LANG_NAMES, type Lang } from "@/lib/lang";
-import { localMinutes, nextArrivals, stopDirectory, timetable } from "@/lib/transit";
+import { runTool as runToolImpl, TOOLS, type ToolContext, type ToolStep } from "@/lib/tools";
+import { stopDirectory } from "@/lib/transit";
 
 export interface Turn {
   role: "user" | "assistant";
   text: string;
 }
 
+/** Everything one agent run needs and produces. */
+export interface AgentRun {
+  ctx: ToolContext;
+  steps: ToolStep[];
+}
+
 export interface Brain {
   name: string;
   configured(): boolean;
-  ask(text: string, lang: Lang, history: Turn[]): Promise<string>;
+  ask(text: string, lang: Lang, history: Turn[], run: AgentRun): Promise<string>;
 }
 
-export const MAX_STEPS = 6;
+export const MAX_STEPS = 10;
 
-// Stable instructions. Nothing time-dependent goes here (keeps prompt caching effective).
-export const SYSTEM = `You are "Эмээ товч" (Grandma Button), a warm, patient voice assistant made in Erdenet, Mongolia, for elderly people and anyone who finds phones hard to use. Your answers are read aloud by a speech engine.
+// Stable instructions. Nothing time- or person-dependent goes here (keeps prompt caching effective).
+export const SYSTEM = `You are "Эмээ товч" (Grandma Button), a Jarvis-style voice assistant made in Erdenet, Mongolia, for elderly people and anyone who finds phones hard to use. Your answers are read aloud.
+
+You are an agent: use your tools whenever they give a better answer than memory. Plan briefly, call several tools at once when they are independent (e.g. weather + air quality + next bus for "should I go to the market now?"), check the results, then answer. Never invent bus times, weather, prices, rates or facts a tool can give.
+
+Your tools: bus arrivals and trip planning, local time, weather, air pollution, exchange rates, encyclopedia, calculator, web search (when available), reminders that the device speaks aloud, a memory on the person's device (their usual stop, family names and phone numbers, medicines), and a big call button (emergency numbers or saved family numbers).
 
 How to answer:
 - Answer in the language the note names for this message. Never mix languages. Use simple everyday words.
-- Keep it to 1-3 short spoken sentences. Put the key number first ("12 минутын дараа...", "In 5 minutes..."). No lists, no markdown, no emoji, no URLs.
-- Be kind and calm, like a caring grandchild. If it is very cold or late, add one short caring tip (dress warmly, wait inside).
-- For bus questions, call get_next_bus. If the person does not name a stop, ask which stop they are at in one short question. If the timetable says no more buses today, say when the first bus comes tomorrow.
-- The timetable is sample data for the Orkhon Hackathon demo; do not mention that unless asked.
-- For anything else (news, weather, facts, prices, how-to), search the web when a search tool is available and the answer may have changed, then answer briefly in your own words.
-- Never ask for or repeat passwords, bank card numbers, PIN codes or ID numbers. If someone asks you to send money or share such details, warn them kindly that it may be a scam.
-- You are not a doctor or lawyer: for health or legal questions give simple general information and suggest asking a professional. If something sounds like an emergency (chest pain, a fall, fire), tell them to call 103 (ambulance) or 101 (fire) in Mongolia right away.
+- 1-3 short spoken sentences. Key number first ("12 минутын дараа...", "In 5 minutes..."). No lists, markdown, emoji or URLs.
+- Be kind and calm, like a caring grandchild. When it is very cold, smoggy or late, add one short caring tip.
+- Bus: if no stop is named, use the saved home stop from memory; if there is none, ask which stop in one short question. After the last bus, say when the first bus comes tomorrow.
+- Reminders: get the local time first for words like "tomorrow"; confirm the time back in one sentence.
+- Memory: when the person tells you something useful about themselves or asks you to remember, save it with remember. Use what is in memory naturally.
+- Calls: for "call my daughter" use the number in memory with call_phone; if there is no number, ask for it and offer to remember it.
+- Emergency (chest pain, fall, fire, can't breathe): immediately call_phone 103 (ambulance) or 101 (fire) and tell them to press the big call button.
+- Never ask for or store passwords, card numbers, PIN codes or ID numbers. If someone asks to send money or share such details, warn them kindly that it may be a scam.
+- You are not a doctor or lawyer: give simple general information and suggest a professional.
+- The bus timetable is sample data for the Orkhon Hackathon demo; do not mention that unless asked.
 
 Bus network:
 ${stopDirectory()}`;
 
-export function languageNote(lang: Lang): string {
+/** Per-message note: language + what the device remembers. Sent after the user's message. */
+export function contextNote(lang: Lang, run: AgentRun): string {
   const l = LANG_NAMES[lang];
-  return `This message is in ${l.english}. Reply only in ${l.english} (${l.native}).`;
+  const mem = Object.entries(run.ctx.device.memory);
+  const parts = [`This message is in ${l.english}. Reply only in ${l.english} (${l.native}).`];
+  parts.push(mem.length ? `Saved on this person's device:\n${mem.map(([k, v]) => `- ${k}: ${v}`).join("\n")}` : "Nothing saved in memory yet.");
+  if (run.ctx.device.reminders.length) parts.push(`They have ${run.ctx.device.reminders.length} reminder(s); use list_reminders for details.`);
+  return parts.join("\n");
 }
 
 /** Provider-neutral tool definitions (JSON Schema). */
-export const TOOL_SPECS = [
-  {
-    name: "get_next_bus",
-    description:
-      "Get the next bus arrivals at a stop in Erdenet: minutes until each bus, route number and arrival time. Use a stop id from the bus network list, or the stop name as the person said it.",
-    parameters: {
-      type: "object",
-      properties: {
-        stop: { type: "string", description: "Stop id (e.g. 'center') or stop name in any language" },
-        route: { type: "string", description: "Optional route number to filter, e.g. '12'. Empty string for all routes." },
-      },
-      required: ["stop", "route"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "get_local_time",
-    description: "Current local date and time in Erdenet (Asia/Ulaanbaatar).",
-    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
-  },
-] as const;
+export const TOOL_SPECS = TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
 
-export function runTool(name: string, input: unknown): string {
-  const now = new Date();
-  if (name === "get_next_bus") {
-    const { stop, route } = (input ?? {}) as { stop?: unknown; route?: unknown };
-    if (typeof stop !== "string" || !stop) return JSON.stringify({ error: "stop is required" });
-    return JSON.stringify(
-      nextArrivals(stop, localMinutes(now), { route: typeof route === "string" && route ? route : undefined }),
-    );
-  }
-  if (name === "get_local_time") {
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: timetable.timezone,
-      dateStyle: "full",
-      timeStyle: "short",
-    }).format(now);
-  }
-  return JSON.stringify({ error: `Unknown tool ${name}` });
+export function runTool(name: string, input: unknown, run: AgentRun): Promise<string> {
+  return runToolImpl(name, input, run.ctx, run.steps);
 }
 
 /** Make model text safe to read aloud. */

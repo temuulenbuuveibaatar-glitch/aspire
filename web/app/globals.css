@@ -346,3 +346,88 @@ body {
   color: var(--ink-soft);
   font-size: 15px;
 }
+
+/* ---- agent: tool steps, call button, reminders, memory panel ---- */
+.steps {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.steps li {
+  font-size: 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+.steps li.step-failed {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.call-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 76px;
+  border-radius: 22px;
+  background: #22c55e;
+  color: #04220f;
+  font-size: clamp(24px, 6vw, 32px);
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.45);
+}
+.call-button:focus-visible {
+  outline: 4px solid var(--amber);
+  outline-offset: 4px;
+}
+.alarm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 181, 71, 0.15);
+  border: 2px solid var(--amber);
+  font-size: clamp(22px, 5.5vw, 30px);
+  font-weight: 800;
+}
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+}
+.panel h2 {
+  font-size: 22px;
+  color: var(--cyan);
+}
+.panel ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.panel li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 19px;
+}
+.muted {
+  color: var(--ink-soft);
+  font-size: 18px;
+}
+.pill--small {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 17px;
+}

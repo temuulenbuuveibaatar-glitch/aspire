@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyActions, takeDue, useDevice } from "@/lib/device-store";
 import { detectTextLanguage, LANG_NAMES, type Lang } from "@/lib/lang";
+import type { ClientAction, Reminder } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 
 type Phase = "idle" | "listening" | "thinking" | "speaking";
@@ -10,6 +12,13 @@ interface Turn {
   role: "user" | "assistant";
   text: string;
 }
+interface Step {
+  tool: string;
+  icon: string;
+  label: string;
+  ok: boolean;
+}
+type CallAction = Extract<ClientAction, { type: "call" }>;
 
 // Voice activity detection: stop recording after this much silence.
 const SILENCE_MS = 1300;
@@ -26,6 +35,15 @@ export default function Assistant() {
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
   const [consented, setConsented] = useState(true);
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [callAction, setCallAction] = useState<CallAction | null>(null);
+  const [alarm, setAlarm] = useState<Reminder | null>(null);
+  const [panel, setPanel] = useState(false);
+  const { device, update } = useDevice();
+  const deviceRef = useRef(device);
+  useEffect(() => {
+    deviceRef.current = device;
+  }, [device]);
 
   const history = useRef<Turn[]>([]);
   const audioEl = useRef<HTMLAudioElement | null>(null);
@@ -97,14 +115,21 @@ export default function Assistant() {
       setHeard(text);
       setReply("");
       setNotice("");
+      setSteps([]);
+      setCallAction(null);
       setLang(l);
       setPhase("thinking");
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, lang: l, history: history.current }),
+        body: JSON.stringify({ text, lang: l, history: history.current, device: deviceRef.current }),
       }).catch(() => null);
-      const data = (await res?.json().catch(() => null)) as { reply?: string; error?: string } | null;
+      const data = (await res?.json().catch(() => null)) as {
+        reply?: string;
+        error?: string;
+        actions?: ClientAction[];
+        steps?: Step[];
+      } | null;
       if (!res?.ok || !data?.reply) {
         setNotice(data?.error === "brain_not_configured" ? UI[l].brainOffline : UI[l].error);
         setPhase("idle");
@@ -112,12 +137,30 @@ export default function Assistant() {
       }
       history.current = [...history.current, { role: "user" as const, text }, { role: "assistant" as const, text: data.reply }].slice(-12);
       setReply(data.reply);
+      setSteps(data.steps ?? []);
+      const actions = data.actions ?? [];
+      if (actions.length) update((d) => applyActions(d, actions));
+      setCallAction(actions.filter((a): a is CallAction => a.type === "call").at(-1) ?? null);
       if (lastAudioUrl.current) URL.revokeObjectURL(lastAudioUrl.current);
       lastAudioUrl.current = null;
       await speak(data.reply, l);
     },
-    [speak],
+    [speak, update],
   );
+
+  // ---- reminders: checked every 15 s, spoken out loud when due ---------------
+  useEffect(() => {
+    const tick = () => {
+      const { due, next } = takeDue(deviceRef.current, new Date());
+      if (!due.length) return;
+      update(() => next);
+      const r = due[0];
+      setAlarm(r);
+      void speak(r.text, detectTextLanguage(r.text));
+    };
+    const id = setInterval(tick, 15_000);
+    return () => clearInterval(id);
+  }, [speak, update]);
 
   // ---- listening ------------------------------------------------------------
   const listen = useCallback(async () => {
@@ -280,8 +323,33 @@ export default function Assistant() {
           </p>
         )}
         {reply && <p className="reply">{reply}</p>}
+        {steps.length > 0 && (
+          <ul className="steps" aria-label="Tools used">
+            {steps.map((s, i) => (
+              <li key={i} className={s.ok ? "" : "step-failed"}>
+                <span aria-hidden>{s.icon}</span> {s.label}
+              </li>
+            ))}
+          </ul>
+        )}
+        {callAction && (
+          <a className="call-button" href={`tel:${callAction.number}`}>
+            <span aria-hidden>📞</span> {t.call}: {callAction.label}
+          </a>
+        )}
         {notice && <p className="notice">{notice}</p>}
       </section>
+
+      {alarm && (
+        <div className="alarm" role="alert">
+          <p>
+            <span aria-hidden>⏰</span> {alarm.text}
+          </p>
+          <button className="pill" onClick={() => setAlarm(null)}>
+            {t.close}
+          </button>
+        </div>
+      )}
 
       <footer className="controls">
         <button className="pill" onClick={onRepeat} disabled={!reply || phase !== "idle"}>
@@ -290,7 +358,54 @@ export default function Assistant() {
         <button className="pill" onClick={() => setTyping((v) => !v)} aria-expanded={typing}>
           <span aria-hidden>⌨</span> {t.type}
         </button>
+        <button className="pill" onClick={() => setPanel((v) => !v)} aria-expanded={panel}>
+          <span aria-hidden>🧠</span> {t.memory}
+        </button>
       </footer>
+
+      {panel && (
+        <section className="panel" aria-label={t.memory}>
+          <h2>
+            <span aria-hidden>🧠</span> {t.memory}
+          </h2>
+          {Object.keys(device.memory).length === 0 && <p className="muted">{t.nothingSaved}</p>}
+          <ul>
+            {Object.entries(device.memory).map(([k, v]) => (
+              <li key={k}>
+                <span>
+                  <b>{k}:</b> {v}
+                </span>
+                <button className="pill pill--small" onClick={() => update((d) => applyActions(d, [{ type: "forget", key: k }]))}>
+                  {t.remove}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <h2>
+            <span aria-hidden>⏰</span> {t.reminders}
+          </h2>
+          {device.reminders.length === 0 && <p className="muted">{t.nothingSaved}</p>}
+          <ul>
+            {device.reminders.map((r) => (
+              <li key={r.id}>
+                <span>
+                  <b>
+                    {new Date(r.at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}
+                    {r.repeatDaily ? " ↻" : ""}
+                  </b>{" "}
+                  {r.text}
+                </span>
+                <button
+                  className="pill pill--small"
+                  onClick={() => update((d) => applyActions(d, [{ type: "cancel_reminder", id: r.id }]))}
+                >
+                  {t.remove}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {!consented && <p className="consent">{t.consent}</p>}
 

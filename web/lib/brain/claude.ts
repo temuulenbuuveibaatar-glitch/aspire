@@ -1,7 +1,7 @@
-// Claude (Anthropic): the default brain, with web search.
+// Claude (Anthropic): the default brain, with web search + web fetch and the shared toolbox.
 import Anthropic from "@anthropic-ai/sdk";
 import type { Lang } from "@/lib/lang";
-import { type Brain, fallbackLine, forSpeech, languageNote, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
+import { type Brain, contextNote, fallbackLine, forSpeech, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 
@@ -10,11 +10,11 @@ const getClient = () => (client ??= new Anthropic());
 
 const tools: Anthropic.Beta.BetaToolUnion[] = [
   { type: "web_search_20260209", name: "web_search", max_uses: 3 },
+  { type: "web_fetch_20260209", name: "web_fetch", max_uses: 2 },
   ...TOOL_SPECS.map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters as unknown as Anthropic.Beta.BetaTool.InputSchema,
-    strict: true,
   })),
 ];
 
@@ -22,11 +22,11 @@ export const claude: Brain = {
   name: "claude",
   configured: () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
 
-  async ask(text, lang: Lang, history) {
+  async ask(text, lang: Lang, history, run) {
     const messages: Anthropic.Beta.BetaMessageParam[] = [
       ...history.map((t) => ({ role: t.role, content: t.text })),
       { role: "user", content: text },
-      { role: "system", content: languageNote(lang) },
+      { role: "system", content: contextNote(lang, run) },
     ];
 
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -41,6 +41,12 @@ export const claude: Brain = {
         tools,
         messages,
       });
+
+      for (const b of response.content) {
+        if (b.type === "server_tool_use") {
+          run.steps.push({ tool: b.name, icon: b.name === "web_fetch" ? "📄" : "🔍", label: b.name === "web_fetch" ? "Reading page" : "Web search", ok: true });
+        }
+      }
 
       const reply = response.content
         .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
@@ -59,9 +65,11 @@ export const claude: Brain = {
       }
 
       messages.push({ role: "assistant", content: response.content });
-      const results: Anthropic.Beta.BetaToolResultBlockParam[] = response.content
-        .filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use")
-        .map((b) => ({ type: "tool_result", tool_use_id: b.id, content: runTool(b.name, b.input) }));
+      const calls = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
+      // Independent tool calls run in parallel; all results go back in one message.
+      const results: Anthropic.Beta.BetaToolResultBlockParam[] = await Promise.all(
+        calls.map(async (b) => ({ type: "tool_result" as const, tool_use_id: b.id, content: await runTool(b.name, b.input, run) })),
+      );
       messages.push({ role: "user", content: results });
     }
     throw new Error("Claude did not finish within the step limit");

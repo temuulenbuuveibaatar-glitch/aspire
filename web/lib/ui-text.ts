@@ -21,6 +21,13 @@ export const UI: Record<
     consent: string;
     privacy: string;
     terms: string;
+    memory: string;
+    reminders: string;
+    nothingSaved: string;
+    remove: string;
+    call: string;
+    reminderNow: string;
+    close: string;
   }
 > = {
   mn: {
@@ -41,6 +48,13 @@ export const UI: Record<
     consent: "Таны дуу хоолойг зөвхөн асуултад хариулахад ашиглана. Хувийн мэдээллээ бүү хэлээрэй. Товчийг дарснаар та нөхцөлийг зөвшөөрч байна.",
     privacy: "Нууцлал",
     terms: "Нөхцөл",
+    memory: "Санах ой",
+    reminders: "Сануулга",
+    nothingSaved: "Одоогоор юу ч хадгалаагүй.",
+    remove: "Устгах",
+    call: "Залгах",
+    reminderNow: "Сануулга",
+    close: "Хаах",
   },
   zh: {
     idle: "按下说话",
@@ -60,6 +74,13 @@ export const UI: Record<
     consent: "您的声音只用于回答问题。请不要说出个人信息。按下按钮即表示您同意使用条款。",
     privacy: "隐私",
     terms: "条款",
+    memory: "记忆",
+    reminders: "提醒",
+    nothingSaved: "还没有保存任何内容。",
+    remove: "删除",
+    call: "拨打",
+    reminderNow: "提醒",
+    close: "关闭",
   },
   en: {
     idle: "Press and speak",
@@ -79,6 +100,13 @@ export const UI: Record<
     consent: "Your voice is only used to answer your question. Please don't share personal details. By pressing the button you agree to the terms.",
     privacy: "Privacy",
     terms: "Terms",
+    memory: "Memory",
+    reminders: "Reminders",
+    nothingSaved: "Nothing saved yet.",
+    remove: "Delete",
+    call: "Call",
+    reminderNow: "Reminder",
+    close: "Close",
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -98,6 +126,13 @@ export const UI: Record<
     consent: "Ваш голос используется только для ответа. Не называйте личные данные. Нажимая кнопку, вы соглашаетесь с условиями.",
     privacy: "Конфиденциальность",
     terms: "Условия",
+    memory: "Память",
+    reminders: "Напоминания",
+    nothingSaved: "Пока ничего не сохранено.",
+    remove: "Удалить",
+    call: "Позвонить",
+    reminderNow: "Напоминание",
+    close: "Закрыть",
   },
   de: {
     idle: "Drücken und sprechen",
@@ -117,5 +152,12 @@ export const UI: Record<
     consent: "Ihre Stimme wird nur für die Antwort verwendet. Bitte nennen Sie keine persönlichen Daten. Mit dem Drücken stimmen Sie den Bedingungen zu.",
     privacy: "Datenschutz",
     terms: "Bedingungen",
+    memory: "Gedächtnis",
+    reminders: "Erinnerungen",
+    nothingSaved: "Noch nichts gespeichert.",
+    remove: "Löschen",
+    call: "Anrufen",
+    reminderNow: "Erinnerung",
+    close: "Schließen",
   },
 };

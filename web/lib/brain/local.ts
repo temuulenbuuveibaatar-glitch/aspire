@@ -2,7 +2,7 @@
 // Ollama (http://localhost:11434/v1), LM Studio, vLLM, llama.cpp server...
 // Default model: Qwen2.5 7B. No web search here; bus and time tools work.
 import type { Lang } from "@/lib/lang";
-import { type Brain, forSpeech, languageNote, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
+import { type Brain, contextNote, forSpeech, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
 
 const URL_BASE = () => process.env.LOCAL_LLM_URL?.replace(/\/$/, "");
 const MODEL = process.env.LOCAL_LLM_MODEL ?? "qwen2.5:7b";
@@ -26,9 +26,9 @@ export const local: Brain = {
   name: "local",
   configured: () => Boolean(URL_BASE()),
 
-  async ask(text, lang: Lang, history) {
+  async ask(text, lang: Lang, history, run) {
     const messages: Message[] = [
-      { role: "system", content: `${SYSTEM}\n\n${languageNote(lang)}` },
+      { role: "system", content: `${SYSTEM}\n\n${contextNote(lang, run)}` },
       ...history.map((t): Message => (t.role === "user" ? { role: "user", content: t.text } : { role: "assistant", content: t.text })),
       { role: "user", content: text },
     ];
@@ -56,15 +56,18 @@ export const local: Brain = {
         return reply;
       }
       messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: msg.tool_calls });
-      for (const call of msg.tool_calls) {
-        let args: unknown = {};
-        try {
-          args = JSON.parse(call.function.arguments || "{}");
-        } catch {
-          args = {};
-        }
-        messages.push({ role: "tool", tool_call_id: call.id, content: runTool(call.function.name, args) });
-      }
+      const results = await Promise.all(
+        msg.tool_calls.map(async (call) => {
+          let args: unknown = {};
+          try {
+            args = JSON.parse(call.function.arguments || "{}");
+          } catch {
+            args = {};
+          }
+          return { role: "tool" as const, tool_call_id: call.id, content: await runTool(call.function.name, args, run) };
+        }),
+      );
+      messages.push(...results);
     }
     throw new Error("Local model did not finish within the step limit");
   },
