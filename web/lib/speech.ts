@@ -53,8 +53,23 @@ export async function synthesize(text: string, lang: Lang): Promise<Audio> {
 // Google Gemini (Interactions API)
 
 const INTERACTIONS = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const STT_MODEL = () => process.env.GEMINI_STT_MODEL ?? "gemini-3.8-flash";
-const TTS_MODEL = () => process.env.GEMINI_TTS_MODEL ?? "gemini-3.8-flash-lite-tts";
+// Tried in order: free-tier models get "high demand" errors, so fall back fast.
+const STT_MODELS = () =>
+  (process.env.GEMINI_STT_MODEL ?? "gemini-3.5-flash-lite,gemini-3.6-flash,gemini-3.8-flash")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+// Each voice model has its own free-tier daily quota, so chain them.
+const TTS_MODELS = () =>
+  (
+    process.env.GEMINI_TTS_MODEL ??
+    "gemini-3.8-flash-lite-tts,gemini-3.8-flash-tts,gemini-3.1-flash-tts-preview,gemini-2.5-flash-preview-tts"
+  )
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+// Same sentence -> same audio: reuse it instead of spending quota again.
+const ttsCache = new Map<string, Uint8Array<ArrayBuffer>>();
 const TTS_VOICE = () => process.env.GEMINI_TTS_VOICE ?? "Sulafat"; // "Warm"
 const TTS_STYLE =
   process.env.GEMINI_TTS_STYLE ?? "warm, gentle and caring, like a kind grandchild; speaking slowly and clearly";
@@ -95,16 +110,27 @@ If nothing is said, reply {"text": "", "language": ""}.`;
 async function geminiTranscribe(audio: Blob): Promise<SttResult> {
   const mime = (audio.type || "audio/webm").split(";")[0];
   const data = Buffer.from(await audio.arrayBuffer()).toString("base64");
-  const r = await interact(
-    {
-      model: STT_MODEL(),
-      input: [
-        { type: "text", text: STT_PROMPT },
-        { type: "audio", data, mime_type: mime },
-      ],
-    },
-    30_000,
-  );
+  let r: InteractionResponse | null = null;
+  let lastError: unknown;
+  for (const model of STT_MODELS()) {
+    try {
+      r = await interact(
+        {
+          model,
+          input: [
+            { type: "text", text: STT_PROMPT },
+            { type: "audio", data, mime_type: mime },
+          ],
+        },
+        12_000,
+      );
+      break;
+    } catch (e) {
+      lastError = e;
+      console.error(`listen: ${model} failed, trying next:`, e instanceof Error ? e.message.slice(0, 160) : e);
+    }
+  }
+  if (!r) throw lastError instanceof Error ? lastError : new SpeechOffline();
   const raw = r.output_text ?? outputParts(r, "text").map((c) => c.text ?? "").join("");
   const json = raw.match(/\{[\s\S]*\}/)?.[0];
   let text = "";
@@ -120,31 +146,47 @@ async function geminiTranscribe(audio: Blob): Promise<SttResult> {
 }
 
 async function geminiSpeak(text: string, lang: Lang): Promise<Audio> {
-  const r = await interact(
-    {
-      model: TTS_MODEL(),
-      input: [
+  const key = `${lang}:${text}`;
+  const cached = ttsCache.get(key);
+  if (cached) return { body: cached, contentType: "audio/wav" };
+
+  let lastError: unknown;
+  for (const model of TTS_MODELS()) {
+    try {
+      const r = await interact(
         {
-          type: "user_input",
-          content: [
+          model,
+          input: [
             {
-              type: "text",
-              text,
-              annotations: [{ type: "speech_metadata", style: `${TTS_STYLE}; ${LANG_NAMES[lang].english}` }],
+              type: "user_input",
+              content: [
+                {
+                  type: "text",
+                  text,
+                  annotations: [{ type: "speech_metadata", style: `${TTS_STYLE}; ${LANG_NAMES[lang].english}` }],
+                },
+              ],
             },
           ],
+          response_format: { type: "audio" },
+          generation_config: { speech_config: [{ voice: TTS_VOICE() }] },
         },
-      ],
-      response_format: { type: "audio" },
-      generation_config: { speech_config: [{ voice: TTS_VOICE() }] },
-    },
-    60_000,
-  );
-  const part = outputParts(r, "audio").at(-1);
-  if (!part?.data) throw new SpeechOffline("Gemini returned no audio");
-  const bytes = Buffer.from(part.data, "base64");
-  const isWav = bytes.subarray(0, 4).toString("ascii") === "RIFF";
-  return { body: new Uint8Array(isWav ? bytes : pcmToWav(bytes, 24_000)), contentType: "audio/wav" };
+        30_000,
+      );
+      const part = outputParts(r, "audio").at(-1);
+      if (!part?.data) throw new SpeechOffline(`${model} returned no audio`);
+      const bytes = Buffer.from(part.data, "base64");
+      const isWav = bytes.subarray(0, 4).toString("ascii") === "RIFF";
+      const wav = new Uint8Array(isWav ? bytes : pcmToWav(bytes, 24_000));
+      if (ttsCache.size > 300) ttsCache.delete(ttsCache.keys().next().value!);
+      ttsCache.set(key, wav);
+      return { body: wav, contentType: "audio/wav" };
+    } catch (e) {
+      lastError = e;
+      console.error(`speak: ${model} failed, trying next:`, e instanceof Error ? e.message.slice(0, 160) : e);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new SpeechOffline();
 }
 
 /** Wrap raw 16-bit mono PCM in a WAV header. */
