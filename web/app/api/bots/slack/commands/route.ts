@@ -42,6 +42,7 @@ export async function POST(req: Request) {
       platformUserId: userId,
       chatId: channelId,
       chatTitle: form.get("channel_name") ?? "",
+      teamId: form.get("team_id") ?? undefined,
     }).catch((e) => {
       log("link", e);
       return null;

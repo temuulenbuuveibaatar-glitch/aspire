@@ -1,6 +1,7 @@
 import { ask, NoBrainConfigured, type Turn } from "@/lib/brain";
 import { detectTextLanguage, isLang, type Lang } from "@/lib/lang";
 import { requireUser, signedOut } from "@/lib/auth";
+import { googleAccessToken } from "@/lib/google-token";
 import { rateLimit } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
 import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
@@ -34,7 +35,10 @@ export async function POST(req: Request) {
     : [];
 
   try {
-    const result = await ask(text, lang, history, cleanDevice(body?.device));
+    // Gmail token only when a tool actually needs it (one Clerk call at most per request).
+    let gmail: Promise<string | null> | undefined;
+    const gmailToken = () => (gmail ??= googleAccessToken(user.id));
+    const result = await ask(text, lang, history, cleanDevice(body?.device), new Date(), { gmailToken });
     return Response.json({ lang, ...result });
   } catch (e) {
     if (e instanceof NoBrainConfigured) return Response.json({ lang, error: "brain_not_configured" }, { status: 503 });

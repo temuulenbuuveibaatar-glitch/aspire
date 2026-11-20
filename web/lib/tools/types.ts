@@ -79,6 +79,8 @@ export interface ToolContext {
   now: Date;
   device: DeviceContext;
   actions: ClientAction[];
+  /** Google access token with Gmail read access, fetched lazily (null = Gmail not connected). Server only. */
+  gmailToken?: () => Promise<string | null>;
 }
 
 export interface Tool {

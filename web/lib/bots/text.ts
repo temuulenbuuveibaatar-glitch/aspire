@@ -10,6 +10,15 @@ export interface BotText {
   thinking: string;
   askUsage: string;
   call: string;
+  /** Label for a message card rendered as text. */
+  message: string;
+  calendar: string;
+  /** Discord/Slack messages are sent from the web app. */
+  openApp: string;
+  /** Appended once per chat for accounts that are not linked yet. */
+  linkHint: string;
+  /** Prefix for reminders the bot delivers. */
+  reminder: string;
 }
 
 export const BOT_TEXT: Record<Lang, BotText> = {
@@ -24,6 +33,11 @@ export const BOT_TEXT: Record<Lang, BotText> = {
     thinking: "Бодож байна…",
     askUsage: "Надаас юу ч асуугаарай: /aspire <асуулт>. Бүртгэлээ холбох: /aspire link <код>.",
     call: "Залгах",
+    message: "Илгээх мессеж",
+    calendar: "Календарьт нэмэх",
+    openApp: "Илгээхийн тулд Аспайр апп-ыг нээнэ үү.",
+    linkHint: "Аспайр бүртгэлээ холбоорой: апп дээр Тохиргоо → Холболтууд руу орно уу.",
+    reminder: "Сануулга",
   },
   zh: {
     welcome:
@@ -35,6 +49,11 @@ export const BOT_TEXT: Record<Lang, BotText> = {
     thinking: "思考中…",
     askUsage: "问我任何问题：/aspire <问题>。关联账户：/aspire link <代码>。",
     call: "拨打",
+    message: "待发送消息",
+    calendar: "添加到日历",
+    openApp: "请打开 Aspire 应用发送。",
+    linkHint: "关联你的 Aspire 账户：在应用中打开 设置 → 连接。",
+    reminder: "提醒",
   },
   en: {
     welcome:
@@ -47,6 +66,11 @@ export const BOT_TEXT: Record<Lang, BotText> = {
     thinking: "Thinking…",
     askUsage: "Ask me anything: /aspire <question>. Link your account: /aspire link <code>.",
     call: "Call",
+    message: "Message to send",
+    calendar: "Add to calendar",
+    openApp: "Open the Aspire app to send it.",
+    linkHint: "Link your Aspire account: open Settings → Connections in the app.",
+    reminder: "Reminder",
   },
   ru: {
     welcome:
@@ -59,6 +83,11 @@ export const BOT_TEXT: Record<Lang, BotText> = {
     thinking: "Думаю…",
     askUsage: "Спросите что угодно: /aspire <вопрос>. Привязать аккаунт: /aspire link <код>.",
     call: "Позвонить",
+    message: "Сообщение для отправки",
+    calendar: "Добавить в календарь",
+    openApp: "Откройте приложение Аспайр, чтобы отправить.",
+    linkHint: "Привяжите аккаунт Аспайр: откройте в приложении Настройки → Подключения.",
+    reminder: "Напоминание",
   },
   de: {
     welcome:
@@ -71,6 +100,11 @@ export const BOT_TEXT: Record<Lang, BotText> = {
     thinking: "Einen Moment…",
     askUsage: "Fragen Sie mich alles: /aspire <Frage>. Konto verknüpfen: /aspire link <Code>.",
     call: "Anrufen",
+    message: "Nachricht zum Senden",
+    calendar: "Zum Kalender hinzufügen",
+    openApp: "Öffnen Sie die Aspire-App, um sie zu senden.",
+    linkHint: "Verknüpfen Sie Ihr Aspire-Konto: in der App unter Einstellungen → Verbindungen.",
+    reminder: "Erinnerung",
   },
 };
 

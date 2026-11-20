@@ -1,5 +1,6 @@
 // Slack OAuth callback: check the state cookie, exchange the code for a bot token,
 // and hand the installation to the install store.
+import { requireUser } from "@/lib/auth";
 import { checkOAuthState, readCookie, SLACK_STATE_COOKIE, siteUrl, slackInstallStore } from "@/lib/bots/slack";
 
 const clearCookie = `${SLACK_STATE_COOKIE}=; Path=/api/bots/slack; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
       teamId: data.team.id,
       botUserId: data.bot_user_id ?? "",
       botToken: data.access_token,
-      installedBy: null, // TODO(Task 3): the signed-in Aspire user once requireUser exists
+      installedBy: (await requireUser())?.id ?? null, // the signed-in Aspire user, when there is one
     });
     return redirect(`${site}/?slack=installed`);
   } catch (e) {

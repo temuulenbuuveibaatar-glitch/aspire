@@ -15,6 +15,7 @@ import {
   Plus,
   Settings,
   Square,
+  Sunrise,
   Trash2,
   TriangleAlert,
   Volume2,
@@ -25,6 +26,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionCard, isCard } from "@/components/aspire/ActionCard";
+import { BotLinks } from "@/components/aspire/BotLinks";
+import { BriefingCard, useDailyBriefing } from "@/components/aspire/BriefingCard";
+import { GmailConnect } from "@/components/aspire/GmailConnect";
 import { Sheet } from "@/components/aspire/Sheet";
 import { VoiceOrb, type VoiceOrbState } from "@/components/ui/voice-orb";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
@@ -121,7 +125,7 @@ export default function Assistant() {
         const input = args[0];
         const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         const target = new URL(href, window.location.href);
-        if (target.origin === window.location.origin && /^\/api\/(ask|listen|speak|send)$/.test(target.pathname)) {
+        if (target.origin === window.location.origin && /^\/api\/(ask|listen|speak|send|briefing)$/.test(target.pathname)) {
           window.location.replace("/login?next=/&expired=1");
         }
       }
@@ -195,6 +199,23 @@ export default function Assistant() {
     },
     [playUrl],
   );
+
+  // ---- morning briefing: first open of the day (Mongolia time) -------------------------
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    // useDevice loads stored data in its own (earlier) effect, so state is real from here on.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mark stored device data as loaded
+    setReady(true);
+  }, []);
+  const { briefing, refresh: refreshBriefing } = useDailyBriefing({
+    lang,
+    reminders: device.reminders,
+    speak: (text: string, l: Lang) => speak(text, l),
+    lastDate: device.settings?.lastBriefingDate,
+    setLastDate: (date) => update((d) => ({ ...d, settings: { ...d.settings, lastBriefingDate: date } })),
+    title: device.settings?.title,
+    ready,
+  });
 
   // ---- thinking ----------------------------------------------------------------------
   const askBrain = useCallback(
@@ -439,6 +460,9 @@ export default function Assistant() {
                 <Plus className="size-5" />
               </IconButton>
             )}
+            <IconButton label={t.briefing} onClick={() => void refreshBriefing()}>
+              <Sunrise className="size-5" />
+            </IconButton>
             <IconButton label={t.memory} onClick={() => setSheet("memory")}>
               <Brain className="size-5" />
             </IconButton>
@@ -505,6 +529,18 @@ export default function Assistant() {
               );
             })}
           </ul>
+        )}
+
+        {briefing && (
+          <div className="mt-2">
+            <BriefingCard
+              text={briefing.text}
+              t={t}
+              onReplay={() => phase === "idle" && void speak(briefing.text, briefing.lang)}
+              gmailError={briefing.gmailError}
+              onReconnect={() => setSheet("connections")}
+            />
+          </div>
         )}
 
         {/* ---- conversation ---- */}
@@ -735,8 +771,11 @@ export default function Assistant() {
           onSave={(v) => update((d) => ({ ...d, settings: { ...d.settings, webhooks: { ...d.settings?.webhooks, slack: v || undefined } } }))}
         />
         <p className="mt-2 text-sm text-ink-faint">{t.webhookHelp}</p>
-        <Section title="Telegram · Gmail">
-          <p className="text-ink-soft">{t.comingSoon}</p>
+        <Section title="Gmail">
+          <GmailConnect t={t} />
+        </Section>
+        <Section title="Telegram · Discord · Slack">
+          <BotLinks t={t} />
         </Section>
       </Sheet>
 

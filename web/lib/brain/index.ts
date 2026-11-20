@@ -1,7 +1,7 @@
 // Any AI can be the brain. Providers are tried in BRAIN_ORDER; unconfigured ones
 // are skipped, and if one fails (outage, rate limit) the next one answers.
 import type { Lang } from "@/lib/lang";
-import type { ClientAction, DeviceContext, ToolStep } from "@/lib/tools";
+import type { ClientAction, DeviceContext, ToolContext, ToolStep } from "@/lib/tools";
 import { claude } from "./claude";
 import { gemini } from "./gemini";
 import { deepseek, local } from "./local";
@@ -42,6 +42,8 @@ export async function ask(
   history: Turn[] = [],
   device: DeviceContext = EMPTY_DEVICE,
   now = new Date(),
+  /** Server-only capabilities for this request (e.g. a lazy Gmail token); never from the client body. */
+  extra: Pick<ToolContext, "gmailToken"> = {},
 ): Promise<AskResult> {
   const brains = activeBrains();
   if (brains.length === 0) throw new NoBrainConfigured();
@@ -49,7 +51,7 @@ export async function ask(
   let lastError: unknown;
   for (const brain of brains) {
     // Fresh run per provider so a failed attempt leaves no half-done actions behind.
-    const run: AgentRun = { ctx: { now, device, actions: [] }, steps: [], sources: [] };
+    const run: AgentRun = { ctx: { now, device, actions: [], ...extra }, steps: [], sources: [] };
     try {
       const reply = await brain.ask(text, lang, history.slice(-8), run);
       return { reply, brain: brain.name, actions: run.ctx.actions, steps: run.steps, sources: run.sources };

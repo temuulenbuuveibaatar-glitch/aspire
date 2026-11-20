@@ -1,14 +1,18 @@
 import { requireUser, signedOut } from "@/lib/auth";
+import { telegramTargets } from "@/lib/bots/links";
+import { sendTelegram } from "@/lib/bots/telegram";
+import { supabaseConfigured } from "@/lib/cloud";
 import { rateLimit } from "@/lib/rate-limit";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
 export const maxDuration = 30;
 
 // POST { channel: "telegram"|"discord"|"slack", text, target: { chatId?, webhookUrl? } } -> { ok: true }
-// Called only after the person pressed Send on a confirm card. Discord/Slack go to the
+// Called only after the person pressed Send on a confirm card. Telegram goes through the bot to
+// one of the person's linked chats (GET /api/link/targets lists them). Discord/Slack go to the
 // channel webhook the person saved in Connections; we store nothing and never log the
 // message text or the webhook URL (the URL itself is a secret that allows posting).
-// Requires a Supabase session (401 otherwise). TODO: rate limit per user instead of per IP.
+// Requires a session (401 otherwise). TODO: rate limit per user instead of per IP.
 
 const MAX_TEXT = 2000;
 
@@ -31,9 +35,20 @@ export async function POST(req: Request) {
   if (!text || text.length > MAX_TEXT) return Response.json({ error: "bad_text" }, { status: 400 });
 
   if (channel === "telegram") {
-    // TODO(task 13): check chatId is one of the user's telegram bot_links rows (else 403), then
-    // `await sendTelegramToLinkedChat(userId, chatId, text)` from "@/lib/bots/telegram-send".
-    return Response.json({ error: "telegram_not_ready" }, { status: 501 });
+    // Only to a chat this person linked (their private chat or a group they ran /link in).
+    const chatId = body?.target?.chatId;
+    if (typeof chatId !== "string" || !/^-?\d{1,20}$/.test(chatId)) return Response.json({ error: "bad_target" }, { status: 400 });
+    if (!supabaseConfigured()) return Response.json({ error: "linking_unavailable" }, { status: 503 });
+    try {
+      const targets = await telegramTargets(user.id);
+      if (!targets.some((t) => t.chatId === chatId)) return Response.json({ error: "not_linked_chat" }, { status: 403 });
+      await sendTelegram(chatId, text);
+      return Response.json({ ok: true });
+    } catch (e) {
+      // The bot token is part of Telegram URLs: log only the error name.
+      console.error("[send:telegram] failed", e instanceof Error ? e.name : "error");
+      return Response.json({ error: "send_failed" }, { status: 502 });
+    }
   }
 
   // Allow-list check happens before any request is made (no SSRF).

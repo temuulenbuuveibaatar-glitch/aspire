@@ -43,7 +43,7 @@ async function answer(teamId: string, ev: Required<Pick<SlackEvent, "user" | "ch
   if (link) {
     let linked = false;
     try {
-      linked = !!(await redeemLinkCode(link[1], { platform: "slack", platformUserId: ev.user, chatId: ev.channel, chatTitle: "" }));
+      linked = !!(await redeemLinkCode(link[1], { platform: "slack", platformUserId: ev.user, chatId: ev.channel, chatTitle: "", teamId }));
     } catch (e) {
       log("link", e);
     }

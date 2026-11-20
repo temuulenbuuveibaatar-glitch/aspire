@@ -77,6 +77,37 @@ export const UI: Record<
     signOut: string;
     signedOutNotice: string;
     wrongCode: string;
+    connectGmail: string;
+    gmailConnected: string;
+    gmailNote: string;
+    briefing: string;
+    reconnectGmail: string;
+    // Bot linking (components/aspire/BotLinks.tsx)
+    botsTitle: string;
+    botConsent: string;
+    botLink: string;
+    botConsentFirst: string;
+    botTelegramHow: string;
+    botOpenTelegram: string;
+    botDiscordHow: string;
+    botSlackHow: string;
+    botGroupHow: string;
+    botCodeExpires: string;
+    botWaiting: string;
+    botLinkedOk: string;
+    botLinkedChats: string;
+    botNoLinks: string;
+    botPrimary: string;
+    botUnlink: string;
+    botDeleteCloud: string;
+    botDeleteConfirm: string;
+    botDeleted: string;
+    botUnavailable: string;
+    botAddSlack: string;
+    botPrivateChat: string;
+    botCopy: string;
+    botCopied: string;
+    botCancel: string;
   }
 > = {
   mn: {
@@ -153,6 +184,36 @@ export const UI: Record<
     signOut: "Гарах",
     signedOutNotice: "Нэвтрэлтийн хугацаа дууссан. Дахин нэвтэрнэ үү.",
     wrongCode: "Код буруу эсвэл хугацаа нь дууссан байна. Дахин оролдоно уу.",
+    connectGmail: "Gmail холбох",
+    gmailConnected: "Gmail холбогдсон",
+    gmailNote: "Зөвхөн уншина: Аспайр өглөөний мэдээ болон таны асуусан үед сүүлийн захидлын илгээгч, гарчиг, товч агуулгыг харна. Юу ч илгээхгүй, хадгалахгүй. Google \"баталгаажаагүй апп\" гэж анхааруулна: Advanced (Нэмэлт), дараа нь Continue (Үргэлжлүүлэх) дээр дарна уу.",
+    briefing: "Өглөөний мэдээ",
+    reconnectGmail: "Gmail дахин холбох",
+    botsTitle: "Ботууд",
+    botConsent: "Миний санах ой, сануулга, Gmail-ийг үүлэнд синк хийж, бот намайг төлөөлөн ажиллахыг зөвшөөрнө",
+    botLink: "Холбох",
+    botConsentFirst: "Эхлээд дээрх нүдийг чагтална уу.",
+    botTelegramHow: "{bot} руу /start {code} гэж илгээнэ үү",
+    botOpenTelegram: "Telegram нээх",
+    botDiscordHow: "Discord дээр /aspire link code:{code} гэж бичнэ үү",
+    botSlackHow: "Slack дээр Аспайр апп руу шууд мессежээр link {code} гэж илгээнэ үү",
+    botGroupHow: "Telegram группт илгээлгэхийн тулд ботыг группт нэмээд тэнд /link {code} гэж илгээнэ үү.",
+    botCodeExpires: "Код нэг удаа, 10 минутын турш хүчинтэй.",
+    botWaiting: "Ботыг хүлээж байна…",
+    botLinkedOk: "Холбогдлоо.",
+    botLinkedChats: "Холбогдсон чатууд",
+    botNoLinks: "Одоогоор холбогдсон чат алга.",
+    botPrimary: "Сануулга энд ирнэ",
+    botUnlink: "Салгах",
+    botDeleteCloud: "Үүлэн дэх миний өгөгдлийг устгах",
+    botDeleteConfirm: "Бүх чатыг салгаж, үүлэн дэх санах ой, сануулга, тохиргоог устгана. Утсан дээрх хуулбар хэвээр үлдэнэ. Баталгаажуулахын тулд дахин дарна уу.",
+    botDeleted: "Үүлэн дэх өгөгдөл устлаа.",
+    botUnavailable: "Одоогоор холбох боломжгүй байна.",
+    botAddSlack: "Slack-д нэмэх",
+    botPrivateChat: "Хувийн чат",
+    botCopy: "Код хуулах",
+    botCopied: "Хуулагдлаа",
+    botCancel: "Болих",
   },
   zh: {
     idle: "按下说话",
@@ -228,6 +289,36 @@ export const UI: Record<
     signOut: "退出登录",
     signedOutNotice: "登录已过期，请重新登录。",
     wrongCode: "验证码错误或已过期，请重试。",
+    connectGmail: "连接 Gmail",
+    gmailConnected: "Gmail 已连接",
+    gmailNote: "只读：Aspire 仅在早间简报或您提问时查看最近邮件的发件人、主题和简短预览，不会发送或保存任何内容。Google 会提示此应用尚未验证：请点“高级”（Advanced），再点“继续”（Continue）。",
+    briefing: "今日简报",
+    reconnectGmail: "重新连接 Gmail",
+    botsTitle: "机器人",
+    botConsent: "将我的记忆、提醒和 Gmail 同步到云端，让机器人可以代表我操作",
+    botLink: "关联",
+    botConsentFirst: "请先勾选上面的选项。",
+    botTelegramHow: "向 {bot} 发送 /start {code}",
+    botOpenTelegram: "打开 Telegram",
+    botDiscordHow: "在 Discord 中输入 /aspire link code:{code}",
+    botSlackHow: "在 Slack 中给 Aspire 应用发私信：link {code}",
+    botGroupHow: "要让 Aspire 发送到 Telegram 群组：先把机器人加入群组，再在群里发送 /link {code}。",
+    botCodeExpires: "代码只能使用一次，10 分钟内有效。",
+    botWaiting: "等待机器人…",
+    botLinkedOk: "已关联。",
+    botLinkedChats: "已关联的聊天",
+    botNoLinks: "还没有关联任何聊天。",
+    botPrimary: "提醒发到这里",
+    botUnlink: "取消关联",
+    botDeleteCloud: "删除我的云端数据",
+    botDeleteConfirm: "这会取消所有聊天的关联，并删除云端的记忆、提醒和设置。手机上的副本会保留。再点一次确认。",
+    botDeleted: "云端数据已删除。",
+    botUnavailable: "暂时无法关联。",
+    botAddSlack: "添加到 Slack",
+    botPrivateChat: "私聊",
+    botCopy: "复制代码",
+    botCopied: "已复制",
+    botCancel: "取消",
   },
   en: {
     idle: "Press and speak",
@@ -303,6 +394,36 @@ export const UI: Record<
     signOut: "Sign out",
     signedOutNotice: "Your session ended. Please sign in again.",
     wrongCode: "That code is wrong or expired. Please try again.",
+    connectGmail: "Connect Gmail",
+    gmailConnected: "Gmail connected",
+    gmailNote: "Read-only: Aspire looks at the sender, subject and a short preview of recent mail for your morning briefing or when you ask. Nothing is sent or stored. Google will say the app isn't verified yet: tap Advanced, then Continue.",
+    briefing: "Briefing",
+    reconnectGmail: "Reconnect Gmail",
+    botsTitle: "Bots",
+    botConsent: "Sync my memory, reminders and Gmail to the cloud so the bot can act as me",
+    botLink: "Link",
+    botConsentFirst: "Tick the box above first.",
+    botTelegramHow: "Send /start {code} to {bot}",
+    botOpenTelegram: "Open Telegram",
+    botDiscordHow: "In Discord, type /aspire link code:{code}",
+    botSlackHow: "In Slack, send the Aspire app a direct message: link {code}",
+    botGroupHow: "To let Aspire send to a Telegram group: add the bot to the group, then send /link {code} there.",
+    botCodeExpires: "The code works once, for 10 minutes.",
+    botWaiting: "Waiting for the bot…",
+    botLinkedOk: "Linked.",
+    botLinkedChats: "Linked chats",
+    botNoLinks: "No chats linked yet.",
+    botPrimary: "Reminders go here",
+    botUnlink: "Unlink",
+    botDeleteCloud: "Delete my cloud data",
+    botDeleteConfirm: "This unlinks every chat and deletes your memory, reminders and settings from the cloud. Your phone keeps its copy. Tap again to confirm.",
+    botDeleted: "Cloud data deleted.",
+    botUnavailable: "Linking is not available right now.",
+    botAddSlack: "Add to Slack",
+    botPrivateChat: "Private chat",
+    botCopy: "Copy code",
+    botCopied: "Copied",
+    botCancel: "Cancel",
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -378,6 +499,36 @@ export const UI: Record<
     signOut: "Выйти",
     signedOutNotice: "Сеанс завершён. Пожалуйста, войдите снова.",
     wrongCode: "Код неверный или устарел. Попробуйте ещё раз.",
+    connectGmail: "Подключить Gmail",
+    gmailConnected: "Gmail подключён",
+    gmailNote: "Только чтение: Аспайр смотрит отправителя, тему и краткий текст последних писем для утренней сводки или когда вы спрашиваете. Ничего не отправляется и не хранится. Google предупредит, что приложение не проверено: нажмите «Дополнительные настройки» (Advanced), затем «Перейти» (Continue).",
+    briefing: "Сводка",
+    reconnectGmail: "Переподключить Gmail",
+    botsTitle: "Боты",
+    botConsent: "Синхронизировать мою память, напоминания и Gmail с облаком, чтобы бот мог действовать от моего имени",
+    botLink: "Привязать",
+    botConsentFirst: "Сначала отметьте пункт выше.",
+    botTelegramHow: "Отправьте /start {code} боту {bot}",
+    botOpenTelegram: "Открыть Telegram",
+    botDiscordHow: "В Discord введите /aspire link code:{code}",
+    botSlackHow: "В Slack отправьте приложению Aspire личное сообщение: link {code}",
+    botGroupHow: "Чтобы Аспайр мог писать в группу Telegram: добавьте бота в группу и отправьте там /link {code}.",
+    botCodeExpires: "Код действует один раз, 10 минут.",
+    botWaiting: "Ждём бота…",
+    botLinkedOk: "Привязано.",
+    botLinkedChats: "Привязанные чаты",
+    botNoLinks: "Пока нет привязанных чатов.",
+    botPrimary: "Напоминания приходят сюда",
+    botUnlink: "Отвязать",
+    botDeleteCloud: "Удалить мои данные из облака",
+    botDeleteConfirm: "Все чаты будут отвязаны, а память, напоминания и настройки удалены из облака. Копия на телефоне останется. Нажмите ещё раз для подтверждения.",
+    botDeleted: "Данные в облаке удалены.",
+    botUnavailable: "Привязка сейчас недоступна.",
+    botAddSlack: "Добавить в Slack",
+    botPrivateChat: "Личный чат",
+    botCopy: "Скопировать код",
+    botCopied: "Скопировано",
+    botCancel: "Отмена",
   },
   de: {
     idle: "Drücken und sprechen",
@@ -453,5 +604,35 @@ export const UI: Record<
     signOut: "Abmelden",
     signedOutNotice: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
     wrongCode: "Der Code ist falsch oder abgelaufen. Bitte noch einmal versuchen.",
+    connectGmail: "Gmail verbinden",
+    gmailConnected: "Gmail verbunden",
+    gmailNote: "Nur lesen: Aspire sieht Absender, Betreff und eine kurze Vorschau neuer Mails für Ihr Morgen-Briefing oder wenn Sie fragen. Nichts wird gesendet oder gespeichert. Google meldet, dass die App noch nicht überprüft ist: Tippen Sie auf „Erweitert“ (Advanced) und dann auf „Weiter“ (Continue).",
+    briefing: "Briefing",
+    reconnectGmail: "Gmail neu verbinden",
+    botsTitle: "Bots",
+    botConsent: "Mein Gedächtnis, meine Erinnerungen und Gmail in die Cloud synchronisieren, damit der Bot für mich handeln kann",
+    botLink: "Verknüpfen",
+    botConsentFirst: "Bitte zuerst das Kästchen oben ankreuzen.",
+    botTelegramHow: "Senden Sie /start {code} an {bot}",
+    botOpenTelegram: "Telegram öffnen",
+    botDiscordHow: "Geben Sie in Discord /aspire link code:{code} ein",
+    botSlackHow: "Senden Sie der Aspire-App in Slack eine Direktnachricht: link {code}",
+    botGroupHow: "Damit Aspire in eine Telegram-Gruppe senden kann: Bot zur Gruppe hinzufügen und dort /link {code} senden.",
+    botCodeExpires: "Der Code gilt einmal, 10 Minuten lang.",
+    botWaiting: "Warte auf den Bot…",
+    botLinkedOk: "Verknüpft.",
+    botLinkedChats: "Verknüpfte Chats",
+    botNoLinks: "Noch keine Chats verknüpft.",
+    botPrimary: "Erinnerungen kommen hierher",
+    botUnlink: "Trennen",
+    botDeleteCloud: "Meine Cloud-Daten löschen",
+    botDeleteConfirm: "Alle Chats werden getrennt und Gedächtnis, Erinnerungen und Einstellungen aus der Cloud gelöscht. Die Kopie auf dem Telefon bleibt. Zum Bestätigen erneut tippen.",
+    botDeleted: "Cloud-Daten gelöscht.",
+    botUnavailable: "Verknüpfen ist gerade nicht möglich.",
+    botAddSlack: "Zu Slack hinzufügen",
+    botPrivateChat: "Privater Chat",
+    botCopy: "Code kopieren",
+    botCopied: "Kopiert",
+    botCancel: "Abbrechen",
   },
 };

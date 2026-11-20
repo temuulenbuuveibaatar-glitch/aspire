@@ -1,6 +1,8 @@
 // Slack: request signatures, bot tokens per workspace, posting, and the OAuth state cookie.
 import { createHmac, randomBytes } from "node:crypto";
+import { supabaseConfigured } from "@/lib/cloud";
 import { hmac, safeEqual } from "./secure";
+import { supabaseInstallStore } from "./slack-store";
 import { splitText } from "./split";
 
 export const SLACK_SCOPES = "app_mentions:read,chat:write,im:history,im:read,im:write,commands";
@@ -17,9 +19,9 @@ export function verifySlack(signingSecret: string, timestamp: string, rawBody: s
 }
 
 // ---------------------------------------------------------------------------
-// Bot tokens per workspace. The store is swappable: today the default serves a
-// single workspace from SLACK_BOT_TOKEN; the Supabase-backed store (encrypted
-// `slack_installations` rows) replaces it with setSlackInstallStore().
+// Bot tokens per workspace. With the database configured, installs are kept encrypted in
+// `slack_installations` (any number of workspaces); without it, one workspace is served from
+// SLACK_BOT_TOKEN. Tests swap the store with setSlackInstallStore().
 
 export interface SlackInstallation {
   teamId: string;
@@ -48,17 +50,36 @@ export const envInstallStore: SlackInstallStore = {
   },
 };
 
-let store: SlackInstallStore = envInstallStore;
+/**
+ * Database store (`slack_installations`, token encrypted) for any number of workspaces. Lookups
+ * fall back to SLACK_BOT_TOKEN, so a workspace set up by hand before the install flow keeps working.
+ */
+export const databaseInstallStore: SlackInstallStore = {
+  async get(teamId) {
+    try {
+      const token = await supabaseInstallStore.get(teamId);
+      if (token) return token;
+    } catch (e) {
+      console.error("[bot:slack] install lookup failed:", e instanceof Error ? e.message.slice(0, 120) : "unknown");
+    }
+    return envInstallStore.get(teamId);
+  },
+  put: (install) => supabaseInstallStore.put(install),
+  delete: (teamId) => supabaseInstallStore.delete(teamId),
+};
 
+let store: SlackInstallStore | null = null;
+
+/** The store set with setSlackInstallStore, else the database when configured, else the env token. */
 export function slackInstallStore(): SlackInstallStore {
-  return store;
+  return store ?? (supabaseConfigured() ? databaseInstallStore : envInstallStore);
 }
-export function setSlackInstallStore(next: SlackInstallStore): void {
+export function setSlackInstallStore(next: SlackInstallStore | null): void {
   store = next;
 }
 
 export function getSlackToken(teamId: string): Promise<string | null> {
-  return store.get(teamId);
+  return slackInstallStore().get(teamId);
 }
 
 // ---------------------------------------------------------------------------

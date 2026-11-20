@@ -1,13 +1,20 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/send/route";
+import { createFakeSupabase } from "./fake-supabase";
 
 vi.mock("@/lib/auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth")>()),
   requireUser: async () => ({ id: "user-1", email: null }),
 }));
+let fake = createFakeSupabase();
+vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: () => fake.client }));
 
+beforeEach(() => {
+  fake = createFakeSupabase();
+});
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -81,10 +88,39 @@ describe("POST /api/send", () => {
     expect((await send({ channel: "discord", text: "x".repeat(2001), target: { webhookUrl: DISCORD } })).status).toBe(400);
   });
 
-  it("telegram is not ready yet", async () => {
-    const res = await send({ channel: "telegram", text: "hi", target: { chatId: "42" } });
-    expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({ error: "telegram_not_ready" });
+  it("telegram needs the database and a valid chat id", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await send({ channel: "telegram", text: "hi", target: { chatId: "42" } })).status).toBe(503);
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://db.test");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-test");
+    expect((await send({ channel: "telegram", text: "hi", target: { chatId: "https://x" } })).status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("telegram sends only to the person's own linked chats", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://db.test");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-test");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "123:abc");
+    fake.table("bot_links").push(
+      { id: 1, user_id: "user-1", platform: "telegram", platform_user_id: "7", chat_id: "-1001", chat_title: "Family", is_primary: false, linked_at: "2026-11-20T00:00:00Z" },
+      { id: 2, user_id: "someone-else", platform: "telegram", platform_user_id: "8", chat_id: "-2002", chat_title: "Theirs", is_primary: true, linked_at: "2026-11-20T00:00:00Z" },
+      { id: 3, user_id: "user-1", platform: "discord", platform_user_id: "9", chat_id: "555", chat_title: null, is_primary: true, linked_at: "2026-11-20T00:00:00Z" },
+    );
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      void url;
+      void init;
+      return Response.json({ ok: true, result: {} });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await send({ channel: "telegram", text: "hi", target: { chatId: "-2002" } })).status).toBe(403);
+    expect((await send({ channel: "telegram", text: "hi", target: { chatId: "555" } })).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const res = await send({ channel: "telegram", text: "On my way", target: { chatId: "-1001" } });
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.telegram.org/bot123:abc/sendMessage");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ chat_id: "-1001", text: "On my way" });
   });
 
   it("is rate limited to 10 per minute", async () => {

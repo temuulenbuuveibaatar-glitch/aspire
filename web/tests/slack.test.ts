@@ -14,6 +14,12 @@ vi.mock("@/lib/bots/core", () => ({
   redeemLinkCode: (...a: unknown[]) => redeemLinkCode(...a),
 }));
 
+let signedIn: { id: string; email: null } | null = null;
+vi.mock("@/lib/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth")>()),
+  requireUser: async () => signedIn,
+}));
+
 const SIGNING = "slack-signing-test";
 const BOT_TOKEN = "xoxb-test-token";
 
@@ -155,7 +161,7 @@ describe("Slack events", () => {
       team_id: "T1",
       event: { type: "message", channel_type: "im", user: "U1", text: "link 123456", channel: "D1", ts: "1.2" },
     });
-    expect(redeemLinkCode).toHaveBeenCalledWith("123456", { platform: "slack", platformUserId: "U1", chatId: "D1", chatTitle: "" });
+    expect(redeemLinkCode).toHaveBeenCalledWith("123456", { platform: "slack", platformUserId: "U1", chatId: "D1", chatTitle: "", teamId: "T1" });
     expect(handleBotMessage).not.toHaveBeenCalled();
     const { BOT_TEXT } = await import("@/lib/bots/text");
     expect(posts()[0].body).toMatchObject({ text: BOT_TEXT.en.linkUnavailable });
@@ -211,7 +217,7 @@ describe("Slack /aspire command", () => {
 
   it("link <code> replies ephemerally", async () => {
     const { json } = await command("link 123456");
-    expect(redeemLinkCode).toHaveBeenCalledWith("123456", { platform: "slack", platformUserId: "U1", chatId: "C1", chatTitle: "general" });
+    expect(redeemLinkCode).toHaveBeenCalledWith("123456", { platform: "slack", platformUserId: "U1", chatId: "C1", chatTitle: "general", teamId: "T1" });
     const { BOT_TEXT } = await import("@/lib/bots/text");
     expect(json).toEqual({ response_type: "ephemeral", text: BOT_TEXT.en.linkUnavailable });
   });
@@ -288,6 +294,12 @@ describe("Slack install (OAuth)", () => {
     expect(calls[0].body).toEqual({ code: "c1", redirect_uri: "https://aspire-mn.vercel.app/api/bots/slack/oauth" });
     expect(calls[0].headers.Authorization).toBe(`Basic ${Buffer.from("cid:csecret").toString("base64")}`);
     expect(store.put).toHaveBeenCalledWith({ teamId: "T2", botUserId: "UBOT2", botToken: "xoxb-new-team", installedBy: null });
+
+    // Installed while signed in: the Aspire user is recorded as the installer.
+    signedIn = { id: "user_X", email: null };
+    await GET(new Request(`https://aspire-mn.vercel.app/api/bots/slack/oauth?code=c1&state=${state}`, { headers: { cookie } }));
+    expect(store.put).toHaveBeenLastCalledWith({ teamId: "T2", botUserId: "UBOT2", botToken: "xoxb-new-team", installedBy: "user_X" });
+    signedIn = null;
   });
 
   it("an expired state is refused", async () => {

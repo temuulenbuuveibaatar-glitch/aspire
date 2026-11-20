@@ -1,13 +1,21 @@
 // Shared bot core: every platform (Telegram, Discord, Slack) turns a chat message
 // into an answer here, using the same brain as the web app.
 //
-// Today only the unlinked path exists (no Supabase yet): smart chat with no
-// personal memory. Cloud linking (Task 12) plugs in at the two marked extension
-// points below: `loadLinkedUser` and `redeemLinkCode`.
+// Linked chat accounts (bot_links) answer as the person: their cloud state is the device
+// context, their Gmail is available, and remember/forget/routine/lesson/reminder actions are
+// written back to the cloud copy (reminders also to bot_reminders). Card actions (call,
+// message, calendar) become plain text lines with links. Unlinked accounts get smart chat with
+// no memory and a one-time hint about linking.
 import { ask, type Turn } from "@/lib/brain";
 import { fallbackLine } from "@/lib/brain/shared";
+import { applyCloudActions, loadCloudState, supabaseConfigured } from "@/lib/cloud";
+import { googleAccessToken } from "@/lib/google-token";
 import { detectTextLanguage, type Lang } from "@/lib/lang";
+import { gmailComposeUrl, smsUrl, telegramShareUrl } from "@/lib/links";
+import { emptyState, toDevice } from "@/lib/state";
 import type { ClientAction } from "@/lib/tools";
+import type { Channel } from "@/lib/tools/types";
+import { findLinkedUser, listLinks, redeemLinkCode as redeemCode } from "./links";
 import { botText } from "./text";
 
 export type BotPlatform = "telegram" | "discord" | "slack";
@@ -32,30 +40,34 @@ export interface LinkTarget {
   platformUserId: string;
   chatId: string;
   chatTitle: string;
+  /** Slack workspace id (needed to DM the person later, e.g. for reminders). */
+  teamId?: string;
 }
 
 export interface LinkedUser {
   userId: string;
 }
 
-// ---------------------------------------------------------------------------
-// EXTENSION POINT (Task 12, cloud linking): look the sender up in `bot_links`
-// (platform, platform_user_id). Return null while Supabase is not set up.
+const logError = (what: string, e: unknown) =>
+  console.error(`[bot] ${what} failed:`, e instanceof Error ? e.message.slice(0, 200) : "unknown");
+
+/** The Aspire user this chat account is linked to (bot_links), or null. Never throws. */
 export async function loadLinkedUser(platform: BotPlatform, platformUserId: string): Promise<LinkedUser | null> {
-  void platform;
-  void platformUserId;
-  return null;
+  if (!supabaseConfigured()) return null;
+  try {
+    const userId = await findLinkedUser(platform, platformUserId);
+    return userId ? { userId } : null;
+  } catch (e) {
+    logError("link lookup", e);
+    return null;
+  }
 }
 
-// EXTENSION POINT (Task 12): redeem a 6-digit code from Settings → Connections,
-// insert the `bot_links` row and delete the code. Null = invalid/expired code
-// (and, for now, "linking isn't available yet").
+/** Redeem a 6-digit code from Settings → Connections. Null = invalid/expired code or linking unavailable. */
 export async function redeemLinkCode(code: string, link: LinkTarget): Promise<LinkedUser | null> {
-  void code;
-  void link;
-  return null;
+  if (!supabaseConfigured()) return null;
+  return redeemCode(code, link);
 }
-// ---------------------------------------------------------------------------
 
 // In-memory per-chat history (per server instance) so a thread keeps context.
 export const MAX_TURNS = 8;
@@ -80,11 +92,34 @@ function remember(platform: BotPlatform, chatId: string, turns: Turn[]) {
   while (histories.size > MAX_CHATS) histories.delete(histories.keys().next().value!);
 }
 
-/** Actions the web app would show as cards become plain text lines in chat. */
-function renderActions(actions: ClientAction[], lang: Lang): string[] {
+const LOCALE: Record<Lang, string> = { mn: "mn-MN", zh: "zh-CN", en: "en-GB", ru: "ru-RU", de: "de-DE" };
+const CHANNEL_NAME: Record<Channel, string> = { telegram: "Telegram", discord: "Discord", slack: "Slack", sms: "SMS", email: "Email" };
+
+function when(iso: string, lang: Lang): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(LOCALE[lang], { timeZone: "Asia/Ulaanbaatar", dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Actions the web app would show as cards become plain text lines in chat (nothing is sent). */
+export function renderActions(actions: ClientAction[], lang: Lang): string[] {
+  const t = botText(lang);
   const lines: string[] = [];
   for (const a of actions) {
-    if (a.type === "call") lines.push(`${botText(lang).call} ${a.label}: ${a.number}`.replace(/\s+:/, ":"));
+    if (a.type === "call") lines.push(`${t.call} ${a.label}: ${a.number}`.replace(/\s+:/, ":"));
+    if (a.type === "message") {
+      const head = `${t.message} (${CHANNEL_NAME[a.channel]}${a.to ? ` → ${a.to}` : ""}): ${a.subject ? `${a.subject} — ` : ""}${a.text}`;
+      const link =
+        a.channel === "email"
+          ? gmailComposeUrl(a.to, a.subject, a.text)
+          : a.channel === "sms"
+            ? smsUrl(a.to, a.text)
+            : a.channel === "telegram"
+              ? telegramShareUrl(a.text)
+              : t.openApp;
+      lines.push(`${head}\n${link}`);
+    }
+    if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang)}\n${a.url}`);
   }
   return lines;
 }
@@ -94,17 +129,34 @@ const MAX_INPUT = 2000;
 export async function handleBotMessage(input: BotMessage): Promise<BotReply> {
   const text = input.text.trim().slice(0, MAX_INPUT);
   const lang = input.lang ?? detectTextLanguage(text);
+  const now = new Date();
 
   const linkedUser = await loadLinkedUser(input.platform, input.platformUserId);
-  // EXTENSION POINT (Task 12): when `linkedUser` is set, load cloud state, run
-  // ask() with toDevice(state) and apply the returned actions to the cloud.
   const linked = linkedUser !== null;
 
   const history = historyFor(input.platform, input.chatId);
   try {
-    const result = await ask(text, lang, history);
+    let result;
+    if (linkedUser) {
+      const { userId } = linkedUser;
+      const [state, links] = await Promise.all([
+        loadCloudState(userId).catch((e) => (logError("cloud load", e), null)),
+        listLinks(userId).catch(() => []),
+      ]);
+      const cloud = state ?? emptyState();
+      const connected = [...new Set(links.map((l) => l.platform))] as Channel[];
+      result = await ask(text, lang, history, { ...toDevice(cloud), connected }, now, {
+        gmailToken: () => googleAccessToken(userId),
+      });
+      // The answer still goes out if saving fails; the person can repeat the request.
+      await applyCloudActions(userId, cloud, result.actions, now).catch((e) => logError("cloud save", e));
+    } else {
+      result = await ask(text, lang, history);
+    }
     const extra = renderActions(result.actions, lang);
-    const reply = [result.reply.trim(), ...(extra.length ? [extra.join("\n")] : [])].filter(Boolean).join("\n\n");
+    // Unlinked: point at linking once per chat (only when linking is available at all).
+    const hint = !linked && supabaseConfigured() && history.length === 0 ? botText(lang).linkHint : "";
+    const reply = [result.reply.trim(), ...(extra.length ? [extra.join("\n")] : []), hint].filter(Boolean).join("\n\n");
     remember(input.platform, input.chatId, [
       ...history,
       { role: "user", text },

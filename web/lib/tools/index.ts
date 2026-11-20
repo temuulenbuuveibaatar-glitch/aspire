@@ -1,5 +1,6 @@
 // The agent's toolbox. Add a tool here and every AI provider can use it.
 import { addToCalendar, call, sendMessage } from "./connect";
+import { checkEmail } from "./email";
 import { deleteRoutine, listRoutines, saveProgress, saveRoutine, startLesson } from "./learning";
 import { cancelReminder, forget, listReminders, localTime, nextBus, remember, setReminder, tripPlanner } from "./local";
 import type { Tool, ToolContext } from "./types";
@@ -29,6 +30,7 @@ export const TOOLS: Tool[] = [
   sendMessage,
   call,
   addToCalendar,
+  checkEmail,
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
