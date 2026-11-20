@@ -28,6 +28,8 @@ export interface Audio {
 }
 
 type Engine = "omnivoice" | "azure" | "gemini";
+/** Audio container for synthesized speech: "mp3" for the web app, "ogg" (Opus) for Telegram voice notes. */
+export type AudioFormat = "mp3" | "ogg";
 
 const configured: Record<Engine, () => boolean> = {
   omnivoice: () => !!process.env.SPEECH_URL,
@@ -47,11 +49,12 @@ export function speechEngine(): Engine | null {
   return speechEngines()[0] ?? null;
 }
 
-async function firstWorking<T>(what: string, run: Record<Engine, () => Promise<T>>): Promise<T> {
+async function firstWorking<T>(what: string, run: Partial<Record<Engine, () => Promise<T>>>): Promise<T> {
   let lastError: unknown = new SpeechOffline();
   for (const engine of speechEngines()) {
+    if (!run[engine]) continue; // this engine cannot do the job (e.g. OGG output)
     try {
-      return await run[engine]();
+      return await run[engine]!();
     } catch (e) {
       lastError = e;
       console.error(`${what}: ${engine} failed:`, e instanceof Error ? e.message.slice(0, 200) : e);
@@ -68,10 +71,17 @@ export async function transcribe(audio: Blob): Promise<SttResult> {
   });
 }
 
-export async function synthesize(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): Promise<Audio> {
+export async function synthesize(
+  text: string,
+  lang: Lang,
+  voice: VoiceStyle = "jarvis",
+  format: AudioFormat = "mp3",
+): Promise<Audio> {
+  // Only Azure can produce OGG/Opus; the others return MP3/WAV, which Telegram cannot play as a voice note.
+  if (format === "ogg") return firstWorking("speak", { azure: () => azureSpeak(text, lang, voice, "ogg") });
   return firstWorking("speak", {
     omnivoice: () => omnivoiceSpeak(text, lang),
-    azure: () => azureSpeak(text, lang, voice),
+    azure: () => azureSpeak(text, lang, voice, "mp3"),
     gemini: () => geminiSpeak(text, lang, voice),
   });
 }
@@ -222,10 +232,16 @@ export function azureSsml(text: string, lang: Lang, voice: VoiceStyle = "jarvis"
   );
 }
 
-async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<Audio> {
-  const key = `${voice}:${lang}:${text}`;
+const AZURE_FORMATS: Record<AudioFormat, { header: string; contentType: string }> = {
+  mp3: { header: "audio-24khz-48kbitrate-mono-mp3", contentType: "audio/mpeg" },
+  ogg: { header: "ogg-24khz-16bit-mono-opus", contentType: "audio/ogg" },
+};
+
+async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle, format: AudioFormat = "mp3"): Promise<Audio> {
+  const { header, contentType } = AZURE_FORMATS[format];
+  const key = `${format}:${voice}:${lang}:${text}`;
   const cached = azureAudioCache.get(key);
-  if (cached) return { body: cached, contentType: "audio/mpeg" };
+  if (cached) return { body: cached, contentType };
   const region = process.env.AZURE_SPEECH_REGION;
   const url = region
     ? `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`
@@ -235,7 +251,7 @@ async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<
     headers: {
       "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
       "Content-Type": "application/ssml+xml",
-      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+      "X-Microsoft-OutputFormat": header,
       "User-Agent": "aspire-assistant",
     },
     body: azureSsml(text, lang, voice),
@@ -244,11 +260,11 @@ async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<
     throw new SpeechOffline(String(e));
   });
   if (!res.ok) throw new SpeechOffline(`Azure voice error ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const mp3 = new Uint8Array(await res.arrayBuffer());
-  if (!mp3.length) throw new SpeechOffline("Azure returned no audio");
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (!bytes.length) throw new SpeechOffline("Azure returned no audio");
   if (azureAudioCache.size > 300) azureAudioCache.delete(azureAudioCache.keys().next().value!);
-  azureAudioCache.set(key, mp3);
-  return { body: mp3, contentType: "audio/mpeg" };
+  azureAudioCache.set(key, bytes);
+  return { body: bytes, contentType };
 }
 
 // ---------------------------------------------------------------------------

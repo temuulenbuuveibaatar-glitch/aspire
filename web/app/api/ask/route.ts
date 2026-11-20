@@ -2,13 +2,13 @@ import { ask, NoBrainConfigured, type Turn } from "@/lib/brain";
 import { detectTextLanguage, isLang, type Lang } from "@/lib/lang";
 import { rateLimit } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
-import type { Title } from "@/lib/tools/types";
+import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
 
 export const maxDuration = 60;
 
-// POST { text, lang?, history?, device? } -> { lang, reply, brain, actions, steps }
-// `device` = what the person's device remembers (memory + reminders). It lives
-// only on their device; we use it for this answer and keep nothing.
+// POST { text, lang?, history?, device? } -> { lang, reply, brain, actions, steps, sources }
+// `device` = what the person's device remembers (memory, reminders, routines, lessons,
+// connected channels). It lives only on their device; we use it for this answer and keep nothing.
 export async function POST(req: Request) {
   const limited = rateLimit(req, "ask", 20);
   if (limited) return limited;
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     text?: unknown;
     lang?: unknown;
     history?: unknown;
-    device?: { memory?: unknown; reminders?: unknown; settings?: unknown };
+    device?: RawDevice;
   } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
   if (!text) return Response.json({ error: "text is required" }, { status: 400 });
@@ -40,7 +40,19 @@ export async function POST(req: Request) {
   }
 }
 
-function cleanDevice(raw: { memory?: unknown; reminders?: unknown; settings?: unknown } | undefined): DeviceContext {
+interface RawDevice {
+  memory?: unknown;
+  reminders?: unknown;
+  settings?: unknown;
+  routines?: unknown;
+  lessons?: unknown;
+  connected?: unknown;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object";
+const clampInt = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : min);
+
+function cleanDevice(raw: RawDevice | undefined): DeviceContext {
   const memory: Record<string, string> = {};
   if (raw?.memory && typeof raw.memory === "object") {
     for (const [k, v] of Object.entries(raw.memory as Record<string, unknown>).slice(0, 40)) {
@@ -58,5 +70,26 @@ function cleanDevice(raw: { memory?: unknown; reminders?: unknown; settings?: un
     voice: s.voice === "friday" ? ("friday" as const) : ("jarvis" as const),
     title: (s.title === "mr" || s.title === "mrs" ? s.title : "") as Title,
   };
-  return { memory, reminders, settings };
+  const routines: Routine[] = Array.isArray(raw?.routines)
+    ? raw.routines
+        .filter((r): r is Routine => isObj(r) && typeof r.id === "string" && typeof r.trigger === "string" && typeof r.steps === "string")
+        .slice(0, 20)
+        .map((r) => ({ id: r.id.slice(0, 40), trigger: r.trigger.slice(0, 60), steps: r.steps.slice(0, 500) }))
+    : [];
+  const lessons: Lesson[] = Array.isArray(raw?.lessons)
+    ? raw.lessons
+        .filter((l): l is Lesson => isObj(l) && typeof l.id === "string" && typeof l.topic === "string")
+        .slice(0, 20)
+        .map((l) => ({
+          id: l.id.slice(0, 40),
+          topic: l.topic.slice(0, 120),
+          level: (LESSON_LEVELS as readonly string[]).includes(l.level) ? l.level : "beginner",
+          step: clampInt(l.step, 1, 1000),
+          score: clampInt(l.score, 0, 100),
+        }))
+    : [];
+  const connected: Channel[] = Array.isArray(raw?.connected)
+    ? CHANNELS.filter((c) => (raw.connected as unknown[]).includes(c))
+    : [];
+  return { memory, reminders, settings, routines, lessons, connected };
 }

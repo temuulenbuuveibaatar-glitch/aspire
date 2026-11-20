@@ -1,4 +1,4 @@
-// Tools for buses, time, and the person's own device (reminders, memory, calls).
+// Tools for buses, time, and the person's own device (reminders, memory). Calls live in connect.ts.
 import { localMinutes, nextArrivals, planTrip, timetable } from "@/lib/transit";
 import { bool, str, type Tool } from "./types";
 
@@ -137,7 +137,7 @@ export const remember: Tool = {
   name: "remember",
   label: { icon: "🧠", mn: "Санах", en: "Remember" },
   description:
-    "Save a fact the person asks you to remember, on their device only: their usual bus stop, a family member's name and phone number, their medicines. Never store passwords, card numbers, PINs or ID numbers.",
+    "Save a stable fact about the person on their device only, when they ask you to remember it or mention it naturally: their name, usual bus stop, family members' names and phone numbers, medicines, job or studies, interests, preferences. Not one-off details. Never store passwords, card numbers, PINs or ID numbers.",
   parameters: {
     type: "object",
     properties: {
@@ -169,30 +169,5 @@ export const forget: Tool = {
     if (!(key in ctx.device.memory)) return { error: "Nothing saved under that key", keys: Object.keys(ctx.device.memory) };
     ctx.actions.push({ type: "forget", key });
     return { ok: true };
-  },
-};
-
-const EMERGENCY: Record<string, string> = { "103": "Ambulance 103", "101": "Fire 101", "102": "Police 102", "105": "Emergency 105" };
-
-export const call: Tool = {
-  name: "call_phone",
-  label: { icon: "📞", mn: "Залгах", en: "Call" },
-  description:
-    "Show a big 'Call' button for a phone number: emergency (103 ambulance, 101 fire, 102 police) or a family member whose number is saved in memory. The person presses it to call; it never dials by itself.",
-  parameters: {
-    type: "object",
-    properties: {
-      number: { type: "string", description: "Phone number, e.g. '103' or '+97699112233'" },
-      label: { type: "string", description: "Who it is, in the person's language, e.g. 'Охин Сараа'" },
-    },
-    required: ["number", "label"],
-  },
-  async run(input, ctx) {
-    const number = str(input.number, 20).replace(/[^\d+]/g, "");
-    if (!/^\+?\d{3,15}$/.test(number)) return { error: "Not a valid phone number" };
-    const known = EMERGENCY[number] || Object.values(ctx.device.memory).some((v) => v.replace(/[^\d+]/g, "").endsWith(number.replace(/^\+976/, "")));
-    if (!known) return { error: "Only emergency numbers or numbers saved in memory can be called. Ask the person to save the number first." };
-    ctx.actions.push({ type: "call", number, label: str(input.label, 60) || EMERGENCY[number] || number });
-    return { ok: true, shown: "call button" };
   },
 };

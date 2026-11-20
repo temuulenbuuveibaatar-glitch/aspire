@@ -66,11 +66,11 @@ describe("memory and calls (privacy + safety)", () => {
     expect((await run("remember", { key: "bank card", value: "4111 1111 1111 1111" })).out.error).toMatch(/Refused/);
     expect((await run("remember", { key: "wifi", value: "my password is 1234" })).out.error).toMatch(/Refused/);
   });
-  it("only shows call buttons for emergency or saved numbers", async () => {
-    expect((await run("call_phone", { number: "103", label: "Түргэн тусламж" })).c.actions[0]).toMatchObject({ type: "call", number: "103" });
-    expect((await run("call_phone", { number: "99112233", label: "stranger" })).out.error).toBeTruthy();
+  it("shows call buttons for any number, flagging numbers that are not emergency or saved", async () => {
+    expect((await run("call_phone", { number: "103", label: "Түргэн тусламж" })).c.actions[0]).toMatchObject({ type: "call", number: "103", known: true });
+    expect((await run("call_phone", { number: "99112233", label: "stranger" })).c.actions[0]).toMatchObject({ type: "call", known: false });
     const saved = await run("call_phone", { number: "99112233", label: "Охин" }, ctx({ "daughter phone": "+976 9911 2233" }));
-    expect(saved.c.actions[0]).toMatchObject({ type: "call", number: "99112233" });
+    expect(saved.c.actions[0]).toMatchObject({ type: "call", number: "99112233", known: true });
   });
 });
 

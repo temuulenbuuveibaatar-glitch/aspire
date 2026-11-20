@@ -78,9 +78,101 @@ describe("Mr / Mrs address", () => {
     const run = (title: "mr" | "mrs" | "") => ({
       ctx: { now: new Date(), device: { memory: {}, reminders: [], settings: { title } }, actions: [] },
       steps: [],
+      sources: [],
     });
     expect(contextNote("mn", run("mr"))).toContain("Ноён");
     expect(contextNote("de", run("mrs"))).toContain("Frau");
     expect(contextNote("en", run(""))).toContain("polite form without a gendered title");
+  });
+});
+
+describe("brain v2 context", () => {
+  it("contextNote lists routines, lessons and connected channels", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const note = contextNote("en", {
+      ctx: {
+        now: new Date(),
+        device: {
+          memory: {},
+          reminders: [],
+          routines: [{ id: "rt1", trigger: "going home", steps: "next bus to Хороолол and the weather" }],
+          lessons: [{ id: "l1", topic: "Aerodynamics", level: "beginner", step: 3, score: 80 }],
+          connected: ["discord", "telegram"],
+        },
+        actions: [],
+      },
+      steps: [],
+      sources: [],
+    });
+    expect(note).toContain('- "going home": next bus to Хороолол and the weather');
+    expect(note).toContain("Aerodynamics");
+    expect(note).toMatch(/Connected.*discord, telegram/);
+  });
+
+  it("contextNote says when nothing is connected", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const note = contextNote("en", { ctx: { now: new Date(), device: { memory: {}, reminders: [] }, actions: [] }, steps: [], sources: [] });
+    expect(note).toMatch(/No messaging apps are connected/);
+    expect(note).not.toMatch(/Routines/);
+  });
+
+  it("the system prompt covers research, teaching, routines and never claiming a send", async () => {
+    const { SYSTEM } = await import("@/lib/brain/shared");
+    expect(SYSTEM).toMatch(/web_search/);
+    expect(SYSTEM).toMatch(/start_lesson/);
+    expect(SYSTEM).toMatch(/routine/i);
+    expect(SYSTEM).toMatch(/never say .*sent/i);
+    expect(SYSTEM).toContain("Аспайр");
+  });
+});
+
+describe("Claude research sources", () => {
+  it("ask returns sources from web search blocks", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+    vi.stubEnv("BRAIN_ORDER", "claude");
+    const requests: Array<{ tools: Array<{ name: string; max_uses?: number }> }> = [];
+    const create = vi.fn(async (req: { tools: Array<{ name: string; max_uses?: number }> }) => {
+      requests.push(req);
+      return {
+        stop_reason: "end_turn",
+        content: [
+          { type: "server_tool_use", id: "s1", name: "web_search", input: { query: "jet engine thrust" } },
+          {
+            type: "web_search_tool_result",
+            tool_use_id: "s1",
+            content: [
+              { type: "web_search_result", title: "How jet engines work", url: "https://example.org/jet", encrypted_content: "x", page_age: null },
+              { type: "web_search_result", title: "Thrust - NASA", url: "https://nasa.example/thrust", encrypted_content: "y", page_age: null },
+            ],
+          },
+          {
+            type: "text",
+            text: "A jet engine pushes air backwards fast, so the plane moves forward.",
+            citations: [
+              { type: "web_search_result_location", url: "https://example.org/jet", title: "How jet engines work", cited_text: "...", encrypted_index: "z" },
+            ],
+          },
+        ],
+      };
+    });
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: class {
+        beta = { messages: { create } };
+      },
+    }));
+
+    const { ask } = await import("@/lib/brain");
+    const out = await ask("Explain how a jet engine produces thrust", "en");
+    expect(out.brain).toBe("claude");
+    expect(out.sources).toEqual([
+      { title: "How jet engines work", url: "https://example.org/jet" },
+      { title: "Thrust - NASA", url: "https://nasa.example/thrust" },
+    ]);
+    const byName = Object.fromEntries(requests[0].tools.map((t) => [t.name, t]));
+    expect(byName.web_search.max_uses).toBe(5);
+    expect(byName.web_fetch.max_uses).toBe(3);
+    expect(byName.start_lesson).toBeTruthy();
+    expect(byName.send_message).toBeTruthy();
+    vi.doUnmock("@anthropic-ai/sdk");
   });
 });

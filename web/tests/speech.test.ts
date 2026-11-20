@@ -154,6 +154,46 @@ describe("Azure Speech", () => {
     expect(azureSsml("Сайн уу", "mn", "friday")).toContain('voice name="mn-MN-YesuiNeural"');
   });
 
+  it("speaks OGG/Opus for Telegram voice notes, cached separately from MP3", async () => {
+    azureEnv();
+    vi.stubEnv("GEMINI_API_KEY", "g-test");
+    const formats: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const fmt = (init?.headers as Record<string, string>)["X-Microsoft-OutputFormat"];
+        formats.push(fmt);
+        return new Response(new Uint8Array(fmt.startsWith("ogg") ? [0x4f, 0x67, 0x67, 0x53] : [0xff, 0xf3]));
+      }),
+    );
+    const { synthesize } = await import("@/lib/speech");
+    const ogg = await synthesize("Сайн уу", "mn", "jarvis", "ogg");
+    expect(ogg.contentType).toBe("audio/ogg");
+    expect(Buffer.from(ogg.body as Uint8Array).subarray(0, 4).toString("ascii")).toBe("OggS");
+    const mp3 = await synthesize("Сайн уу", "mn", "jarvis");
+    expect(mp3.contentType).toBe("audio/mpeg");
+    expect(formats).toEqual(["ogg-24khz-16bit-mono-opus", "audio-24khz-48kbitrate-mono-mp3"]);
+    // Both are cached now: no more requests.
+    expect((await synthesize("Сайн уу", "mn", "jarvis", "ogg")).contentType).toBe("audio/ogg");
+    expect(formats).toHaveLength(2);
+  });
+
+  it("OGG is only made by Azure: other engines are not asked for it", async () => {
+    azureEnv();
+    vi.stubEnv("GEMINI_API_KEY", "g-test");
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        return new Response("busy", { status: 503 });
+      }),
+    );
+    const { synthesize, SpeechOffline } = await import("@/lib/speech");
+    await expect(synthesize("hi", "en", "jarvis", "ogg")).rejects.toBeInstanceOf(SpeechOffline);
+    expect(urls.every((u) => u.includes("tts.speech.microsoft.com"))).toBe(true);
+  });
+
   it("short clips: each language transcribes, the one whose words fit its language wins", async () => {
     const { pickShortClip } = await import("@/lib/speech");
     // Real results from Azure for very short TTS clips ("Hi!", "你好", "Hallo").

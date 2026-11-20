@@ -5,9 +5,9 @@ import type { ClientAction, DeviceContext, ToolStep } from "@/lib/tools";
 import { claude } from "./claude";
 import { gemini } from "./gemini";
 import { deepseek, local } from "./local";
-import type { AgentRun, Brain, Turn } from "./shared";
+import type { AgentRun, Brain, Source, Turn } from "./shared";
 
-export type { Turn } from "./shared";
+export type { Source, Turn } from "./shared";
 
 const ALL: Record<string, Brain> = { claude, deepseek, gemini, local };
 
@@ -30,6 +30,8 @@ export interface AskResult {
   brain: string;
   actions: ClientAction[];
   steps: ToolStep[];
+  /** Web pages used for the answer (shown on screen, not spoken). */
+  sources: Source[];
 }
 
 const EMPTY_DEVICE: DeviceContext = { memory: {}, reminders: [] };
@@ -47,10 +49,10 @@ export async function ask(
   let lastError: unknown;
   for (const brain of brains) {
     // Fresh run per provider so a failed attempt leaves no half-done actions behind.
-    const run: AgentRun = { ctx: { now, device, actions: [] }, steps: [] };
+    const run: AgentRun = { ctx: { now, device, actions: [] }, steps: [], sources: [] };
     try {
       const reply = await brain.ask(text, lang, history.slice(-8), run);
-      return { reply, brain: brain.name, actions: run.ctx.actions, steps: run.steps };
+      return { reply, brain: brain.name, actions: run.ctx.actions, steps: run.steps, sources: run.sources };
     } catch (e) {
       lastError = e;
       console.error(`[brain:${brain.name}] failed, trying next`, e instanceof Error ? e.message.slice(0, 300) : e);
