@@ -1,3 +1,4 @@
+import { requireUser, signedOut } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
@@ -7,13 +8,15 @@ export const maxDuration = 30;
 // Called only after the person pressed Send on a confirm card. Discord/Slack go to the
 // channel webhook the person saved in Connections; we store nothing and never log the
 // message text or the webhook URL (the URL itself is a secret that allows posting).
-// TODO(auth): require a Supabase session (`requireUser`) once auth lands; rate limit per user then.
+// Requires a Supabase session (401 otherwise). TODO: rate limit per user instead of per IP.
 
 const MAX_TEXT = 2000;
 
 export async function POST(req: Request) {
   const limited = rateLimit(req, "send", 10);
   if (limited) return limited;
+  const user = await requireUser();
+  if (!user) return signedOut();
 
   const body = (await req.json().catch(() => null)) as {
     channel?: unknown;

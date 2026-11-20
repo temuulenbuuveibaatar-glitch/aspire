@@ -1,6 +1,7 @@
 import { isLang } from "@/lib/lang";
 import { SpeechOffline, synthesize } from "@/lib/speech";
 
+import { requireUser, signedOut } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
@@ -9,6 +10,8 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const limited = rateLimit(req, "speak", 30);
   if (limited) return limited;
+  const user = await requireUser();
+  if (!user) return signedOut();
 
   const body = (await req.json().catch(() => null)) as { text?: unknown; lang?: unknown; voice?: unknown } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 600) : "";

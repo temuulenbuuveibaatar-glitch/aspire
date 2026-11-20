@@ -9,6 +9,7 @@ import {
   Coins,
   Brain,
   Cable,
+  LogOut,
   Mic,
   Plus,
   Settings,
@@ -108,6 +109,27 @@ export default function Assistant() {
   const t = UI[lang];
   const settings = device.settings ?? {};
   const webhooks = settings.webhooks ?? {};
+
+  // Session ended while the app is open: a guarded API answering 401 sends the person to sign in
+  // again with a short notice instead of a blank error (covers ActionCard's /api/send too).
+  useEffect(() => {
+    const original = window.fetch;
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const res = await original.apply(window, args);
+      if (res.status === 401) {
+        const input = args[0];
+        const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const target = new URL(href, window.location.href);
+        if (target.origin === window.location.origin && /^\/api\/(ask|listen|speak|send)$/.test(target.pathname)) {
+          window.location.replace("/login?next=/&expired=1");
+        }
+      }
+      return res;
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
@@ -676,6 +698,12 @@ export default function Assistant() {
             ))}
           </Choices>
         </Section>
+        <form action="/auth/signout" method="post" className="mt-6">
+          <button type="submit" className="press flex min-h-12 items-center gap-2 rounded-full border border-line px-5 font-medium text-ink-soft hover:bg-white/10 hover:text-ink">
+            <LogOut className="size-5" aria-hidden />
+            {t.signOut}
+          </button>
+        </form>
         <p className="mt-6 text-sm text-ink-faint">
           <Link href="/privacy" className="underline">
             {t.privacy}

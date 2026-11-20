@@ -1,6 +1,7 @@
 import { chooseSpokenLanguage } from "@/lib/lang";
 import { SpeechOffline, transcribe } from "@/lib/speech";
 
+import { requireUser, signedOut } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
@@ -9,6 +10,8 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const limited = rateLimit(req, "listen", 20);
   if (limited) return limited;
+  const user = await requireUser();
+  if (!user) return signedOut();
 
   const form = await req.formData().catch(() => null);
   const audio = form?.get("audio");

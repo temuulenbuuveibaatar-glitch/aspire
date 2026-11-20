@@ -66,6 +66,17 @@ export const UI: Record<
     newChat: string;
     menu: string;
     suggestions: string[];
+    signInTitle: string;
+    continueGoogle: string;
+    emailMeCode: string;
+    emailLabel: string;
+    codeLabel: string;
+    verify: string;
+    codeSent: string;
+    orTapLink: string;
+    signOut: string;
+    signedOutNotice: string;
+    wrongCode: string;
   }
 > = {
   mn: {
@@ -131,6 +142,17 @@ export const UI: Record<
     newChat: "Шинэ яриа",
     menu: "Цэс",
     suggestions: ["Надад цөмийн физикийг энгийнээр зааж өгөөч", "Өнөөдөр цаг агаар ямар байна?", "Маргааш 8 цагт сануулга тавиач", "Багийнхандаа хоцорно гэж бичээд өгөөч", "Дараагийн автобус хэзээ ирэх вэ?", "100 доллар хэдэн төгрөг вэ?"],
+    signInTitle: "Нэвтрэх",
+    continueGoogle: "Google-ээр үргэлжлүүлэх",
+    emailMeCode: "Имэйлээр код авах",
+    emailLabel: "Имэйл хаяг",
+    codeLabel: "6 оронтой код",
+    verify: "Баталгаажуулах",
+    codeSent: "Таны имэйл рүү нэвтрэх код илгээлээ.",
+    orTapLink: "Эсвэл имэйл доторх холбоосыг дарахад л болно.",
+    signOut: "Гарах",
+    signedOutNotice: "Нэвтрэлтийн хугацаа дууссан. Дахин нэвтэрнэ үү.",
+    wrongCode: "Код буруу эсвэл хугацаа нь дууссан байна. Дахин оролдоно уу.",
   },
   zh: {
     idle: "按下说话",
@@ -195,6 +217,17 @@ export const UI: Record<
     newChat: "新对话",
     menu: "菜单",
     suggestions: ["用简单的话教我核物理", "今天天气怎么样？", "明天早上8点提醒我", "帮我给团队写条消息说我会迟到", "下一班公交车什么时候来？", "100美元等于多少图格里克？"],
+    signInTitle: "登录",
+    continueGoogle: "使用 Google 继续",
+    emailMeCode: "通过邮件发送验证码",
+    emailLabel: "邮箱地址",
+    codeLabel: "6 位验证码",
+    verify: "验证",
+    codeSent: "登录验证码已发送到您的邮箱。",
+    orTapLink: "也可以直接点击邮件中的链接。",
+    signOut: "退出登录",
+    signedOutNotice: "登录已过期，请重新登录。",
+    wrongCode: "验证码错误或已过期，请重试。",
   },
   en: {
     idle: "Press and speak",
@@ -259,6 +292,17 @@ export const UI: Record<
     newChat: "New chat",
     menu: "Menu",
     suggestions: ["Teach me nuclear physics simply", "What's the weather today?", "Remind me tomorrow at 8", "Tell my team I'll be 10 minutes late", "When is the next bus?", "How much is 100 dollars in tugriks?"],
+    signInTitle: "Sign in",
+    continueGoogle: "Continue with Google",
+    emailMeCode: "Email me a code",
+    emailLabel: "Email address",
+    codeLabel: "6-digit code",
+    verify: "Verify",
+    codeSent: "We sent a sign-in code to your email.",
+    orTapLink: "Or just tap the link in the email.",
+    signOut: "Sign out",
+    signedOutNotice: "Your session ended. Please sign in again.",
+    wrongCode: "That code is wrong or expired. Please try again.",
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -323,6 +367,17 @@ export const UI: Record<
     newChat: "Новый разговор",
     menu: "Меню",
     suggestions: ["Объясни ядерную физику простыми словами", "Какая сегодня погода?", "Напомни мне завтра в 8", "Напиши команде, что я опоздаю", "Когда следующий автобус?", "Сколько тугриков стоит 100 долларов?"],
+    signInTitle: "Вход",
+    continueGoogle: "Продолжить с Google",
+    emailMeCode: "Получить код на почту",
+    emailLabel: "Адрес эл. почты",
+    codeLabel: "6-значный код",
+    verify: "Подтвердить",
+    codeSent: "Мы отправили код для входа на вашу почту.",
+    orTapLink: "Или просто нажмите на ссылку в письме.",
+    signOut: "Выйти",
+    signedOutNotice: "Сеанс завершён. Пожалуйста, войдите снова.",
+    wrongCode: "Код неверный или устарел. Попробуйте ещё раз.",
   },
   de: {
     idle: "Drücken und sprechen",
@@ -387,5 +442,16 @@ export const UI: Record<
     newChat: "Neuer Chat",
     menu: "Menü",
     suggestions: ["Erklär mir Kernphysik einfach", "Wie ist das Wetter heute?", "Erinnere mich morgen um 8", "Sag meinem Team, dass ich später komme", "Wann kommt der nächste Bus?", "Wie viel sind 100 Dollar in Tugrik?"],
+    signInTitle: "Anmelden",
+    continueGoogle: "Weiter mit Google",
+    emailMeCode: "Code per E-Mail senden",
+    emailLabel: "E-Mail-Adresse",
+    codeLabel: "6-stelliger Code",
+    verify: "Bestätigen",
+    codeSent: "Wir haben Ihnen einen Anmeldecode per E-Mail geschickt.",
+    orTapLink: "Oder tippen Sie einfach auf den Link in der E-Mail.",
+    signOut: "Abmelden",
+    signedOutNotice: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    wrongCode: "Der Code ist falsch oder abgelaufen. Bitte noch einmal versuchen.",
   },
 };

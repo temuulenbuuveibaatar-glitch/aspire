@@ -1,5 +1,6 @@
 import { ask, NoBrainConfigured, type Turn } from "@/lib/brain";
 import { detectTextLanguage, isLang, type Lang } from "@/lib/lang";
+import { requireUser, signedOut } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
 import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
@@ -12,6 +13,8 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const limited = rateLimit(req, "ask", 20);
   if (limited) return limited;
+  const user = await requireUser();
+  if (!user) return signedOut();
 
   const body = (await req.json().catch(() => null)) as {
     text?: unknown;
