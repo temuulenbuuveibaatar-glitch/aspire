@@ -1,7 +1,7 @@
 // Tools that look things up in the world. All free APIs, no keys needed.
 import { str, type Tool } from "./types";
 
-const UA = { "User-Agent": "Aspire/1.0 (Orkhon Hackathon; https://github.com/temuulenbuuveibaatar-glitch/emee-tovch)" };
+const UA = { "User-Agent": "Aspire/1.0 (Orkhon Hackathon; https://github.com/temuulenbuuveibaatar-glitch/aspire)" };
 const ERDENET = { name: "Erdenet", latitude: 49.0333, longitude: 104.0833 };
 
 async function getJson<T>(url: string): Promise<T> {

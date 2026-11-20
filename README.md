@@ -1,5 +1,7 @@
 # Aspire — Jarvis-style voice assistant
 
+**Live:** https://aspire-mn.vercel.app
+
 Orkhon Hackathon (Erdenet). One big button: press it and ask out loud. It answers out loud in the language you spoke — **Mongolian, Chinese, English, Russian or German** — with no settings. "hi" → English, "ni hao" → Chinese, "hallo" → German, "privet" → Russian, "сайн байна уу" → Mongolian.
 
 It knows when the next bus comes and looks up anything else on the web.
