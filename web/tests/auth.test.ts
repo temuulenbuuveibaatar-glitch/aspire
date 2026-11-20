@@ -1,9 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// The Supabase server client is faked: tests control what `auth.getUser()` answers.
-const getUser = vi.fn();
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseServer: async () => ({ auth: { getUser: () => getUser() } }),
+// Clerk is faked: tests control what `auth()` answers. `clerkMiddleware(handler)` becomes a
+// plain function that calls our handler with the same fake `auth`, so proxy.ts logic is tested
+// without Clerk's network handshake.
+type AuthState = { userId: string | null; sessionClaims?: Record<string, unknown> | null };
+const authMock = vi.fn<() => Promise<AuthState>>();
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: () => authMock(),
+  clerkMiddleware:
+    (handler: (auth: () => Promise<AuthState>, req: unknown, ev: unknown) => unknown) => (req: unknown, ev: unknown) =>
+      handler(() => authMock(), req, ev),
 }));
 
 // Routes see a mocked `requireUser`; the real one is loaded with importActual below.
@@ -13,33 +19,24 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   requireUser: () => requireUserMock(),
 }));
 
-// proxy.ts builds its own client from @supabase/ssr.
-vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({ auth: { getUser: () => getUser() } }),
-}));
-
 const actual = () => vi.importActual<typeof import("@/lib/auth")>("@/lib/auth");
 
-beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "sb_publishable_test");
-});
 afterEach(() => {
-  vi.unstubAllEnvs();
-  getUser.mockReset();
+  authMock.mockReset();
   requireUserMock.mockReset();
 });
 
 describe("isPublicPath", () => {
   it.each([
     ["/login", true],
-    ["/auth/callback", true],
+    ["/login/factor-one", true],
     ["/privacy", true],
     ["/terms", true],
     ["/api/bots/telegram", true],
     ["/api/cron/reminders", true],
     ["/_next/static/chunk.js", true],
     ["/favicon.ico", true],
+    ["/auth/callback", false],
     ["/api/ask", false],
     ["/", false],
     ["/loginx", false],
@@ -52,21 +49,28 @@ describe("isPublicPath", () => {
 
 describe("requireUser", () => {
   it("requireUser returns null for an expired session", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: { name: "AuthApiError", message: "JWT expired", status: 401 } });
+    // Clerk reports an expired or absent session token as signed out: no userId.
+    authMock.mockResolvedValue({ userId: null, sessionClaims: null });
     const { requireUser } = await actual();
     expect(await requireUser()).toBeNull();
   });
 
   it("returns null when the auth call itself fails", async () => {
-    getUser.mockRejectedValue(new Error("network down"));
+    authMock.mockRejectedValue(new Error("clerk down"));
     const { requireUser } = await actual();
     expect(await requireUser()).toBeNull();
   });
 
-  it("returns id and email for a signed-in user", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "u-1", email: "a@b.test" } }, error: null });
+  it("returns the Clerk user id and the email claim for a signed-in user", async () => {
+    authMock.mockResolvedValue({ userId: "user_2abc", sessionClaims: { sub: "user_2abc", email: "a@b.test" } });
     const { requireUser } = await actual();
-    expect(await requireUser()).toEqual({ id: "u-1", email: "a@b.test" });
+    expect(await requireUser()).toEqual({ id: "user_2abc", email: "a@b.test" });
+  });
+
+  it("email is null when the session token carries no email claim", async () => {
+    authMock.mockResolvedValue({ userId: "user_2abc", sessionClaims: { sub: "user_2abc" } });
+    const { requireUser } = await actual();
+    expect(await requireUser()).toEqual({ id: "user_2abc", email: null });
   });
 });
 
@@ -76,6 +80,29 @@ describe("signedOut", () => {
     const res = signedOut();
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "signed_out" });
+  });
+});
+
+describe("safeNext", () => {
+  it("keeps same-origin relative paths", async () => {
+    const { safeNext } = await actual();
+    expect(safeNext("/settings?tab=voice")).toBe("/settings?tab=voice");
+    expect(safeNext("/")).toBe("/");
+    expect(safeNext(null)).toBe("/");
+    expect(safeNext(undefined)).toBe("/");
+  });
+
+  it("ignores absolute and protocol-relative next (open redirect)", async () => {
+    const { safeNext } = await actual();
+    for (const next of ["https://evil.test", "//evil.test", "/\\evil.test", "javascript:alert(1)", "evil.test", "/\tevil", "/%0a//evil.test"]) {
+      const out = safeNext(next);
+      expect(out.startsWith("/"), next).toBe(true);
+      expect(out.startsWith("//"), next).toBe(false);
+      expect(new URL(out, "http://same.invalid").origin, next).toBe("http://same.invalid");
+    }
+    expect(safeNext("https://evil.test")).toBe("/");
+    expect(safeNext("//evil.test")).toBe("/");
+    expect(safeNext("/\\evil.test")).toBe("/");
   });
 });
 
@@ -114,32 +141,36 @@ describe("guarded API routes", () => {
 });
 
 describe("proxy", () => {
-  const run = async (url: string) => {
+  // Returning nothing from the Clerk handler means "continue" (Clerk sends NextResponse.next()).
+  const run = async (url: string): Promise<Response | undefined> => {
     const { NextRequest } = await import("next/server");
-    const { proxy } = await import("@/proxy");
-    return proxy(new NextRequest(url));
+    const proxy = (await import("@/proxy")).default as unknown as (req: unknown, ev: unknown) => Promise<Response | undefined>;
+    return proxy(new NextRequest(url), {});
   };
+  const location = (res: Response | undefined) => res?.headers.get("location") ?? null;
 
   it("redirects a signed-out page visit to /login with next", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    authMock.mockResolvedValue({ userId: null });
     const res = await run("http://localhost/settings?tab=voice");
-    expect(res.status).toBe(307);
-    const loc = new URL(res.headers.get("location")!);
+    expect(res?.status).toBe(307);
+    const loc = new URL(location(res)!);
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("next")).toBe("/settings?tab=voice");
   });
 
   it("never redirects API paths (routes answer 401 themselves)", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
-    const res = await run("http://localhost/api/ask");
-    expect(res.headers.get("location")).toBeNull();
-    expect(res.status).toBe(200);
+    authMock.mockResolvedValue({ userId: null });
+    for (const path of ["/api/ask", "/api/listen", "/api/speak", "/api/send"]) {
+      expect(location(await run(`http://localhost${path}`)), path).toBeNull();
+    }
   });
 
   it("lets public pages and signed-in users through", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
-    expect((await run("http://localhost/login")).headers.get("location")).toBeNull();
-    getUser.mockResolvedValue({ data: { user: { id: "u-1", email: null } }, error: null });
-    expect((await run("http://localhost/")).headers.get("location")).toBeNull();
+    authMock.mockResolvedValue({ userId: null });
+    for (const path of ["/login", "/login?next=%2F", "/privacy", "/terms", "/api/bots/telegram", "/api/cron/reminders", "/robots.txt"]) {
+      expect(location(await run(`http://localhost${path}`)), path).toBeNull();
+    }
+    authMock.mockResolvedValue({ userId: "user_2abc" });
+    expect(location(await run("http://localhost/"))).toBeNull();
   });
 });

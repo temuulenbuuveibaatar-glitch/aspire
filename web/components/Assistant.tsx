@@ -1,5 +1,6 @@
 "use client";
 
+import { SignOutButton } from "@clerk/nextjs";
 import {
   ArrowUp,
   Bell,
@@ -698,12 +699,14 @@ export default function Assistant() {
             ))}
           </Choices>
         </Section>
-        <form action="/auth/signout" method="post" className="mt-6">
-          <button type="submit" className="press flex min-h-12 items-center gap-2 rounded-full border border-line px-5 font-medium text-ink-soft hover:bg-white/10 hover:text-ink">
-            <LogOut className="size-5" aria-hidden />
-            {t.signOut}
-          </button>
-        </form>
+        <div className="mt-6">
+          <SignOutButton redirectUrl="/login">
+            <button type="button" className="press flex min-h-12 items-center gap-2 rounded-full border border-line px-5 font-medium text-ink-soft hover:bg-white/10 hover:text-ink">
+              <LogOut className="size-5" aria-hidden />
+              {t.signOut}
+            </button>
+          </SignOutButton>
+        </div>
         <p className="mt-6 text-sm text-ink-faint">
           <Link href="/privacy" className="underline">
             {t.privacy}

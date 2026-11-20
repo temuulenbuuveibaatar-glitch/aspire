@@ -1,43 +1,24 @@
-import { createServerClient } from "@supabase/ssr";
-import { type NextRequest, NextResponse } from "next/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 import { isPublicPath } from "@/lib/auth";
-import { supabaseEnv } from "@/lib/supabase/env";
 
-// Runs before every matched request: refreshes the Supabase session cookie, and sends people
-// who are not signed in to /login. API paths are never redirected; routes answer 401 themselves.
-export async function proxy(request: NextRequest) {
-  const { url, anonKey } = supabaseEnv();
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll(toSet, headers) {
-        for (const { name, value } of toSet) request.cookies.set(name, value);
-        response = NextResponse.next({ request });
-        for (const { name, value, options } of toSet) response.cookies.set(name, value, options);
-        for (const [key, value] of Object.entries(headers ?? {})) response.headers.set(key, value);
-      },
-    },
-  });
-
-  // getUser() validates the token with Supabase and refreshes it when needed.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+// Runs before every matched request. Clerk verifies (and in development, hands off) the session;
+// people who are not signed in are sent to /login?next=<path>. API paths are never redirected:
+// guarded routes answer 401 themselves via requireUser(). Public paths come from isPublicPath()
+// (/login…, /privacy, /terms, /api/bots/…, /api/cron/…, static files), the same list the tests pin.
+export default clerkMiddleware(async (auth, request) => {
   const { pathname, search } = request.nextUrl;
-  if (!user && !pathname.startsWith("/api/") && !isPublicPath(pathname)) {
-    const login = request.nextUrl.clone();
-    login.pathname = "/login";
-    login.search = "";
-    login.searchParams.set("next", `${pathname}${search}`);
-    const redirect = NextResponse.redirect(login);
-    for (const c of response.cookies.getAll()) redirect.cookies.set(c);
-    return redirect;
-  }
-  return response;
-}
+  if (pathname.startsWith("/api/") || isPublicPath(pathname)) return;
+
+  const { userId } = await auth();
+  if (userId) return;
+
+  const login = request.nextUrl.clone();
+  login.pathname = "/login";
+  login.search = "";
+  login.searchParams.set("next", `${pathname}${search}`);
+  return NextResponse.redirect(login);
+});
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)"],

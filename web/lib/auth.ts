@@ -1,17 +1,22 @@
-import { supabaseServer } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 
 export interface SessionUser {
+  /** Clerk user id, e.g. "user_2abc…" (a string, not a uuid). */
   id: string;
   email: string | null;
 }
 
-/** The signed-in person, or null when there is no valid session (missing, expired, revoked). */
+/**
+ * The signed-in person, or null when there is no valid session (missing, expired, revoked).
+ * Reads only the verified Clerk session token: no network call per request. `email` comes from
+ * an `email` claim when the Clerk session token is customised to carry one, otherwise null.
+ */
 export async function requireUser(): Promise<SessionUser | null> {
   try {
-    const supabase = await supabaseServer();
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) return null;
-    return { id: data.user.id, email: data.user.email ?? null };
+    const { userId, sessionClaims } = await auth();
+    if (!userId) return null;
+    const email = sessionClaims?.email;
+    return { id: userId, email: typeof email === "string" && email ? email : null };
   } catch (e) {
     // Fail closed: an auth outage looks like "signed out", never like "signed in".
     console.error("requireUser:", e instanceof Error ? e.name : "error");
@@ -24,7 +29,7 @@ export function signedOut(): Response {
   return Response.json({ error: "signed_out" }, { status: 401 });
 }
 
-const PUBLIC_PREFIXES = ["/login", "/auth", "/privacy", "/terms", "/api/bots", "/api/cron", "/_next"];
+const PUBLIC_PREFIXES = ["/login", "/privacy", "/terms", "/api/bots", "/api/cron", "/_next"];
 
 /** Paths anyone may open without signing in. */
 export function isPublicPath(pathname: string): boolean {

@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Sign in · Aspire" };
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-// Cache Components: request data (searchParams, cookies) is read inside a Suspense boundary.
+// Cache Components: request data (searchParams, the Clerk session) is read inside a Suspense boundary.
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <Suspense fallback={<main className="min-h-dvh" />}>
@@ -22,5 +22,5 @@ async function Login({ searchParams }: Pick<PageProps<"/login">, "searchParams">
   const next = safeNext(first(params.next));
   // Already signed in (e.g. back button after login): go straight on.
   if (await requireUser()) redirect(next);
-  return <LoginForm next={next} expired={first(params.expired) === "1"} failed={first(params.error) === "1"} />;
+  return <LoginForm next={next} expired={first(params.expired) === "1"} />;
 }
