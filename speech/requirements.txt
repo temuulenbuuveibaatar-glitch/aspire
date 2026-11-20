@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0
+torchaudio==2.8.0
+omnivoice
+faster-whisper>=1.1
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.18
+soundfile>=0.12
+numpy

@@ -1,0 +1,60 @@
+{
+  "city": "Erdenet",
+  "timezone": "Asia/Ulaanbaatar",
+  "sample": true,
+  "note": "SAMPLE DATA for the Orkhon Hackathon demo. Routes, stops and times are illustrative, not the real Erdenet schedule. Replace with the operator's timetable or a GTFS feed.",
+  "stops": [
+    { "id": "center", "names": { "mn": "Төв талбай", "en": "Central Square", "ru": "Центральная площадь", "zh": "中心广场", "de": "Zentralplatz" } },
+    { "id": "market", "names": { "mn": "Төв зах", "en": "Central Market", "ru": "Центральный рынок", "zh": "中心市场", "de": "Zentralmarkt" } },
+    { "id": "hospital", "names": { "mn": "Нэгдсэн эмнэлэг", "en": "General Hospital", "ru": "Больница", "zh": "综合医院", "de": "Krankenhaus" } },
+    { "id": "culture", "names": { "mn": "Соёлын төв", "en": "Culture Center", "ru": "Дом культуры", "zh": "文化中心", "de": "Kulturzentrum" } },
+    { "id": "railway", "names": { "mn": "Галт тэрэгний буудал", "en": "Railway Station", "ru": "Вокзал", "zh": "火车站", "de": "Bahnhof" } },
+    { "id": "plant", "names": { "mn": "Эрдэнэт үйлдвэр", "en": "Erdenet Mining Plant", "ru": "Горно-обогатительный комбинат", "zh": "额尔登特矿厂", "de": "Bergbauwerk Erdenet" } },
+    { "id": "school", "names": { "mn": "1-р сургууль", "en": "School No. 1", "ru": "Школа №1", "zh": "第一学校", "de": "Schule Nr. 1" } },
+    { "id": "dormitory", "names": { "mn": "Хороолол", "en": "Residential District", "ru": "Микрорайон", "zh": "住宅区", "de": "Wohnviertel" } }
+  ],
+  "routes": [
+    {
+      "id": "1",
+      "names": { "mn": "1-р чиглэл: Хороолол → Үйлдвэр", "en": "Route 1: Residential District → Mining Plant" },
+      "stops": [
+        { "stop": "dormitory", "offsetMin": 0 },
+        { "stop": "school", "offsetMin": 4 },
+        { "stop": "center", "offsetMin": 9 },
+        { "stop": "market", "offsetMin": 13 },
+        { "stop": "plant", "offsetMin": 25 }
+      ],
+      "firstDeparture": "06:30",
+      "lastDeparture": "22:00",
+      "headwayMin": 15
+    },
+    {
+      "id": "5",
+      "names": { "mn": "5-р чиглэл: Галт тэрэг → Эмнэлэг", "en": "Route 5: Railway Station → Hospital" },
+      "stops": [
+        { "stop": "railway", "offsetMin": 0 },
+        { "stop": "market", "offsetMin": 10 },
+        { "stop": "center", "offsetMin": 14 },
+        { "stop": "culture", "offsetMin": 17 },
+        { "stop": "hospital", "offsetMin": 22 }
+      ],
+      "firstDeparture": "07:00",
+      "lastDeparture": "21:00",
+      "headwayMin": 20
+    },
+    {
+      "id": "12",
+      "names": { "mn": "12-р чиглэл: Эмнэлэг → Хороолол", "en": "Route 12: Hospital → Residential District" },
+      "stops": [
+        { "stop": "hospital", "offsetMin": 0 },
+        { "stop": "culture", "offsetMin": 5 },
+        { "stop": "center", "offsetMin": 8 },
+        { "stop": "school", "offsetMin": 13 },
+        { "stop": "dormitory", "offsetMin": 18 }
+      ],
+      "firstDeparture": "06:45",
+      "lastDeparture": "21:45",
+      "headwayMin": 12
+    }
+  ]
+}
