@@ -4,10 +4,10 @@ The code in this repository is MIT-licensed. It uses, but does not include, the 
 
 | Component | Use | License / terms |
 |---|---|---|
-| [OmniVoice](https://github.com/k2-fsa/OmniVoice) (k2-fsa) | Text-to-speech in all 5 languages | Code: Apache-2.0. **Model weights: CC-BY-NC (non-commercial only)** |
+| [OmniVoice](https://github.com/k2-fsa/OmniVoice) (k2-fsa) | Optional self-hosted text-to-speech (speech/) | Code: Apache-2.0. **Model weights: CC-BY-NC (non-commercial only)** |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) / OpenAI Whisper | Speech-to-text + language detection | MIT |
 | [Anthropic Claude API](https://www.anthropic.com/legal) | Brain + web search | Anthropic's commercial terms |
-| [Google Gemini API](https://ai.google.dev/gemini-api/terms) | Optional brain | Gemini API terms |
+| [Google Gemini API](https://ai.google.dev/gemini-api/terms) | Brain, speech recognition and voice (default speech engine) | Gemini API terms. On the free tier Google may use content to improve its products |
 | Qwen2.5 via Ollama (optional, local) | Offline brain | Qwen license (see model card) |
 | Next.js, React | Web app | MIT |
 | Nunito, Orbitron fonts | UI | SIL Open Font License |

@@ -9,7 +9,7 @@ It knows when the next bus comes and looks up anything else on the web.
 | Folder | What | Runs on |
 |---|---|---|
 | `web/` | Next.js app: the Jarvis screen + API (`/api/listen`, `/api/ask`, `/api/speak`) | Vercel |
-| `speech/` | Our speech engine: Whisper (listening + language detection) and OmniVoice (one warm voice in all 5 languages) | AWS GPU machine (Docker) |
+| `speech/` | Optional self-hosted speech engine: Whisper + OmniVoice | Any NVIDIA GPU machine (Docker) |
 
 **Any AI can be the brain.** Set `BRAIN_ORDER` (default `claude,gemini,local`). Unconfigured providers are skipped, and if one fails the next answers:
 
@@ -29,9 +29,11 @@ npm run dev                  # http://localhost:3000
 npm test                     # language detection + bus timetable tests
 ```
 
-Without `SPEECH_URL` the app still works by typing; answers show on screen and a note says the voice engine is offline. There is no browser voice fallback.
+**Voice, free:** with just `GEMINI_API_KEY`, Gemini does the listening (speech-to-text + language) and the talking (warm "Sulafat" voice; Halh Mongolian, Chinese, English, Russian, German). No server to run. Set `SPEECH_URL` instead to use the self-hosted OmniVoice engine. There is no browser voice fallback.
 
-## Run the speech engine (GPU)
+One free Gemini key from https://aistudio.google.com/apikey runs the whole app (brain + ears + voice).
+
+## Optional: self-hosted speech engine (GPU)
 
 ```bash
 cd speech

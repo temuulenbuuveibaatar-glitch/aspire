@@ -15,12 +15,15 @@ export async function POST(req: Request) {
   if (!text || !isLang(body?.lang)) return Response.json({ error: "text and lang are required" }, { status: 400 });
 
   try {
-    const upstream = await synthesize(text, body.lang);
-    return new Response(upstream.body, {
-      headers: { "Content-Type": upstream.headers.get("Content-Type") ?? "audio/wav", "Cache-Control": "no-store" },
+    const audio = await synthesize(text, body.lang);
+    return new Response(audio.body, {
+      headers: { "Content-Type": audio.contentType, "Cache-Control": "no-store" },
     });
   } catch (e) {
-    if (e instanceof SpeechOffline) return Response.json({ error: "voice_offline" }, { status: 503 });
+    if (e instanceof SpeechOffline) {
+      console.error("speak:", e.message);
+      return Response.json({ error: "voice_offline" }, { status: 503 });
+    }
     throw e;
   }
 }

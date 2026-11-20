@@ -22,7 +22,10 @@ export async function POST(req: Request) {
     const text = stt.text.trim();
     return Response.json({ text, lang: chooseSpokenLanguage(text, stt.probs) });
   } catch (e) {
-    if (e instanceof SpeechOffline) return Response.json({ error: "voice_offline" }, { status: 503 });
+    if (e instanceof SpeechOffline) {
+      console.error("listen:", e.message);
+      return Response.json({ error: "voice_offline" }, { status: 503 });
+    }
     throw e;
   }
 }
