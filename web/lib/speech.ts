@@ -236,7 +236,7 @@ async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<
       "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
       "Content-Type": "application/ssml+xml",
       "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
-      "User-Agent": "emee-tovch",
+      "User-Agent": "aspire-assistant",
     },
     body: azureSsml(text, lang, voice),
     signal: AbortSignal.timeout(20_000),

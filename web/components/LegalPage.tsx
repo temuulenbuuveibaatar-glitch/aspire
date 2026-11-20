@@ -11,7 +11,7 @@ export default function LegalPage({ title, children }: { title: string; children
   return (
     <main className="legal">
       <p>
-        <Link href="/">← Эмээ товч</Link>
+        <Link href="/">← Aspire</Link>
       </p>
       <h1>{title}</h1>
       <p className="legal-updated">

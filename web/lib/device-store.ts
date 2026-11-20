@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ClientAction, DeviceContext, Reminder } from "@/lib/tools/types";
 
-const KEY = "emee-device-v1";
+const KEY = "aspire-device-v1";
+const OLD_KEY = "emee-device-v1"; // before the rename; read once so nothing is lost
 const EMPTY: DeviceContext = { memory: {}, reminders: [] };
 
 function load(): DeviceContext {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as DeviceContext | null;
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? localStorage.getItem(OLD_KEY) ?? "null") as DeviceContext | null;
     if (raw && typeof raw.memory === "object" && Array.isArray(raw.reminders)) return raw;
   } catch {
     /* storage blocked or corrupt: start empty */

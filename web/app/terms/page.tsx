@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import LegalPage, { Contact } from "@/components/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Үйлчилгээний нөхцөл · Terms of Use — Эмээ товч" };
+export const metadata: Metadata = { title: "Үйлчилгээний нөхцөл · Terms of Use — Aspire" };
 
 export default function Terms() {
   return (
@@ -10,7 +10,7 @@ export default function Terms() {
       <section lang="mn">
         <h2>Энэ юу вэ</h2>
         <p>
-          Эмээ товч бол {SITE.event}-д зориулан бүтээсэн туршилтын (demo) үйлчилгээ юм. Үнэ төлбөргүй, &quot;байгаа хэвээр нь&quot;
+          Aspire бол {SITE.event}-д зориулан бүтээсэн туршилтын (demo) үйлчилгээ юм. Үнэ төлбөргүй, &quot;байгаа хэвээр нь&quot;
           санал болгож байна.
         </p>
         <h2>Анхаарах зүйл</h2>
@@ -38,7 +38,7 @@ export default function Terms() {
       <section lang="en">
         <h2>What this is</h2>
         <p>
-          Эмээ товч is a demo service built for the {SITE.event}. It is free and provided &quot;as is&quot;, without warranties of any
+          Aspire is a demo service built for the {SITE.event}. It is free and provided &quot;as is&quot;, without warranties of any
           kind.
         </p>
         <h2>Please note</h2>

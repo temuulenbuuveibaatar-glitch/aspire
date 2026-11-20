@@ -58,7 +58,7 @@ export default function Assistant() {
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading browser-only storage after mount
-      setConsented(localStorage.getItem("emee-consent") === "1");
+      setConsented((localStorage.getItem("aspire-consent") ?? localStorage.getItem("emee-consent")) === "1");
     } catch {
       setConsented(false);
     }
@@ -66,7 +66,7 @@ export default function Assistant() {
   const acceptConsent = () => {
     setConsented(true);
     try {
-      localStorage.setItem("emee-consent", "1");
+      localStorage.setItem("aspire-consent", "1");
     } catch {
       /* storage unavailable: show the note again next visit */
     }
@@ -288,7 +288,7 @@ export default function Assistant() {
       <header className="top">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
-          <span>ЭМЭЭ ТОВЧ</span>
+          <span>ASPIRE</span>
         </div>
         <div className="lang-badge" title="Auto-detected language">
           <span aria-hidden>{LANG_NAMES[lang].flag}</span> {LANG_NAMES[lang].native}

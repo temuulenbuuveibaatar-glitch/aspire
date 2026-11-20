@@ -1,4 +1,4 @@
-# Эмээ товч — Grandma Button
+# Aspire — Jarvis-style voice assistant
 
 Orkhon Hackathon (Erdenet). One big button: press it and ask out loud. It answers out loud in the language you spoke — **Mongolian, Chinese, English, Russian or German** — with no settings. "hi" → English, "ni hao" → Chinese, "hallo" → German, "privet" → Russian, "сайн байна уу" → Mongolian.
 
@@ -40,8 +40,8 @@ One free Gemini key from https://aistudio.google.com/apikey runs the whole app (
 
 ```bash
 cd speech
-docker build -t emee-speech .
-docker run --gpus all -p 8000:8000 -e SPEECH_TOKEN=change-me -v emee-data:/data emee-speech
+docker build -t aspire-speech .
+docker run --gpus all -p 8000:8000 -e SPEECH_TOKEN=change-me -v aspire-data:/data aspire-speech
 ```
 
 First start downloads the models and designs the persona voice (`/data/persona.wav`). To use a real person's voice instead, put a 10–20 s clean recording at `/data/persona.wav` and its transcript in `/data/persona.txt` — **only with that person's written consent**.

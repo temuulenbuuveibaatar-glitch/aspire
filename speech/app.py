@@ -1,4 +1,4 @@
-"""Эмээ товч speech engine: Whisper (listening) + OmniVoice (speaking).
+"""Aspire speech engine: Whisper (listening) + OmniVoice (speaking).
 
 Runs on a GPU machine (AWS). The Vercel app calls it with a shared secret.
 
@@ -42,7 +42,7 @@ PERSONA_TEXT = DATA / "persona.txt"
 PERSONA_INSTRUCT = os.environ.get("PERSONA_INSTRUCT", "female, young adult, moderate pitch")
 PERSONA_SEED_TEXT = "Hello! I am here to help you. Take your time, I am listening."
 
-app = FastAPI(title="Emee speech engine")
+app = FastAPI(title="Aspire speech engine")
 gpu_lock = threading.Lock()
 
 stt = WhisperModel(

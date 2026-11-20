@@ -6,9 +6,9 @@ const body = Nunito({ variable: "--font-body", subsets: ["latin", "cyrillic", "c
 const display = Orbitron({ variable: "--font-display", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Эмээ товч",
-  description: "One big button: ask out loud in Mongolian, Chinese, English, Russian or German. Bus times for Erdenet and answers to anything.",
-  applicationName: "Эмээ товч",
+  title: "Aspire",
+  description: "Aspire, a Jarvis-style voice assistant. Ask out loud in Mongolian, Chinese, English, Russian or German. Bus times for Erdenet and answers to anything.",
+  applicationName: "Aspire",
 };
 
 export const viewport: Viewport = {
