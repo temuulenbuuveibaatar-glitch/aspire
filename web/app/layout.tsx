@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito, Orbitron } from "next/font/google";
+import { Inter, Orbitron } from "next/font/google";
 import "./globals.css";
 
-const body = Nunito({ variable: "--font-body", subsets: ["latin", "cyrillic", "cyrillic-ext"] });
-const display = Orbitron({ variable: "--font-display", subsets: ["latin"] });
+const body = Inter({ variable: "--font-body", subsets: ["latin", "cyrillic", "cyrillic-ext"] });
+const display = Orbitron({ variable: "--font-brand", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Aspire",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050b16",
+  themeColor: "#060b16",
   width: "device-width",
   initialScale: 1,
 };

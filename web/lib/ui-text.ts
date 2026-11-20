@@ -37,6 +37,35 @@ export const UI: Record<
     addressMrs: string;
     addressNone: string;
     voiceSample: string;
+    tapOrSay: string;
+    connections: string;
+    learning: string;
+    routines: string;
+    sources: string;
+    sendNow: string;
+    sending: string;
+    sent: string;
+    sendFailed: string;
+    retry: string;
+    openGmail: string;
+    otherMail: string;
+    openSms: string;
+    shareTelegram: string;
+    addCalendar: string;
+    newNumber: string;
+    to: string;
+    discordWebhook: string;
+    slackWebhook: string;
+    webhookHelp: string;
+    save: string;
+    invalidLink: string;
+    alwaysOn: string;
+    comingSoon: string;
+    mic: string;
+    stop: string;
+    newChat: string;
+    menu: string;
+    suggestions: string[];
   }
 > = {
   mn: {
@@ -73,6 +102,35 @@ export const UI: Record<
     addressMrs: "Хатагтай",
     addressNone: "Хэлэхгүй",
     voiceSample: "Таны үйлчилгээнд бэлэн байна.",
+    tapOrSay: "Дараад ярь, эсвэл доор бичээрэй",
+    connections: "Холболтууд",
+    learning: "Сурч байгаа",
+    routines: "Миний команд",
+    sources: "Эх сурвалж",
+    sendNow: "Илгээх",
+    sending: "Илгээж байна…",
+    sent: "Илгээгдлээ",
+    sendFailed: "Илгээж чадсангүй",
+    retry: "Дахин",
+    openGmail: "Gmail-ээр нээх",
+    otherMail: "Өөр шуудан",
+    openSms: "SMS бичих",
+    shareTelegram: "Найздаа Telegram-аар",
+    addCalendar: "Календарьт нэмэх",
+    newNumber: "Шинэ дугаар — залгахаасаа өмнө шалгаарай",
+    to: "Хэнд",
+    discordWebhook: "Discord сувгийн холбоос (webhook)",
+    slackWebhook: "Slack сувгийн холбоос (webhook)",
+    webhookHelp: "Discord: сервер тохиргоо → Integrations → Webhooks. Slack: Incoming Webhooks.",
+    save: "Хадгалах",
+    invalidLink: "Энэ холбоос буруу байна",
+    alwaysOn: "SMS, дуудлага, имэйл ноорог үргэлж ажиллана — таны утасны апп нээгдэнэ.",
+    comingSoon: "Удахгүй нэмэгдэнэ",
+    mic: "Микрофон",
+    stop: "Зогсоох",
+    newChat: "Шинэ яриа",
+    menu: "Цэс",
+    suggestions: ["Надад цөмийн физикийг энгийнээр зааж өгөөч", "Өнөөдөр цаг агаар ямар байна?", "Маргааш 8 цагт сануулга тавиач", "Багийнхандаа хоцорно гэж бичээд өгөөч", "Дараагийн автобус хэзээ ирэх вэ?", "100 доллар хэдэн төгрөг вэ?"],
   },
   zh: {
     idle: "按下说话",
@@ -108,6 +166,35 @@ export const UI: Record<
     addressMrs: "女士",
     addressNone: "不用称呼",
     voiceSample: "随时为您效劳。",
+    tapOrSay: "点一下说话，或在下面输入",
+    connections: "连接",
+    learning: "学习中",
+    routines: "我的指令",
+    sources: "来源",
+    sendNow: "发送",
+    sending: "发送中…",
+    sent: "已发送",
+    sendFailed: "发送失败",
+    retry: "重试",
+    openGmail: "在 Gmail 中打开",
+    otherMail: "其他邮箱",
+    openSms: "发短信",
+    shareTelegram: "用 Telegram 分享",
+    addCalendar: "添加到日历",
+    newNumber: "新号码，拨打前请确认",
+    to: "收件人",
+    discordWebhook: "Discord 频道 Webhook",
+    slackWebhook: "Slack 频道 Webhook",
+    webhookHelp: "Discord：服务器设置 → 集成 → Webhooks。Slack：Incoming Webhooks。",
+    save: "保存",
+    invalidLink: "链接无效",
+    alwaysOn: "短信、电话和邮件草稿随时可用，会打开您手机上的应用。",
+    comingSoon: "即将推出",
+    mic: "麦克风",
+    stop: "停止",
+    newChat: "新对话",
+    menu: "菜单",
+    suggestions: ["用简单的话教我核物理", "今天天气怎么样？", "明天早上8点提醒我", "帮我给团队写条消息说我会迟到", "下一班公交车什么时候来？", "100美元等于多少图格里克？"],
   },
   en: {
     idle: "Press and speak",
@@ -143,6 +230,35 @@ export const UI: Record<
     addressMrs: "Mrs.",
     addressNone: "No title",
     voiceSample: "At your service.",
+    tapOrSay: "Tap and talk, or type below",
+    connections: "Connections",
+    learning: "Learning",
+    routines: "My routines",
+    sources: "Sources",
+    sendNow: "Send",
+    sending: "Sending…",
+    sent: "Sent",
+    sendFailed: "Couldn't send",
+    retry: "Retry",
+    openGmail: "Open in Gmail",
+    otherMail: "Other mail app",
+    openSms: "Text message",
+    shareTelegram: "Share on Telegram",
+    addCalendar: "Add to Google Calendar",
+    newNumber: "New number — check before calling",
+    to: "To",
+    discordWebhook: "Discord channel webhook",
+    slackWebhook: "Slack channel webhook",
+    webhookHelp: "Discord: Server settings → Integrations → Webhooks. Slack: Incoming Webhooks app.",
+    save: "Save",
+    invalidLink: "That link doesn't look right",
+    alwaysOn: "SMS, calls and email drafts always work — they open your phone's own apps.",
+    comingSoon: "Coming next",
+    mic: "Microphone",
+    stop: "Stop",
+    newChat: "New chat",
+    menu: "Menu",
+    suggestions: ["Teach me nuclear physics simply", "What's the weather today?", "Remind me tomorrow at 8", "Tell my team I'll be 10 minutes late", "When is the next bus?", "How much is 100 dollars in tugriks?"],
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -178,6 +294,35 @@ export const UI: Record<
     addressMrs: "Госпожа",
     addressNone: "Без обращения",
     voiceSample: "К вашим услугам.",
+    tapOrSay: "Нажмите и говорите или напишите ниже",
+    connections: "Подключения",
+    learning: "Обучение",
+    routines: "Мои команды",
+    sources: "Источники",
+    sendNow: "Отправить",
+    sending: "Отправка…",
+    sent: "Отправлено",
+    sendFailed: "Не удалось отправить",
+    retry: "Повторить",
+    openGmail: "Открыть в Gmail",
+    otherMail: "Другая почта",
+    openSms: "Написать SMS",
+    shareTelegram: "Отправить в Telegram",
+    addCalendar: "Добавить в календарь",
+    newNumber: "Новый номер — проверьте перед звонком",
+    to: "Кому",
+    discordWebhook: "Webhook канала Discord",
+    slackWebhook: "Webhook канала Slack",
+    webhookHelp: "Discord: настройки сервера → Интеграция → Вебхуки. Slack: Incoming Webhooks.",
+    save: "Сохранить",
+    invalidLink: "Неверная ссылка",
+    alwaysOn: "SMS, звонки и черновики писем работают всегда — открываются приложения телефона.",
+    comingSoon: "Скоро",
+    mic: "Микрофон",
+    stop: "Стоп",
+    newChat: "Новый разговор",
+    menu: "Меню",
+    suggestions: ["Объясни ядерную физику простыми словами", "Какая сегодня погода?", "Напомни мне завтра в 8", "Напиши команде, что я опоздаю", "Когда следующий автобус?", "Сколько тугриков стоит 100 долларов?"],
   },
   de: {
     idle: "Drücken und sprechen",
@@ -213,5 +358,34 @@ export const UI: Record<
     addressMrs: "Frau",
     addressNone: "Ohne Anrede",
     voiceSample: "Stets zu Diensten.",
+    tapOrSay: "Tippen und sprechen oder unten schreiben",
+    connections: "Verbindungen",
+    learning: "Lernen",
+    routines: "Meine Routinen",
+    sources: "Quellen",
+    sendNow: "Senden",
+    sending: "Wird gesendet…",
+    sent: "Gesendet",
+    sendFailed: "Senden fehlgeschlagen",
+    retry: "Erneut",
+    openGmail: "In Gmail öffnen",
+    otherMail: "Andere Mail-App",
+    openSms: "SMS schreiben",
+    shareTelegram: "Über Telegram teilen",
+    addCalendar: "Zum Kalender",
+    newNumber: "Neue Nummer – vor dem Anruf prüfen",
+    to: "An",
+    discordWebhook: "Discord-Kanal-Webhook",
+    slackWebhook: "Slack-Kanal-Webhook",
+    webhookHelp: "Discord: Servereinstellungen → Integrationen → Webhooks. Slack: Incoming Webhooks.",
+    save: "Speichern",
+    invalidLink: "Dieser Link ist ungültig",
+    alwaysOn: "SMS, Anrufe und E-Mail-Entwürfe gehen immer – sie öffnen die Apps Ihres Telefons.",
+    comingSoon: "Kommt bald",
+    mic: "Mikrofon",
+    stop: "Stopp",
+    newChat: "Neuer Chat",
+    menu: "Menü",
+    suggestions: ["Erklär mir Kernphysik einfach", "Wie ist das Wetter heute?", "Erinnere mich morgen um 8", "Sag meinem Team, dass ich später komme", "Wann kommt der nächste Bus?", "Wie viel sind 100 Dollar in Tugrik?"],
   },
 };

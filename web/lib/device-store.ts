@@ -28,6 +28,8 @@ function save(d: DeviceContext) {
 export function applyActions(d: DeviceContext, actions: ClientAction[]): DeviceContext {
   let memory = { ...d.memory };
   let reminders = [...d.reminders];
+  let routines = [...(d.routines ?? [])];
+  let lessons = [...(d.lessons ?? [])];
   for (const a of actions) {
     if (a.type === "remember") memory[a.key] = a.value;
     if (a.type === "forget") {
@@ -37,9 +39,13 @@ export function applyActions(d: DeviceContext, actions: ClientAction[]): DeviceC
     }
     if (a.type === "reminder") reminders = [...reminders.filter((r) => r.id !== a.id), { id: a.id, text: a.text, at: a.at, repeatDaily: a.repeatDaily }];
     if (a.type === "cancel_reminder") reminders = reminders.filter((r) => r.id !== a.id);
+    if (a.type === "routine") routines = [...routines.filter((r) => r.id !== a.id), { id: a.id, trigger: a.trigger, steps: a.steps }];
+    if (a.type === "delete_routine") routines = routines.filter((r) => r.id !== a.id);
+    if (a.type === "lesson")
+      lessons = [...lessons.filter((l) => l.id !== a.id), { id: a.id, topic: a.topic, level: a.level, step: a.step, score: a.score }];
   }
   reminders.sort((a, b) => a.at.localeCompare(b.at));
-  return { ...d, memory, reminders };
+  return { ...d, memory, reminders, routines, lessons };
 }
 
 /** Reminders that are due now, and the list with them rescheduled (daily) or removed. */
