@@ -6,7 +6,10 @@ import type { ToolContext } from "@/lib/tools/types";
 import { calculate } from "@/lib/tools/world";
 import { planTrip } from "@/lib/transit";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 // 2026-11-20 10:00 in Mongolia
 const NOW = new Date("2026-11-20T10:00:00+08:00");
@@ -83,6 +86,7 @@ describe("trip planner", () => {
 
 describe("world tools (network mocked)", () => {
   it("weather for Erdenet without geocoding, failures marked in steps", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", ""); // Open-Meteo path
     const fetchMock = vi.fn(async (url: string) => {
       void url;
       return Response.json({

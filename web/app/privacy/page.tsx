@@ -40,7 +40,9 @@ export default function Privacy() {
           Анхдагч байдлаар таны санах ой (жишээ нь, ойр байдаг буудал, гэр бүлийн гишүүний утас), сануулга, дадал (routine), хичээлийн
           явц, тохиргоо болон Discord/Slack сувгийн холбоос <b>зөвхөн таны төхөөрөмж дээр</b> хадгалагдана. Асуулт асуух үед хариулт
           гаргахын тулд түр илгээгдэх боловч бид хадгалдаггүй. &quot;Санах ой&quot; хэсгээс хэзээ ч харж, устгах боломжтой. Нууц үг,
-          картын дугаар, ПИН кодыг туслах хадгалахаас татгалзана.
+          картын дугаар, ПИН кодыг туслах хадгалахаас татгалзана. Тохиргооноос байршил хуваалцахыг асаасан үед л ойролцоогоор (~100 м
+          хүртэл бөөрөнхийлсөн) байршил асуулттай хамт болон Google Maps Platform руу зөвхөн тухайн асуултад хариулахын тулд илгээгдэх
+          бөгөөд хадгалагдахгүй.
         </p>
 
         <h2>Мэдээллийн сан (Supabase)</h2>
@@ -94,6 +96,7 @@ export default function Privacy() {
           <li>Google: Gmail API, нэвтрэлт. Apple: нэвтрэлт.</li>
           <li>Telegram, Discord, Slack: ботууд.</li>
           <li>Open-Meteo (цаг агаар, агаарын бохирдол), Wikipedia (мэдлэг), open.er-api.com (валютын ханш).</li>
+          <li>Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар, цаг агаар, агаарын бохирдол.</li>
         </ul>
         <p>
           Эдгээр компани өөрсдийн нөхцөлийн дагуу мэдээллийг аюулгүй байдлын зорилгоор богино хугацаанд хадгалж болно.{" "}
@@ -148,7 +151,9 @@ export default function Privacy() {
           By default, your memory (things you ask the assistant to remember, for example your usual bus stop or a family member&apos;s
           phone number), reminders, routines, lesson progress, settings and Discord/Slack channel links are stored <b>only on your
           device</b>. They are sent along with a question so it can be answered, and we don&apos;t keep them. You can see and delete them
-          any time in &quot;Memory&quot;. The assistant refuses to store passwords, card numbers or PIN codes.
+          any time in &quot;Memory&quot;. The assistant refuses to store passwords, card numbers or PIN codes. Only when you turn on
+          location sharing in Settings, a rounded location (about 100 m) is sent with your questions and to Google Maps Platform, only to
+          answer them, and is not stored.
         </p>
 
         <h2>Our database (Supabase)</h2>
@@ -202,6 +207,7 @@ export default function Privacy() {
           <li>Google: Gmail API and sign-in. Apple: sign-in.</li>
           <li>Telegram, Discord, Slack: bots.</li>
           <li>Open-Meteo (weather and air quality), Wikipedia (encyclopedia), open.er-api.com (exchange rates).</li>
+          <li>Google Maps Platform: directions, public transport, nearby places, weather and air quality.</li>
         </ul>
         <p>
           These providers may keep data briefly for safety and abuse monitoring under their own terms.{" "}

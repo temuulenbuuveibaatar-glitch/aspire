@@ -1,26 +1,58 @@
 // Tools for buses, time, and the person's own device (reminders, memory). Calls live in connect.ts.
-import { localMinutes, nextArrivals, planTrip, timetable } from "@/lib/transit";
-import { bool, str, type Tool } from "./types";
+// Buses: Google Maps transit first (real departures) when a key is set and Google knows transit
+// there; otherwise the sample Erdenet timetable. Every answer says which `source` it came from.
+import { isGoogleMapsUrl } from "@/lib/links";
+import { directionsUrl, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
+import { findStop, localMinutes, nextArrivals, planTrip, timetable } from "@/lib/transit";
+import { bool, str, type Tool, type ToolContext } from "./types";
 
 const TZ_OFFSET = "+08:00"; // Mongolia has no daylight saving time
+
+/** A sample stop becomes a full place name Google can find; anything else is passed as said. */
+function placeFor(query: string): string {
+  const stop = findStop(query);
+  return stop ? `${stop.names.en}, ${timetable.city}, Mongolia` : query;
+}
+
+/** Google transit options, or [] (no key, no transit here, quota or error) to use the timetable. */
+async function googleTransit(from: string, to: string, ctx: ToolContext): Promise<TransitOption[]> {
+  if (!mapsConfigured() || !from || !to) return [];
+  return transitOptions({ from: placeFor(from), to: placeFor(to), now: ctx.now, lang: ctx.lang ?? "en" }).catch(() => []);
+}
+
+const clockNow = (now: Date) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: timetable.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
 
 export const nextBus: Tool = {
   name: "get_next_bus",
   label: { icon: "🚌", mn: "Автобус", en: "Bus" },
   description:
-    "Next bus arrivals at a stop in Erdenet: minutes until each bus, route number, arrival time. Use a stop id from the bus network list or the stop name as the person said it. If the person saved their usual stop in memory, use it.",
+    "Next bus arrivals at a stop in Erdenet: minutes until each bus, route number, arrival time. Use a stop id from the bus network list or the stop name as the person said it. If the person saved their usual stop in memory, use it. With a destination, real Google Maps departures are used where Google has transit; otherwise the Erdenet timetable.",
   parameters: {
     type: "object",
     properties: {
       stop: { type: "string", description: "Stop id (e.g. 'center') or stop name in any language" },
       route: { type: "string", description: "Route number to filter, e.g. '12'. Empty string for all routes." },
+      to: { type: "string", description: "Where the person is going (stop or place), if they said; empty string otherwise" },
     },
-    required: ["stop", "route"],
+    required: ["stop", "route", "to"],
   },
   async run(input, ctx) {
     const stop = str(input.stop, 80);
     if (!stop) return { error: "stop is required" };
-    return nextArrivals(stop, localMinutes(ctx.now), { route: str(input.route, 10) || undefined });
+    const route = str(input.route, 10);
+    const google = (await googleTransit(stop, str(input.to, 120), ctx)).filter((o) => !route || o.line === route);
+    if (google.length) {
+      return {
+        stop: google[0].stop || stop,
+        now: clockNow(ctx.now),
+        arrivals: google.map((o) => ({ route: o.line, routeName: o.lineName, minutes: o.waitMinutes, time: o.departs, towards: o.headsign })),
+        tomorrow: [],
+        source: "google",
+      };
+    }
+    const r = nextArrivals(stop, localMinutes(ctx.now), { route: route || undefined });
+    return "error" in r ? r : { ...r, source: "sample-timetable" };
   },
 };
 
@@ -28,7 +60,7 @@ export const tripPlanner: Tool = {
   name: "plan_trip",
   label: { icon: "🗺️", mn: "Замын төлөвлөгөө", en: "Trip plan" },
   description:
-    "How to get from one stop to another in Erdenet by bus: which route, when it leaves, when it arrives, how long to wait. Direct routes only.",
+    "How to get from one stop to another by bus: which route, when it leaves, when it arrives, how long to wait. Uses Google Maps transit when it has data for the area, otherwise the Erdenet timetable (direct routes only).",
   parameters: {
     type: "object",
     properties: {
@@ -38,7 +70,21 @@ export const tripPlanner: Tool = {
     required: ["from", "to"],
   },
   async run(input, ctx) {
-    return planTrip(str(input.from, 80), str(input.to, 80), localMinutes(ctx.now));
+    const from = str(input.from, 80);
+    const to = str(input.to, 80);
+    const google = await googleTransit(from, to, ctx);
+    if (google.length) {
+      const mapsUrl = directionsUrl(placeFor(from), placeFor(to), "transit");
+      if (isGoogleMapsUrl(mapsUrl)) ctx.actions.push({ type: "map", title: to, url: mapsUrl });
+      return {
+        from: google[0].stop || from,
+        to,
+        options: google.map((o) => ({ route: o.line, departs: o.departs, arrives: o.arrives, waitMinutes: o.waitMinutes, rideMinutes: o.rideMinutes, stops: o.stops })),
+        source: "google",
+      };
+    }
+    const r = planTrip(from, to, localMinutes(ctx.now));
+    return "error" in r ? r : { ...r, source: "sample-timetable" };
   },
 };
 

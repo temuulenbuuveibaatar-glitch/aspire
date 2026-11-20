@@ -11,6 +11,7 @@ import {
   Brain,
   Cable,
   LogOut,
+  MapPin,
   Mic,
   Plus,
   Settings,
@@ -80,6 +81,19 @@ const PHASE_GLOW: Record<Phase, string> = {
 const SUGGESTION_ICONS = [BookOpen, CloudSun, Bell, Wand2, Bus, Coins];
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+/** Coarse position (rounded to ~100 m), or undefined if unavailable or refused. Only used when the person opted in. */
+function coarsePosition(): Promise<{ lat: number; lng: number } | undefined> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(undefined);
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: r3(p.coords.latitude), lng: r3(p.coords.longitude) }),
+      () => resolve(undefined),
+      { enableHighAccuracy: false, maximumAge: 600_000, timeout: 8000 },
+    ),
+  );
+}
 
 function rms(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>): number {
   analyser.getFloatTimeDomainData(buf);
@@ -230,6 +244,7 @@ export default function Assistant() {
       const connected: Channel[] = ["sms", "email"];
       if (hooks.discord && isAllowedWebhook("discord", hooks.discord)) connected.push("discord");
       if (hooks.slack && isAllowedWebhook("slack", hooks.slack)) connected.push("slack");
+      const location = d.settings?.shareLocation ? await coarsePosition() : undefined;
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -245,6 +260,7 @@ export default function Assistant() {
             lessons: d.lessons ?? [],
             connected,
             settings: { voice: d.settings?.voice, title: d.settings?.title },
+            ...(location ? { location } : {}),
           },
         }),
       }).catch(() => null);
@@ -734,6 +750,21 @@ export default function Assistant() {
               </Choice>
             ))}
           </Choices>
+        </Section>
+        <Section title="Google Maps">
+          <Choice
+            pressed={settings.shareLocation === true}
+            onClick={async () => {
+              const on = settings.shareLocation !== true;
+              // Turning it on asks the browser for permission right away; refused = stays off.
+              if (on && !(await coarsePosition())) return;
+              update((d) => ({ ...d, settings: { ...d.settings, shareLocation: on } }));
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <MapPin className="size-5 shrink-0" aria-hidden /> {t.useLocation}
+            </span>
+          </Choice>
         </Section>
         <div className="mt-6">
           <SignOutButton redirectUrl="/login">

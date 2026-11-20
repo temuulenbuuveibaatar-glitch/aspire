@@ -41,3 +41,13 @@ export function googleCalendarUrl(title: string, startIso: string, endIso: strin
   const dates = `${calendarStamp(startIso)}/${calendarStamp(endIso)}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(title)}&dates=${enc(dates)}&details=${enc(details)}`;
 }
+
+/** Only https Google Maps links may become "Open in Google Maps" buttons. */
+export function isGoogleMapsUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && (((u.hostname === "www.google.com" || u.hostname === "google.com") && u.pathname.startsWith("/maps")) || u.hostname === "maps.google.com");
+  } catch {
+    return false;
+  }
+}

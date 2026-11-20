@@ -11,7 +11,7 @@ import { fallbackLine } from "@/lib/brain/shared";
 import { applyCloudActions, loadCloudState, supabaseConfigured } from "@/lib/cloud";
 import { googleAccessToken } from "@/lib/google-token";
 import { detectTextLanguage, type Lang } from "@/lib/lang";
-import { gmailComposeUrl, smsUrl, telegramShareUrl } from "@/lib/links";
+import { gmailComposeUrl, isGoogleMapsUrl, smsUrl, telegramShareUrl } from "@/lib/links";
 import { emptyState, toDevice } from "@/lib/state";
 import type { ClientAction } from "@/lib/tools";
 import type { Channel } from "@/lib/tools/types";
@@ -120,6 +120,7 @@ export function renderActions(actions: ClientAction[], lang: Lang): string[] {
       lines.push(`${head}\n${link}`);
     }
     if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang)}\n${a.url}`);
+    if (a.type === "map" && isGoogleMapsUrl(a.url)) lines.push(`Google Maps: ${a.title}\n${a.url}`);
   }
   return lines;
 }

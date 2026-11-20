@@ -1,4 +1,6 @@
-// Tools that look things up in the world. All free APIs, no keys needed.
+// Tools that look things up in the world. Free APIs, no keys needed; weather and air quality
+// use Google Maps Platform first when GOOGLE_MAPS_API_KEY is set, and fall back to Open-Meteo.
+import { airQualityAt, currentWeather, geocode, mapsConfigured } from "@/lib/maps";
 import { str, type Tool } from "./types";
 
 const UA = { "User-Agent": "Aspire/1.0 (Orkhon Hackathon; https://github.com/temuulenbuuveibaatar-glitch/aspire)" };
@@ -10,14 +12,27 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+const isErdenet = (place: string) => !place || /erdenet|эрдэнэт|额尔登特/i.test(place);
+
 async function locate(place: string) {
-  if (!place || /erdenet|эрдэнэт|额尔登特/i.test(place)) return ERDENET;
+  if (isErdenet(place)) return ERDENET;
   const data = await getJson<{ results?: Array<{ name: string; country?: string; latitude: number; longitude: number }> }>(
     `https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(place)}`,
   );
   const r = data.results?.[0];
   if (!r) throw new Error(`Place not found: ${place}`);
   return { name: [r.name, r.country].filter(Boolean).join(", "), latitude: r.latitude, longitude: r.longitude };
+}
+
+/** Google's answer for a place, or null to fall back to Open-Meteo (no key, quota, error, no data). */
+async function viaGoogle<T>(place: string, get: (lat: number, lng: number) => Promise<T>): Promise<({ place: string } & T) | null> {
+  if (!mapsConfigured()) return null;
+  try {
+    const loc = isErdenet(place) ? { name: ERDENET.name, lat: ERDENET.latitude, lng: ERDENET.longitude } : await geocode(place);
+    return { place: loc.name, ...(await get(loc.lat, loc.lng)) };
+  } catch {
+    return null;
+  }
 }
 
 // WMO weather codes -> words (the model translates them).
@@ -41,7 +56,10 @@ export const weather: Tool = {
     required: ["place"],
   },
   async run(input) {
-    const loc = await locate(str(input.place, 80));
+    const place = str(input.place, 80);
+    const google = await viaGoogle(place, currentWeather);
+    if (google) return { ...google, source: "google" };
+    const loc = await locate(place);
     const d = await getJson<{
       current: Record<string, number>;
       daily: { time: string[]; temperature_2m_max: number[]; temperature_2m_min: number[]; weather_code: number[]; precipitation_probability_max: number[] };
@@ -66,9 +84,13 @@ export const weather: Tool = {
         conditions: WMO[d.daily.weather_code[i]] ?? "",
         precipitationChancePct: d.daily.precipitation_probability_max[i],
       })),
+      source: "open-meteo",
     };
   },
 };
+
+const aqiLevel = (aqi: number) =>
+  aqi <= 50 ? "good" : aqi <= 100 ? "moderate" : aqi <= 150 ? "unhealthy for sensitive groups (elderly)" : aqi <= 200 ? "unhealthy" : "very unhealthy";
 
 export const airQuality: Tool = {
   name: "get_air_quality",
@@ -81,14 +103,17 @@ export const airQuality: Tool = {
     required: ["place"],
   },
   async run(input) {
-    const loc = await locate(str(input.place, 80));
+    const place = str(input.place, 80);
+    const google = await viaGoogle(place, airQualityAt);
+    if (google) {
+      return { place: google.place, usAqi: google.usAqi, level: aqiLevel(google.usAqi), pm2_5: google.pm2_5, pm10: google.pm10, universalAqi: google.universalAqi, source: "google" };
+    }
+    const loc = await locate(place);
     const d = await getJson<{ current: { pm2_5: number; pm10: number; us_aqi: number } }>(
       `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${loc.latitude}&longitude=${loc.longitude}&current=pm2_5,pm10,us_aqi`,
     );
     const aqi = d.current.us_aqi;
-    const level =
-      aqi <= 50 ? "good" : aqi <= 100 ? "moderate" : aqi <= 150 ? "unhealthy for sensitive groups (elderly)" : aqi <= 200 ? "unhealthy" : "very unhealthy";
-    return { place: loc.name, usAqi: aqi, level, pm2_5: d.current.pm2_5, pm10: d.current.pm10 };
+    return { place: loc.name, usAqi: aqi, level: aqiLevel(aqi), pm2_5: d.current.pm2_5, pm10: d.current.pm10, source: "open-meteo" };
   },
 };
 

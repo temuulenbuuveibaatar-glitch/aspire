@@ -3,6 +3,7 @@ import { addToCalendar, call, sendMessage } from "./connect";
 import { checkEmail } from "./email";
 import { deleteRoutine, listRoutines, saveProgress, saveRoutine, startLesson } from "./learning";
 import { cancelReminder, forget, listReminders, localTime, nextBus, remember, setReminder, tripPlanner } from "./local";
+import { findPlaces, getDirections } from "./maps";
 import type { Tool, ToolContext } from "./types";
 import { airQuality, calculator, currency, encyclopedia, weather } from "./world";
 
@@ -11,6 +12,8 @@ export type { Channel, ClientAction, DeviceContext, Lesson, Reminder, Routine, T
 export const TOOLS: Tool[] = [
   nextBus,
   tripPlanner,
+  getDirections,
+  findPlaces,
   localTime,
   weather,
   airQuality,

@@ -23,6 +23,7 @@ The code in this repository is MIT-licensed. It uses, but does not include, the 
 | [OmniVoice](https://github.com/k2-fsa/OmniVoice) (k2-fsa) | Optional self-hosted text-to-speech (speech/) | Code: Apache-2.0. **Model weights: CC-BY-NC (non-commercial only)** |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) / OpenAI Whisper | Optional self-hosted speech-to-text + language detection (speech/) | MIT |
 | Qwen2.5 via Ollama (optional, local) | Offline brain | Qwen license (see model card) |
+| [Google Maps Platform](https://cloud.google.com/maps-platform/terms) (Routes API, Places API (New), Weather API, Air Quality API) | Directions, public transport, nearby places; weather and air quality when configured (Open-Meteo is the fallback) | Google Maps Platform terms; show results with Google Maps links/attribution |
 | [Open-Meteo](https://open-meteo.com) | Weather and air quality | Free for non-commercial use, CC BY 4.0 data |
 | [Wikipedia](https://www.wikipedia.org) | Encyclopedia tool | CC BY-SA text |
 | [ExchangeRate-API open access](https://www.exchangerate-api.com/docs/free) (open.er-api.com) | Exchange rates | Free with attribution |

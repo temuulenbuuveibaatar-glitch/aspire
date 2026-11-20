@@ -10,7 +10,8 @@ export const maxDuration = 60;
 
 // POST { text, lang?, history?, device? } -> { lang, reply, brain, actions, steps, sources }
 // `device` = what the person's device remembers (memory, reminders, routines, lessons,
-// connected channels). It lives only on their device; we use it for this answer and keep nothing.
+// connected channels, and a location only if they turned on location sharing). It lives only on
+// their device; we use it for this answer and keep nothing.
 export async function POST(req: Request) {
   const limited = rateLimit(req, "ask", 20);
   if (limited) return limited;
@@ -54,6 +55,7 @@ interface RawDevice {
   routines?: unknown;
   lessons?: unknown;
   connected?: unknown;
+  location?: unknown;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object";
@@ -98,5 +100,16 @@ function cleanDevice(raw: RawDevice | undefined): DeviceContext {
   const connected: Channel[] = Array.isArray(raw?.connected)
     ? CHANNELS.filter((c) => (raw.connected as unknown[]).includes(c))
     : [];
-  return { memory, reminders, settings, routines, lessons, connected };
+  const location = cleanLocation(raw?.location);
+  return { memory, reminders, settings, routines, lessons, connected, ...(location ? { location } : {}) };
+}
+
+/** Rounded to 3 decimals (about 100 m): enough for directions and nearby places, no more. */
+function cleanLocation(v: unknown): { lat: number; lng: number } | undefined {
+  if (!isObj(v)) return undefined;
+  const { lat, lng } = v;
+  if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return undefined;
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  return { lat: r3(lat), lng: r3(lng) };
 }

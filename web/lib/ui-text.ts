@@ -52,6 +52,8 @@ export const UI: Record<
     openSms: string;
     shareTelegram: string;
     addCalendar: string;
+    openMaps: string;
+    useLocation: string;
     newNumber: string;
     to: string;
     discordWebhook: string;
@@ -159,6 +161,8 @@ export const UI: Record<
     openSms: "SMS бичих",
     shareTelegram: "Найздаа Telegram-аар",
     addCalendar: "Календарьт нэмэх",
+    openMaps: "Google Maps-д нээх",
+    useLocation: "Чиглэл болон ойролцоох газрын хайлтад байршлаа ашиглах",
     newNumber: "Шинэ дугаар — залгахаасаа өмнө шалгаарай",
     to: "Хэнд",
     discordWebhook: "Discord сувгийн холбоос (webhook)",
@@ -264,6 +268,8 @@ export const UI: Record<
     openSms: "发短信",
     shareTelegram: "用 Telegram 分享",
     addCalendar: "添加到日历",
+    openMaps: "在 Google 地图中打开",
+    useLocation: "使用我的位置来查路线和附近地点",
     newNumber: "新号码，拨打前请确认",
     to: "收件人",
     discordWebhook: "Discord 频道 Webhook",
@@ -369,6 +375,8 @@ export const UI: Record<
     openSms: "Text message",
     shareTelegram: "Share on Telegram",
     addCalendar: "Add to Google Calendar",
+    openMaps: "Open in Google Maps",
+    useLocation: "Use my location for directions and nearby places",
     newNumber: "New number — check before calling",
     to: "To",
     discordWebhook: "Discord channel webhook",
@@ -474,6 +482,8 @@ export const UI: Record<
     openSms: "Написать SMS",
     shareTelegram: "Отправить в Telegram",
     addCalendar: "Добавить в календарь",
+    openMaps: "Открыть в Google Картах",
+    useLocation: "Использовать моё местоположение для маршрутов и мест рядом",
     newNumber: "Новый номер — проверьте перед звонком",
     to: "Кому",
     discordWebhook: "Webhook канала Discord",
@@ -579,6 +589,8 @@ export const UI: Record<
     openSms: "SMS schreiben",
     shareTelegram: "Über Telegram teilen",
     addCalendar: "Zum Kalender",
+    openMaps: "In Google Maps öffnen",
+    useLocation: "Meinen Standort für Routen und Orte in der Nähe verwenden",
     newNumber: "Neue Nummer – vor dem Anruf prüfen",
     to: "An",
     discordWebhook: "Discord-Kanal-Webhook",

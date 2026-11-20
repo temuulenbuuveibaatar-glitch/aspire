@@ -7,6 +7,7 @@ import {
   Hash,
   LoaderCircle,
   Mail,
+  MapPin,
   MessageSquareText,
   MessagesSquare,
   Phone,
@@ -15,13 +16,13 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useState } from "react";
-import { gmailComposeUrl, mailtoUrl, smsUrl, telegramShareUrl, telUrl } from "@/lib/links";
+import { gmailComposeUrl, isGoogleMapsUrl, mailtoUrl, smsUrl, telegramShareUrl, telUrl } from "@/lib/links";
 import type { Channel, ClientAction } from "@/lib/tools/types";
 import type { UI } from "@/lib/ui-text";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
 type T = (typeof UI)["en"];
-type Card = Extract<ClientAction, { type: "message" | "call" | "calendar" }>;
+type Card = Extract<ClientAction, { type: "message" | "call" | "calendar" | "map" }>;
 
 const CHANNEL: Record<Channel, { icon: typeof Send; name: string }> = {
   telegram: { icon: Send, name: "Telegram" },
@@ -31,7 +32,8 @@ const CHANNEL: Record<Channel, { icon: typeof Send; name: string }> = {
   email: { icon: Mail, name: "Email" },
 };
 
-export const isCard = (a: ClientAction): a is Card => a.type === "message" || a.type === "call" || a.type === "calendar";
+export const isCard = (a: ClientAction): a is Card =>
+  a.type === "message" || a.type === "call" || a.type === "calendar" || (a.type === "map" && isGoogleMapsUrl(a.url));
 
 const shell = "glass rounded-2xl p-4";
 const primary =
@@ -71,6 +73,16 @@ export function ActionCard({
         <p className="text-sm text-ink-soft">{new Date(action.start).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
         <a href={action.url} target="_blank" rel="noopener noreferrer" className={`${secondary} mt-3 w-full`}>
           <CalendarPlus className="size-5" aria-hidden /> {t.addCalendar}
+        </a>
+      </div>
+    );
+  }
+  if (action.type === "map") {
+    return (
+      <div className={shell}>
+        <p className="font-medium">{action.title}</p>
+        <a href={action.url} target="_blank" rel="noopener noreferrer" className={`${secondary} mt-3 w-full`}>
+          <MapPin className="size-5" aria-hidden /> {t.openMaps}
         </a>
       </div>
     );

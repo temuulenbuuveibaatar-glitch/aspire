@@ -25,8 +25,8 @@ export interface UserState {
 }
 
 export const TOMBSTONE_TTL_MS = 30 * 86_400_000;
-/** Settings that never leave the device (secrets). */
-export const LOCAL_ONLY_SETTINGS = ["gmailRefreshToken", "webhooks"] as const;
+/** Settings that never leave the device (secrets, and location sharing, which is a per-device choice). */
+export const LOCAL_ONLY_SETTINGS = ["gmailRefreshToken", "webhooks", "shareLocation"] as const;
 
 const EPOCH = new Date(0).toISOString();
 
@@ -273,6 +273,7 @@ function parseSettings(raw: unknown): StampedSettings {
   if (raw.title === "mr" || raw.title === "mrs" || raw.title === "") s.title = raw.title;
   if (typeof raw.gmailRefreshToken === "string") s.gmailRefreshToken = raw.gmailRefreshToken.slice(0, 2000);
   if (typeof raw.gmailConnected === "boolean") s.gmailConnected = raw.gmailConnected;
+  if (typeof raw.shareLocation === "boolean") s.shareLocation = raw.shareLocation;
   if (typeof raw.lastBriefingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.lastBriefingDate)) s.lastBriefingDate = raw.lastBriefingDate;
   if (isObj(raw.webhooks)) {
     const w: { discord?: string; slack?: string } = {};

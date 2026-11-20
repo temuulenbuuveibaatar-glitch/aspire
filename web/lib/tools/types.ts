@@ -1,4 +1,5 @@
 // Agent tool system: every AI provider sees the same tools.
+import type { Lang } from "@/lib/lang";
 
 /** Where "send for me" can deliver a message. */
 export type Channel = "telegram" | "discord" | "slack" | "sms" | "email";
@@ -37,7 +38,9 @@ export type ClientAction =
   | { type: "calendar"; title: string; start: string; end: string; details: string; url: string }
   | ({ type: "routine" } & Routine)
   | { type: "delete_routine"; id: string }
-  | ({ type: "lesson" } & Lesson);
+  | ({ type: "lesson" } & Lesson)
+  /** "Open in Google Maps" card (url is a Google Maps link). */
+  | { type: "map"; title: string; url: string };
 
 export interface Reminder {
   id: string;
@@ -60,6 +63,8 @@ export interface Settings {
   gmailConnected?: boolean;
   /** YYYY-MM-DD in Mongolia time: the day the morning briefing last played. */
   lastBriefingDate?: string;
+  /** Opt-in: send a rounded location with questions (directions, nearby places). Default off. */
+  shareLocation?: boolean;
 }
 
 /** What the device tells us about the person (stored only on their device). */
@@ -73,12 +78,16 @@ export interface DeviceContext {
   lessons?: Lesson[];
   /** Messaging apps the person connected (Telegram link, Discord/Slack webhooks). Missing = none. */
   connected?: Channel[];
+  /** Only when the person turned on location sharing; rounded to 3 decimals (~100 m) by /api/ask. */
+  location?: { lat: number; lng: number };
 }
 
 export interface ToolContext {
   now: Date;
   device: DeviceContext;
   actions: ClientAction[];
+  /** Language of this message (for Maps answers). Missing = English. */
+  lang?: Lang;
   /** Google access token with Gmail read access, fetched lazily (null = Gmail not connected). Server only. */
   gmailToken?: () => Promise<string | null>;
 }
