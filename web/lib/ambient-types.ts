@@ -62,7 +62,7 @@ export interface AmbientStop {
   lng?: number;
 }
 
-/** A scenic photo of the place (Google Places). The UI must show the author credit. */
+/** A scenic photo of the place (Google Places, else Wikimedia Commons). The UI must show the author credit. */
 export interface AmbientPhoto {
   url: string;
   attribution: { name: string; uri: string };
@@ -81,6 +81,8 @@ export interface AmbientNextBus {
   departsInMin: number;
   /** "erdenet-live": the city's live feed (credit Орхон ТКХДТ); "google": Google transit. */
   source: "erdenet-live" | "google";
+  /** Server time (ISO) the estimate was made: the client counts down from it and drops it when old. */
+  at: string;
 }
 
 export interface Ambient {

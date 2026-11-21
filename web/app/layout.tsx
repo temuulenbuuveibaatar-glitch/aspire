@@ -58,8 +58,9 @@ export const viewport: Viewport = {
 };
 
 // Mirrors lib/display-prefs.ts (key "aspire-display-v1"). Inline and blocking by design: tiny,
-// no network, wrapped in try/catch so blocked storage never breaks the page.
-const PREFS_SCRIPT = `try{var p=JSON.parse(localStorage.getItem("aspire-display-v1")||"null");if(p&&typeof p==="object"){var h=document.documentElement;if(p.calm===true)h.setAttribute("data-calm","true");if(p.textSize==="lg"||p.textSize==="xl")h.setAttribute("data-text-size",p.textSize);if(p.units==="metric"||p.units==="imperial")h.setAttribute("data-units",p.units);}}catch(e){}`;
+// no network, wrapped in try/catch so blocked storage never breaks the page. It also preloads the cached
+// city photo (lib/use-ambient.ts, "aspire-photo-v1"), so it downloads before the JS bundle is parsed.
+const PREFS_SCRIPT = `try{var p=JSON.parse(localStorage.getItem("aspire-display-v1")||"null");if(p&&typeof p==="object"){var h=document.documentElement;if(p.calm===true)h.setAttribute("data-calm","true");if(p.textSize==="lg"||p.textSize==="xl")h.setAttribute("data-text-size",p.textSize);if(p.units==="metric"||p.units==="imperial")h.setAttribute("data-units",p.units);}}catch(e){}try{var c=JSON.parse(localStorage.getItem("aspire-photo-v1")||"null");if(c&&typeof c.url==="string"&&c.url.indexOf("https://")===0&&(!/google/.test(c.url)||Date.now()-c.savedAt<864e5)){var l=document.createElement("link");l.rel="preload";l.as="image";l.href=c.url;l.setAttribute("referrerpolicy","no-referrer");document.head.appendChild(l);}}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

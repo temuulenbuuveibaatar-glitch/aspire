@@ -8,7 +8,7 @@ import { whereFrom } from "@/lib/where";
 
 export const maxDuration = 60;
 
-// POST { lang, reminders, title?, tz?, city?, location? } -> { text, mailCount, gmailError }
+// POST { lang, reminders, title?, tz?, city?, location? } -> { text, mailCount, gmailError, headlines? } (headlines: up to 3 from newsdata.io, shown on the card)
 // `tz` and `city` come from the device; `location` only when the person shares it (rounded).
 // Google tokens stay with Clerk; mail headers are used for this answer only and never stored.
 export async function POST(req: Request) {

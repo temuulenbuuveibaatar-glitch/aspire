@@ -162,6 +162,21 @@ describe("bot core (linked users)", () => {
     expect(ask.mock.calls[0][5]).toEqual({ timeZone: "Asia/Ulaanbaatar" });
   });
 
+  it("code and form cards reach the chat as text (the reply itself only says they are ready)", async () => {
+    ask.mockResolvedValue(
+      reply("On it, sir.", [
+        { type: "code", language: "python", title: "Sum", code: "def f():\n    return 1" },
+        { type: "form", title: "Hotel booking", fields: [{ label: "Name", value: "Bat" }, { label: "Passport number", value: "" }] },
+        { type: "code", language: "text", title: "Big", code: "x".repeat(9000) },
+      ]),
+    );
+    const { renderActions } = await import("@/lib/bots/core");
+    const lines = renderActions((await ask()).actions, "en");
+    expect(lines[0]).toBe("Sum (python):\ndef f():\n    return 1");
+    expect(lines[1]).toBe("Hotel booking\nName: Bat\nPassport number: -");
+    expect(lines[2].length).toBe(3500);
+  });
+
   it("without BOT_TIME_ZONE, event times are shown in UTC and labelled", async () => {
     vi.stubEnv("BOT_TIME_ZONE", "");
     ask.mockResolvedValue(

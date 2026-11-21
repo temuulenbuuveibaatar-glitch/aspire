@@ -18,8 +18,16 @@ export interface Notable {
 
 const BAD_AIR = new Set(["unhealthy", "very_unhealthy", "hazardous"]);
 
-/** The single most notable fact in the snapshot, in the spec's urgency order, or null. */
-export function notableFrom(a: Ambient | null | undefined): Notable | null {
+/** A live bus estimate older than this is not said at all (the bus may have come and gone). */
+export const BUS_FRESH_MS = 2 * 60_000;
+/** Is the snapshot's bus estimate recent enough to repeat? */
+export const busFresh = (at: string | undefined, now: number | null) => !!at && now != null && now - Date.parse(at) <= BUS_FRESH_MS;
+
+/**
+ * The single most notable fact in the snapshot, in the spec's urgency order, or null.
+ * `now` null (prerender, before the client clock is read) skips the time-dependent bus fact.
+ */
+export function notableFrom(a: Ambient | null | undefined, now: number | null = Date.now()): Notable | null {
   if (!a) return null;
   if (a.air && BAD_AIR.has(a.air.category)) return { kind: "air" };
   const k = a.sky?.kind;
@@ -27,7 +35,8 @@ export function notableFrom(a: Ambient | null | undefined): Notable | null {
   if (k === "snow") return { kind: "snow" };
   if (k === "rain" || k === "drizzle" || k === "sleet" || k === "hail") return { kind: "rain" };
   let best: { route: string; minutes: number } | null = null;
-  for (const s of a.stops ?? []) {
+  // Stop arrival minutes come from the same snapshot as nextBus: only while it is fresh.
+  for (const s of busFresh(a.nextBus?.at, now) ? (a.stops ?? []) : []) {
     for (const l of s.lines ?? []) {
       if (Number.isFinite(l.minutes) && l.minutes >= 1 && l.minutes <= 10 && (!best || l.minutes < best.minutes)) {
         best = { route: String(l.route).slice(0, 12), minutes: Math.round(l.minutes) };
@@ -46,11 +55,12 @@ export function notableSentence(lang: Lang, n: Notable): string {
 
 /**
  * The greeting line, shown (and, when spoken, said) identically.
- * `hour` is the local hour at the place (0-23); `first` is the first open of this browser session.
+ * `hour` is the local hour at the place (0-23); `first` is the first open of this browser session;
+ * `now` is the clock (null before the client has read it).
  */
-export function greeting(lang: Lang, title: Title, hour: number, ambient: Ambient | null, first: boolean): string {
+export function greeting(lang: Lang, title: Title, hour: number, ambient: Ambient | null, first: boolean, now: number | null = Date.now()): string {
   const part = greetingPart(hour);
-  const fact = notableFrom(ambient);
+  const fact = notableFrom(ambient, now);
   if (!fact) return jarvisGreeting(lang, part, title, first);
   const hello = jarvisGreeting(lang, part, title, false);
   const sentence = notableSentence(lang, fact);

@@ -1,8 +1,8 @@
 "use client";
 
 // The live sky. Two modes:
-// - overlay (v4, over the city photo in Backdrop): precipitation, fog and storm flashes
-//   over transparency. No gradient or stars.
+// - overlay (over the city photo in Backdrop): clouds, precipitation, fog, storm flashes and, on a
+//   clear dark night, a few stars high up, over transparency. No gradient or vignette.
 // - full (login, no photo): a gradient per weather family x time-of-day phase that crossfades on
 //   change, stars at night and a vignette, plus everything above.
 // Particles live in a preallocated Float32Array pool, so a frame allocates nothing. The loop runs
@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { ORB_LIGHTNING_EVENT } from "@/components/ui/voice-orb";
 import { SKY_KINDS, type SkyKind } from "@/lib/ambient-types";
 import { useStill } from "@/lib/display-prefs";
+import { DARK, skySun, type SkyPhase } from "@/lib/sun";
 import { cn } from "@/lib/utils";
 
 export interface SkyProps {
@@ -23,6 +24,10 @@ export interface SkyProps {
   windKph?: number | null;
   /** 0..23 in the place's time zone. */
   localHour?: number | null;
+  /** The time-of-day phase when the caller knows it (the real sun); else from isDay and localHour. */
+  phase?: SkyPhase | null;
+  /** 0..100 from the weather; drifting cloud banks scale with it. */
+  cloudCover?: number | null;
   className?: string;
   /** Draw only particles, fog and flashes over transparency (the photo backdrop). */
   overlay?: boolean;
@@ -54,18 +59,15 @@ const GRADIENTS: Record<Family, Record<Phase, [top: string, horizon: string]>> =
   snow: { night: ["#0E1626", "#2E3D55"], dawn: ["#6F7C99", "#D9C9CF"], golden: ["#A9A3BC", "#F1D5C2"], day: ["#C9D6E3", "#EEF3F8"], dusk: ["#3D4763", "#8E93AE"] },
 };
 
-/** Phase from isDay and the local hour. */
-function phaseFor(isDay: boolean, hour: number | null): Phase {
-  if (!isDay) return "night";
-  if (hour === 5 || hour === 6) return "dawn";
-  if (hour === 7 || hour === 17 || hour === 18) return "golden";
-  return hour === 19 || hour === 20 ? "dusk" : "day";
-}
+/** The ten time-of-day phases on the five-phase colour grid. */
+const GRID: Record<SkyPhase, Phase> = {
+  midnight: "night", night: "night", evening: "night", dawn: "dusk", sunrise: "dawn",
+  day: "day", afternoon: "day", golden: "golden", sunset: "golden", dusk: "dusk",
+};
 
-/** The still two-stop gradient for a sky (effects off, or no photo yet). */
-export function stillSkyGradient(kind: SkyKind, isDay: boolean, hour: number | null): string {
-  const [top, horizon] = GRADIENTS[skyFamily(kind)][phaseFor(isDay, hour)];
-  return `linear-gradient(180deg, ${top} 0%, ${horizon} 100%)`;
+/** Top and horizon colours of a sky. */
+export function skyColors(kind: SkyKind, phase: SkyPhase): [top: string, horizon: string] {
+  return GRADIENTS[skyFamily(kind)][GRID[phase] ?? "day"];
 }
 
 /* ---- colour helpers ---- */
@@ -98,16 +100,16 @@ function skyBackground(top: string, horizon: string, phase: Phase): string {
 /* ---- environment stores (useSyncExternalStore keeps SSR and hydration honest) ---- */
 
 const noop = () => () => {};
-/** 0.5 on low-end devices (smaller particle budget, 30 fps), otherwise 1. */
-function getTier(): number {
+/** 0.5 on low-end devices (smaller particle budget, 30 fps, no photo drift), otherwise 1. */
+export function getTier(): number {
   const nav = navigator as Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number };
   return (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4 || nav.connection?.saveData ? 0.5 : 1;
 }
 
 /* ---- particle engine ---- */
 
-/** bright: snow or fog by day (flakes get a slate rim to stay visible on white). starVis: full mode at night. */
-interface Scene { kind: SkyKind; intensity: number; windKph: number; night: boolean; bright: boolean; starVis: number; still: boolean }
+/** bright: snow or fog by day (flakes get a slate rim to stay visible on white). starVis: a clear dark sky. sparse: over a photo (a few stars, high up). */
+interface Scene { kind: SkyKind; intensity: number; windKph: number; night: boolean; bright: boolean; starVis: number; sparse: boolean; still: boolean }
 
 const STRIDE = 11;
 const X = 0, Y = 1, VY = 2, LEN = 3, SIZE = 4, PH = 5, FQ = 6, AMP = 7, LAYER = 8, TYPE = 9, ALPHA = 10;
@@ -155,13 +157,14 @@ function sprite(size: number, stops: [number, string][]): HTMLCanvasElement {
   return c;
 }
 
-/** Stars, seeded so they stay put across resizes. */
-function drawNight(c: CanvasRenderingContext2D, w: number, h: number, vis: number) {
+/** Stars, seeded so they stay put across resizes. Sparse (over a photo): a third of them, in the top 40%. */
+function drawNight(c: CanvasRenderingContext2D, w: number, h: number, vis: number, sparse: boolean) {
   const r = mulberry32(1337 + Math.round(w) * 7 + Math.round(h));
-  const n = Math.round(60 + 60 * clamp((w - 390) / 1050, 0, 1));
+  const n = Math.round((60 + 60 * clamp((w - 390) / 1050, 0, 1)) * (sparse ? 0.35 : 1));
+  const band = h * (sparse ? 0.4 : 0.72);
   for (let k = 0; k < n; k++) {
-    const x = r() * w, y = Math.pow(r(), 1.5) * h * 0.72, tp = r();
-    c.globalAlpha = (0.4 + 0.6 * r()) * (1 - (y / (h * 0.72)) * 0.55) * vis;
+    const x = r() * w, y = Math.pow(r(), 1.5) * band, tp = r();
+    c.globalAlpha = (0.4 + 0.6 * r()) * (1 - (y / band) * 0.55) * vis;
     c.fillStyle = STAR_TINTS[tp < 0.12 ? 1 : tp < 0.28 ? 2 : 0];
     c.beginPath();
     c.arc(x, y, 0.5 + r(), 0, Math.PI * 2);
@@ -235,7 +238,8 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
   /** Pre-renders the stars once per size and visibility. */
   function buildNight() {
     const vis = scene ? scene.starVis : 0;
-    const key = vis > 0 ? `${w}x${h}@${dpr}|${vis}` : "";
+    const sparse = !!scene?.sparse;
+    const key = vis > 0 ? `${w}x${h}@${dpr}|${vis}|${sparse}` : "";
     if (key === nightKey) return;
     nightKey = key;
     const nctx = night.getContext("2d");
@@ -243,7 +247,7 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     night.width = Math.round(w * dpr);
     night.height = Math.round(h * dpr);
     nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawNight(nctx, w, h, vis);
+    drawNight(nctx, w, h, vis, sparse);
   }
 
   const wantsAnim = () => !!scene && !scene.still && ((cur !== null && cur.count > 0) || prev !== null);
@@ -432,31 +436,37 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
 /* ---- static decor ---- */
 
 const FOG = "#DCE2EA";
-function fogBand(a: number, offset: number): string {
+/** Soft blobs in a band: fog low down, cloud banks up top. */
+function band(color: string, a: number, offset: number): string {
   const p = (v: number) => (v + offset) % 100;
   return [
-    `radial-gradient(30% 50% at ${p(12)}% 50%, ${rgba(FOG, a)} 0%, ${rgba(FOG, 0)} 100%)`,
-    `radial-gradient(26% 46% at ${p(36)}% 56%, ${rgba(FOG, a * 0.85)} 0%, ${rgba(FOG, 0)} 100%)`,
-    `radial-gradient(32% 52% at ${p(62)}% 46%, ${rgba(FOG, a)} 0%, ${rgba(FOG, 0)} 100%)`,
-    `radial-gradient(24% 44% at ${p(86)}% 54%, ${rgba(FOG, a * 0.8)} 0%, ${rgba(FOG, 0)} 100%)`,
-    `linear-gradient(180deg, ${rgba(FOG, 0)} 0%, ${rgba(FOG, a * 0.55)} 50%, ${rgba(FOG, 0)} 100%)`,
+    `radial-gradient(30% 50% at ${p(12)}% 50%, ${rgba(color, a)} 0%, ${rgba(color, 0)} 100%)`,
+    `radial-gradient(26% 46% at ${p(36)}% 56%, ${rgba(color, a * 0.85)} 0%, ${rgba(color, 0)} 100%)`,
+    `radial-gradient(32% 52% at ${p(62)}% 46%, ${rgba(color, a)} 0%, ${rgba(color, 0)} 100%)`,
+    `radial-gradient(24% 44% at ${p(86)}% 54%, ${rgba(color, a * 0.8)} 0%, ${rgba(color, 0)} 100%)`,
+    `linear-gradient(180deg, ${rgba(color, 0)} 0%, ${rgba(color, a * 0.55)} 50%, ${rgba(color, 0)} 100%)`,
   ].join(", ");
 }
+
+/** Cloud cover 0..1 a sky kind implies when the weather gives no figure. */
+const COVER: Record<SkyKind, number> = { clear: 0, partly: 0.4, cloudy: 0.85, fog: 0, drizzle: 0.7, rain: 0.75, storm: 0.9, snow: 0.7, sleet: 0.75, hail: 0.8 };
+/** Cloud colour by light: lit white by day, warm at the low sun, slate in twilight, near-black at night. */
+const CLOUD: Record<Phase, string> = { day: "#EEF1F5", golden: "#F0C7AE", dawn: "#E8BFB4", dusk: "#7E84A3", night: "#3A4252" };
 
 const EASE = "cubic-bezier(0.45, 0, 0.55, 1)";
 
 /* ---- component ---- */
 
-export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, className, overlay = false }: SkyProps) {
+export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phase: phaseProp, cloudCover, className, overlay = false }: SkyProps) {
   const still = useStill();
   const tier = useSyncExternalStore(noop, getTier, () => 1);
 
   const kind = safeKind(kindProp);
   const I = Number.isFinite(intensity) ? clamp(intensity, 0, 1) : 0.5;
   const wind = typeof windKph === "number" && Number.isFinite(windKph) ? Math.max(0, windKph) : 0;
-  const hour = typeof localHour === "number" && Number.isFinite(localHour) ? ((Math.floor(localHour) % 24) + 24) % 24 : null;
+  const fine = phaseProp ?? skySun({ hour: localHour, isDay: isDay === true }).phase;
   const family = FAMILY[kind];
-  const phase = phaseFor(isDay === true, hour);
+  const phase = GRID[fine] ?? "day";
   const bg = skyBackground(...GRADIENTS[family][phase], phase);
   const night = phase === "night";
   const ms = still ? 150 : 1200;
@@ -477,11 +487,11 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, clas
     };
   }, [tier]);
 
-  const starVis = overlay || !night ? 0 : kind === "clear" ? 1 : kind === "partly" ? 0.7 : 0;
+  const starVis = !DARK.has(fine) ? 0 : (kind === "clear" ? 1 : kind === "partly" ? 0.7 : 0) * (overlay ? 0.75 : 1);
   const bright = !night && (family === "snow" || family === "fog");
   const scene = useMemo<Scene>(
-    () => ({ kind, intensity: I, windKph: wind, night, bright, starVis, still }),
-    [kind, I, wind, night, bright, starVis, still],
+    () => ({ kind, intensity: I, windKph: wind, night, bright, starVis, sparse: overlay, still }),
+    [kind, I, wind, night, bright, starVis, overlay, still],
   );
   useEffect(() => {
     engineRef.current?.setScene(scene);
@@ -512,6 +522,8 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, clas
   }, [kind, still]);
 
   const fogA = kind === "fog" ? (0.18 * I + 0.1) * (night ? 0.7 : 1) : 0;
+  const cover = kind === "clear" || kind === "fog" ? 0 : typeof cloudCover === "number" && Number.isFinite(cloudCover) ? clamp(cloudCover / 100, 0, 1) : COVER[kind];
+  const cloudA = cover > 0.05 ? (0.1 + 0.32 * cover) * (night ? 0.8 : 1) : 0;
   const veilA = kind === "fog" ? 0.22 + 0.2 * I : !overlay && (family === "rain" || family === "storm" || family === "snow") ? 0.06 + 0.08 * I : 0;
 
   return (
@@ -527,6 +539,20 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, clas
         </>
       )}
 
+      {/* Cloud banks up top drift like the fog (transform only); the second bank comes in past half cover. */}
+      {["animate-fog-110", "animate-fog-80"].map((anim, i) => (
+        <div
+          key={`cloud-${anim}`}
+          className={cn("absolute -left-1/2 w-[200%]", anim, i ? "top-[6vh] h-[30vh]" : "-top-[8vh] h-[42vh]")}
+          style={{
+            background: band(CLOUD[phase], Math.max(cloudA * (i ? 0.8 : 1), 0.01), i * 29 + 7),
+            opacity: cloudA > 0 && (i === 0 || cover > 0.5) ? 1 : 0,
+            transition: fade,
+            animationPlayState: cloudA > 0 && !still && tier >= 1 ? "running" : "paused",
+          }}
+        />
+      ))}
+
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       {/* Fog bands drift (transform only, the --animate-fog-* tokens); the low tier keeps them still. */}
@@ -536,7 +562,7 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, clas
           className={cn("absolute -left-1/2 h-[40vh] w-[200%]", anim)}
           style={{
             top: `calc(${i ? 75 : 55}% - 20vh)`,
-            background: fogBand(Math.max(fogA, 0.01), i * 17),
+            background: band(FOG, Math.max(fogA, 0.01), i * 17),
             opacity: fogA > 0 ? 1 : 0,
             transition: fade,
             animationPlayState: fogA > 0 && !still && tier >= 1 ? "running" : "paused",

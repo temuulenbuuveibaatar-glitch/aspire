@@ -2,7 +2,7 @@
 
 // The conversation, as a presentational component (design spec v3, section 10.1 and 10.2):
 // the morning briefing above the thread, user and assistant messages, the tool ledger,
-// sources, send-for-me and map cards, the thinking row, follow-the-stream scrolling with a
+// sources, send-for-me, map, code and form cards, the thinking row, follow-the-stream scrolling with a
 // "Jump to latest" pill, the reminder banner, and one sr-only live region for the newest reply.
 // All state that matters (messages, phase, audio) lives in the shell; this file only renders.
 
@@ -20,7 +20,9 @@ import {
   Check,
   ChevronDown,
   Clock,
+  ClipboardList,
   CloudSun,
+  Code,
   Coins,
   Copy,
   Eraser,
@@ -35,6 +37,7 @@ import {
   MapPin,
   Music,
   Navigation,
+  Newspaper,
   Phone,
   Play,
   RotateCw,
@@ -53,8 +56,10 @@ import { createPortal } from "react-dom";
 import { ActionCard, isCard } from "@/components/aspire/ActionCard";
 import { BriefingCard } from "@/components/aspire/BriefingCard";
 import { MediaCard } from "@/components/aspire/MediaCard";
+import { TaskCard } from "@/components/aspire/TaskCard";
 import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
-import type { ClientAction, MediaAction, Reminder, Title } from "@/lib/tools/types";
+import type { Headline } from "@/lib/news";
+import type { ClientAction, MediaAction, Reminder, TaskAction, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +101,7 @@ export interface MessageListBriefing {
   text: string;
   lang: Lang;
   gmailError: boolean;
+  headlines?: Headline[];
 }
 
 export interface MessageListProps {
@@ -174,6 +180,10 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   convert_currency: Coins,
   encyclopedia: BookOpen,
   calculate: Calculator,
+  // news.ts, tasks.ts
+  get_news: Newspaper,
+  write_code: Code,
+  fill_form: ClipboardList,
   // research (Claude server tools)
   web_search: Search,
   web_fetch: FileText,
@@ -216,6 +226,9 @@ const TOOL_TEXT: Record<string, L5> = {
   get_calendar: { mn: "Хуанли унших", zh: "查看日历", en: "Calendar", ru: "Календарь", de: "Kalender" },
   play_video: { mn: "Видео", zh: "视频", en: "Video", ru: "Видео", de: "Video" },
   play_music: { mn: "Хөгжим", zh: "音乐", en: "Music", ru: "Музыка", de: "Musik" },
+  get_news: { mn: "Мэдээ", zh: "新闻", en: "News", ru: "Новости", de: "Nachrichten" },
+  write_code: { mn: "Код бичих", zh: "编写代码", en: "Writing code", ru: "Пишу код", de: "Code schreiben" },
+  fill_form: { mn: "Маягт бөглөх", zh: "填写表格", en: "Filling in a form", ru: "Заполняю форму", de: "Formular ausfüllen" },
 };
 
 /* ---------------------------------------------------------------------------------------- */
@@ -481,6 +494,7 @@ export function MessageList({
             }}
             gmailError={briefing.gmailError}
             onReconnect={onOpenConnections}
+            headlines={briefing.headlines}
           />
         </div>
       )}
@@ -676,6 +690,7 @@ function AssistantMessage({
   const text = clean(m.text);
   const cards = (m.cards ?? []).filter(isCard);
   const media = (m.cards ?? []).filter((c): c is MediaAction => c.type === "video" || c.type === "spotify");
+  const tasks = (m.cards ?? []).filter((c): c is TaskAction => c.type === "code" || c.type === "form");
   const canRetry = !!onRetry && !!question;
 
   return (
@@ -754,6 +769,10 @@ function AssistantMessage({
 
         {!!m.sources?.length && <Sources sources={m.sources} t={t} s={s} />}
       </div>
+
+      {tasks.map((c, i) => (
+        <TaskCard key={`t${i}`} action={c} lang={m.lang} />
+      ))}
 
       {media.map((c, i) => (
         <MediaCard key={`m${i}`} action={c} lang={m.lang} />

@@ -130,6 +130,9 @@ export function renderActions(actions: ClientAction[], lang: Lang, timeZone = bo
     }
     if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang, timeZone)}\n${a.url}`);
     if (a.type === "map" && isGoogleMapsUrl(a.url)) lines.push(`Google Maps: ${a.title}\n${a.url}`);
+    // Task cards ("On it"): the chat gets the code or the form itself. 3500 keeps each under Telegram's 4096 limit.
+    if (a.type === "code") lines.push(`${a.title} (${a.language}):\n${a.code}`.slice(0, 3500));
+    if (a.type === "form") lines.push([a.title, ...a.fields.map((f) => `${f.label}: ${f.value || "-"}`)].join("\n").slice(0, 3500));
   }
   return lines;
 }

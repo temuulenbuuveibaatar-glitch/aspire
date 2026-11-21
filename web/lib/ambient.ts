@@ -8,7 +8,7 @@
 // once per cell and only the words are localised per request. Current conditions 10 minutes,
 // forecast 3 hours, air 30 minutes, traffic 20 minutes, next bus 10 minutes; stops, taxis, the
 // city centre, a typed city and the photo for a day.
-import type { Ambient, AmbientAir, AmbientNextBus, AmbientSky, AmbientStop, AmbientTaxi, AmbientTraffic, AmbientWeather, SkyKind, TrafficLevel } from "@/lib/ambient-types";
+import type { Ambient, AmbientAir, AmbientNextBus, AmbientPhoto, AmbientSky, AmbientStop, AmbientTaxi, AmbientTraffic, AmbientWeather, SkyKind, TrafficLevel } from "@/lib/ambient-types";
 import { aqiCategory } from "@/lib/ambient-types";
 import { arrivals, isErdenet, nearestStations } from "@/lib/erdenet-transit";
 import type { Lang } from "@/lib/lang";
@@ -434,6 +434,77 @@ async function memo<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<
 
 /** The ~10 km cell a position falls in (centre searches are biased to 30 km anyway). */
 const cell10 = (p: LatLng) => `${round(p.lat, 1)},${round(p.lng, 1)}`;
+
+const stripTags = (h: string) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Free fallback photo (no key, no billing): a 1600 px landscape thumbnail of a Wikipedia article's lead
+ * image within 10 km, Commons JPEGs only (no maps or diagrams), credited with its author and licence and
+ * linked to its Commons file page. null when there is no such image or its credit is unknown; throws when
+ * a request fails (so the failure is not memoised).
+ */
+export async function wikiPhoto(p: LatLng): Promise<AmbientPhoto | null> {
+  type Page = { pageimage?: string; thumbnail?: { source?: string; width?: number; height?: number } };
+  const q = new URLSearchParams({
+    action: "query", format: "json", generator: "geosearch", ggscoord: `${p.lat}|${p.lng}`, ggsradius: "10000",
+    ggslimit: "20", prop: "pageimages", piprop: "thumbnail|name", pithumbsize: "1600", origin: "*",
+  });
+  const data = await getJson<{ query?: { pages?: Record<string, Page> } }>(`https://en.wikipedia.org/w/api.php?${q}`);
+  const best = Object.values(data.query?.pages ?? {})
+    .filter((pg) => {
+      const { source = "", width = 0, height = 0 } = pg.thumbnail ?? {};
+      return !!pg.pageimage && /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/.+\.jpe?g$/i.test(source) && width >= 1000 && height > 0 && width / height > 1 && width / height <= 2.2;
+    })
+    .sort((a, b) => Math.abs((a.thumbnail?.width ?? 0) - 1600) - Math.abs((b.thumbnail?.width ?? 0) - 1600))[0];
+  if (!best?.thumbnail?.source || !best.pageimage) return null;
+  type Info = { descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
+  const iq = new URLSearchParams({ action: "query", format: "json", origin: "*", prop: "imageinfo", iiprop: "extmetadata|url", titles: `File:${best.pageimage}` });
+  const meta = await getJson<{ query?: { pages?: Record<string, { imageinfo?: Info[] }> } }>(`https://commons.wikimedia.org/w/api.php?${iq}`);
+  const info = Object.values(meta.query?.pages ?? {})[0]?.imageinfo?.[0];
+  const field = (k: string) => { const v = info?.extmetadata?.[k]?.value; return typeof v === "string" ? stripTags(v) : ""; };
+  const artist = field("Artist").slice(0, 36), licence = field("LicenseShortName").slice(0, 20); // fits the 80-char credit
+  const uri = info?.descriptionurl && /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(best.pageimage)}`;
+  if (!artist || !licence) return null;
+  return { url: best.thumbnail.source, attribution: { name: `${artist} / ${licence} (Wikimedia Commons)`, uri } };
+}
+/**
+ * A WHOLE-CITY photo (skyline, panorama, city view) from Wikimedia Commons, searched by the city's
+ * name: the first wide landscape JPEG whose title names the city, as a 1920 px thumbnail, credited
+ * with author and licence. null when none; throws when a request fails (not memoised).
+ */
+export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
+  const name = city.split(",")[0].trim();
+  if (!name) return null;
+  type Info = { thumburl?: string; thumbwidth?: number; thumbheight?: number; descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
+  type Page = { title?: string; index?: number; imageinfo?: Info[] };
+  // The city name as a whole word ("Murun" must not match "Muruntau").
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wordRe = new RegExp(`(^|[^\\p{L}])${escaped}([^\\p{L}]|$)`, "iu");
+  for (const words of ["city view", "skyline", "panorama", "city"]) {
+    const q = new URLSearchParams({
+      action: "query", format: "json", origin: "*", generator: "search", gsrnamespace: "6", gsrlimit: "10",
+      gsrsearch: `${name} ${words} filetype:bitmap`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1920",
+    });
+    const data = await getJson<{ query?: { pages?: Record<string, Page> } }>(`https://commons.wikimedia.org/w/api.php?${q}`);
+    const hit = Object.values(data.query?.pages ?? {})
+      .sort((a, b) => (a.index ?? 99) - (b.index ?? 99))
+      .find((pg) => {
+        const i = pg.imageinfo?.[0];
+        const w = i?.thumbwidth ?? 0, h = i?.thumbheight ?? 0;
+        return wordRe.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") &&
+          /^https:\/\/upload\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.25;
+      });
+    const info = hit?.imageinfo?.[0];
+    if (!info?.thumburl) continue;
+    const field = (k: string) => { const v = info.extmetadata?.[k]?.value; return typeof v === "string" ? stripTags(v) : ""; };
+    const artist = field("Artist").slice(0, 40), licence = field("LicenseShortName").slice(0, 30);
+    if (!artist || !licence) continue;
+    const uri = info.descriptionurl && /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : "https://commons.wikimedia.org";
+    return { url: info.thumburl, attribution: { name: `${artist} / ${licence} (Wikimedia Commons)`, uri } };
+  }
+  return null;
+}
+
 const cell = (p: LatLng) => `${p.lat},${p.lng}`;
 
 type Centre = { city: string | null } & LatLng;
@@ -490,11 +561,11 @@ async function googleBus(c: LatLng, centre: Centre | null, lang: Lang, now: Date
   const gone = Math.floor((now.getTime() - got.at) / 60_000);
   const o = got.options.find((x) => x.waitMinutes - gone >= 0 && (x.line || x.lineName));
   if (!o) return null;
-  return { line: (o.line || o.lineName).slice(0, 40), departsInMin: o.waitMinutes - gone, source: "google" };
+  return { line: (o.line || o.lineName).slice(0, 40), departsInMin: o.waitMinutes - gone, source: "google", at: now.toISOString() };
 }
 
 /** Erdenet: the nearest stations of the city's live feed with their next buses (no Google calls). */
-async function erdenetPart(p: LatLng): Promise<{ stops: AmbientStop[]; nextBus: AmbientNextBus | null }> {
+async function erdenetPart(p: LatLng, now: Date): Promise<{ stops: AmbientStop[]; nextBus: AmbientNextBus | null }> {
   const stations = await nearestStations(p.lat, p.lng, 3);
   // A vehicles outage still leaves the real stops, just without arrivals.
   const next = await Promise.all(stations.map((s) => arrivals(s.id).catch(() => [])));
@@ -509,7 +580,7 @@ async function erdenetPart(p: LatLng): Promise<{ stops: AmbientStop[]; nextBus: 
   );
   // The soonest bus at any of them (the nearest stop wins a tie).
   const soon = stations.flatMap((_, i) => next[i].slice(0, 1)).sort((x, y) => x.minutes - y.minutes)[0];
-  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live" } : null };
+  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live", at: now.toISOString() } : null };
 }
 
 // ---- snapshot + cache ----------------------------------------------------------------------------
@@ -570,11 +641,14 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const google = mapsConfigured();
   // A network (IP) position can be far off: no "nearest stop" or "next bus from here" for it.
   const precise = loc.locatedBy !== "network";
+  // The free Wikimedia photo starts now, in parallel: it covers a Google key that is missing or rejected
+  // (memoised per ~10 km cell for a day; a failed request is not memoised).
+  const wiki = memo(`wiki:${cell10(c)}`, DAY_MS, () => wikiPhoto(c)).catch(() => null);
   const [centreR, taxisR, erdR] = await Promise.allSettled([
     google ? centreFor(c, loc.city, lang) : null,
     google ? taxisPart(c, p, lang) : [],
     // In Erdenet the city's own feed gives the real stops and buses.
-    precise && isErdenet(p.lat, p.lng) ? erdenetPart(p) : null,
+    precise && isErdenet(p.lat, p.lng) ? erdenetPart(p, now) : null,
   ]);
   const centre = value(centreR, null);
   const city = centre?.city ?? loc.city;
@@ -592,7 +666,12 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
     city,
     stops: erd ? erd.stops : value(stopsR, []),
     taxis: value(taxisR, []),
-    photo: value(photoR, null),
+    // A whole-city photo first (English city name searches Commons best), then Google's, then a nearby
+    // Wikipedia lead image, so the backdrop is the city and never empty.
+    photo:
+      (await memo(`city:${(loc.city ?? city ?? "").toLowerCase()}`, DAY_MS, () => cityPhoto(loc.city ?? city ?? "")).catch(() => null)) ??
+      value(photoR, null) ??
+      (await wiki),
     nextBus: erd ? erd.nextBus : value(busR, null),
   };
 }

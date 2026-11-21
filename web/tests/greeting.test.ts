@@ -31,8 +31,12 @@ describe("greeting", () => {
     const bus: Ambient = {
       ...base,
       stops: [{ name: "Central", distanceM: 200, lines: [{ route: "12", minutes: 4 }, { route: "3", minutes: 25 }] }],
+      nextBus: { line: "12", departsInMin: 4, source: "erdenet-live", at: new Date().toISOString() },
     };
-    expect(greeting("en", "mr", 13, bus, false)).toBe("Good afternoon, sir. Bus 12 leaves in 4 minutes.");
+    expect(greeting("en", "mr", 13, bus, false)).toBe("Good afternoon, sir. Bus 12 is about 4 minutes from your stop (estimate).");
+    // An estimate from a snapshot over 2 minutes old is not repeated as a fact.
+    const old = { ...bus, nextBus: { ...bus.nextBus!, at: new Date(Date.now() - 3 * 60_000).toISOString() } };
+    expect(notableFrom(old)).toBeNull();
     expect(notableFrom({ ...base, air: { ...base.air!, category: "unhealthy", aqi: 170 }, sky: snow.sky })?.kind).toBe("air");
     expect(notableFrom({ ...base, traffic: { ...base.traffic!, level: "heavy" } })?.kind).toBe("traffic");
   });

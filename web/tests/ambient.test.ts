@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/ambient/route";
-import { cityParam, getAmbient, googleSky, locate, placeName, resetAmbientCache, skyText, trafficLevel, wmoSky } from "@/lib/ambient";
+import { cityParam, getAmbient, googleSky, locate, placeName, resetAmbientCache, skyText, trafficLevel, wikiPhoto, wmoSky, cityPhoto } from "@/lib/ambient";
 import { drivingTraffic, haversineKm, resetMapsUsage } from "@/lib/maps";
 
 const user = vi.hoisted(() => ({ current: { id: "user_2abc", email: null } as { id: string; email: null } | null }));
@@ -228,7 +228,7 @@ describe("snapshot without a Google key", () => {
     expect(a.stops[0].distanceM).toBeLessThan(20);
     expect(a.stops[1].lines).toEqual([{ route: "Ч:1-Ч:2", minutes: 6 }]);
     expect(a.stops[2].lines).toBeUndefined();
-    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live" });
+    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live", at: NOW.toISOString() });
     expect(a.taxis).toEqual([]);
     expect(a.photo).toBeNull();
     expect(a.timeZone).toBe("Asia/Ulaanbaatar");
@@ -244,6 +244,7 @@ describe("snapshot without a Google key", () => {
     const calls = mockFetch([
       ["api.open-meteo.com/v1/forecast", OPEN_METEO],
       ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+      ["en.wikipedia.org/w/api.php", { query: { pages: {} } }], // "no image here" is kept for the day
     ]);
     const first = await getAmbient(await locate(new URLSearchParams("lat=47.9211&lng=106.9211"), new Headers()), "en", NOW);
     const n = calls.length;
@@ -368,7 +369,7 @@ describe("snapshot with Google", () => {
       { name: "Taxistand Invalidenstr.", phone: null, distanceM: expect.any(Number), lat: 52.5301, lng: 13.3801 },
     ]);
     expect(a.taxis![0].distanceM).toBeLessThan(a.taxis![1].distanceM);
-    expect(a.nextBus).toEqual({ line: "M10", departsInMin: 7, source: "google" });
+    expect(a.nextBus).toEqual({ line: "M10", departsInMin: 7, source: "google", at: NOW.toISOString() });
     // The landscape photo, with its author credit; the photo URL never carries our key.
     expect(a.photo).toEqual({ url: PHOTO_URI, attribution: { name: "A. Bat", uri: "https://maps.google.com/maps/contrib/1" } });
     const photoSearch = calls.find((c) => c.url.includes("searchText") && mask(c.init).includes("photos"))!;
@@ -597,5 +598,70 @@ describe("Erdenet feed edge cases", () => {
     const a = await getAmbient(await locate(new URLSearchParams(), headers), "en", NOW);
     expect(a).toMatchObject({ locatedBy: "network", coords: null, stops: [], nextBus: null });
     expect(calls.some((c) => c.url.includes("dedtuv.erdenet.mn"))).toBe(false);
+  });
+});
+
+describe("wikiPhoto (free fallback)", () => {
+  const img = (w: number, h: number, ext = "jpg", path = "commons") => ({ source: `https://upload.wikimedia.org/wikipedia/${path}/thumb/a/ab/${w}.${ext}/${w}px-${w}.${ext}`, width: w, height: h });
+  const commons = (artist: string, licence: string) => ({
+    query: { pages: { "-1": { imageinfo: [{ descriptionurl: "https://commons.wikimedia.org/wiki/File:View.jpg", extmetadata: { Artist: { value: artist }, LicenseShortName: { value: licence } } }] } } },
+  });
+
+  it("picks a 1600 px landscape Commons JPEG thumbnail and credits its author and licence", async () => {
+    const calls = mockFetch([
+      ["en.wikipedia.org/w/api.php", { query: { pages: {
+        a: { pageimage: "Tall.jpg", thumbnail: img(1200, 2000) },
+        b: { pageimage: "Small.jpg", thumbnail: img(800, 500) },
+        c: { pageimage: "View.jpg", thumbnail: img(1600, 1067) },
+        d: { pageimage: "Map.png", thumbnail: img(1600, 900, "png") },
+        e: { pageimage: "Local.jpg", thumbnail: img(1600, 1000, "jpg", "en") },
+        f: { pageimage: "Pano.jpg", thumbnail: img(1600, 400) },
+      } } }],
+      ["commons.wikimedia.org/w/api.php", commons('<a href="//commons.wikimedia.org/wiki/User:Bat">B. Bat</a>', "CC BY-SA 4.0")],
+    ]);
+    expect(await wikiPhoto({ lat: 49.03, lng: 104.08 })).toEqual({
+      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/1600.jpg/1600px-1600.jpg",
+      attribution: { name: "B. Bat / CC BY-SA 4.0 (Wikimedia Commons)", uri: "https://commons.wikimedia.org/wiki/File:View.jpg" },
+    });
+    expect(calls[0].url).toContain("pithumbsize=1600");
+    expect(calls[0].url).not.toContain("original");
+    expect(calls[1].url).toContain("titles=File%3AView.jpg");
+  });
+
+  it("gives no photo when its author or licence is unknown, and throws (not null) when a request fails", async () => {
+    mockFetch([
+      ["en.wikipedia.org/w/api.php", { query: { pages: { c: { pageimage: "View.jpg", thumbnail: img(1600, 1067) } } } }],
+      ["commons.wikimedia.org/w/api.php", commons("", "CC BY 4.0")],
+    ]);
+    expect(await wikiPhoto({ lat: 49.03, lng: 104.08 })).toBeNull();
+    mockFetch([]);
+    await expect(wikiPhoto({ lat: 49.03, lng: 104.08 })).rejects.toThrow();
+  });
+
+  it("returns null when nothing suitable is nearby", async () => {
+    mockFetch([["en.wikipedia.org/w/api.php", { query: { pages: {} } }]]);
+    expect(await wikiPhoto({ lat: 0, lng: 0 })).toBeNull();
+  });
+});
+
+describe("cityPhoto (whole-city Commons photo)", () => {
+  const page = (title: string, index: number, w = 1920, h = 1080) => ({
+    title, index,
+    imageinfo: [{ thumburl: `https://upload.wikimedia.org/t/${index}.jpg`, thumbwidth: w, thumbheight: h, descriptionurl: "https://commons.wikimedia.org/wiki/F",
+      extmetadata: { Artist: { value: "<a>Ann</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
+  });
+  it("takes the first wide photo whose title names the city as a whole word", async () => {
+    mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: {
+      a: page("File:Muruntau mine.jpg", 1),
+      b: page("File:Murun portrait.jpg", 2, 1000, 1500),
+      c: page("File:Murun city view 2019.jpg", 3),
+    } } }]]);
+    expect(await cityPhoto("Murun, Mongolia")).toEqual({
+      url: "https://upload.wikimedia.org/t/3.jpg",
+      attribution: { name: "Ann / CC BY-SA 4.0 (Wikimedia Commons)", uri: "https://commons.wikimedia.org/wiki/F" },
+    });
+  });
+  it("returns null for an empty city", async () => {
+    expect(await cityPhoto("")).toBeNull();
   });
 });

@@ -1,9 +1,10 @@
 "use client";
 
-import { RotateCw, Sunrise, Volume2 } from "lucide-react";
+import { Newspaper, RotateCw, Sunrise, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deviceTimeZone, localDate, shouldBrief } from "@/lib/briefing-day";
 import type { Lang } from "@/lib/lang";
+import type { Headline } from "@/lib/news";
 import type { Reminder, Title } from "@/lib/tools/types";
 import type { UI } from "@/lib/ui-text";
 
@@ -16,7 +17,15 @@ export interface Briefing {
   /** Gmail is connected but Google refused access: show "Reconnect Gmail". */
   gmailError: boolean;
   lang: Lang;
+  /** The headlines the briefing speaks, shown with their source and link (at most 3). */
+  headlines?: Headline[];
 }
+
+/** Trust boundary: only well-formed headlines with an https link reach the card. */
+const cleanHeadlines = (v: unknown): Headline[] =>
+  (Array.isArray(v) ? v : [])
+    .filter((h): h is Headline => !!h && typeof h.title === "string" && typeof h.source === "string" && typeof h.url === "string" && /^https:\/\//.test(h.url))
+    .slice(0, 3);
 
 /** The morning briefing, on the same panel material as the other result cards. */
 export function BriefingCard({
@@ -25,10 +34,12 @@ export function BriefingCard({
   onReplay,
   gmailError,
   onReconnect,
+  headlines = [],
 }: {
   text: string;
   t: T;
   onReplay: () => void;
+  headlines?: Headline[];
   /** Optional: show a "Reconnect Gmail" button (e.g. open Settings, then Connections). */
   gmailError?: boolean;
   onReconnect?: () => void;
@@ -51,6 +62,21 @@ export function BriefingCard({
         </button>
       </div>
       <p className="max-w-[65ch] text-reply text-ink">{text}</p>
+      {headlines.length > 0 && (
+        <ul className="mt-3 divide-y divide-line border-t border-line">
+          {headlines.map((h) => (
+            <li key={h.url}>
+              <a href={h.url} target="_blank" rel="noopener noreferrer" className="press flex min-h-12 items-start gap-2 py-2 hover:text-hud focus-visible:text-hud">
+                <Newspaper aria-hidden className="mt-1 size-4 shrink-0 text-hud" />
+                <span className="min-w-0">
+                  <span className="line-clamp-2 text-body text-ink">{h.title}</span>
+                  <span className="block font-mono text-label text-ink-faint">{h.source}</span>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
       {gmailError && onReconnect && (
         <button
           type="button"
@@ -123,7 +149,7 @@ export function useDailyBriefing({
     if (!res?.ok) return;
     const data = (await res.json().catch(() => null)) as Omit<Briefing, "lang"> | null;
     if (!data || typeof data.text !== "string" || !data.text) return;
-    setBriefing({ text: data.text, mailCount: data.mailCount ?? null, gmailError: data.gmailError === true, lang: l });
+    setBriefing({ text: data.text, mailCount: data.mailCount ?? null, gmailError: data.gmailError === true, lang: l, headlines: cleanHeadlines(data.headlines) });
     latest.current.setLastDate(localDate(new Date()));
     await latest.current.speak(data.text, l);
   }, []);

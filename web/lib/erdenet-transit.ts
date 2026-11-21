@@ -5,6 +5,8 @@
 // Feed facts (verified against samples): stations are GeoJSON [lng, lat]; routePaths.coords are
 // [lat, lng]; vehicle `speed` is metres per second (6.11 = 22 km/h). The site computes stop ETAs
 // in the browser (no ETA endpoint), so arrivals() estimates them from live positions.
+// Truthfulness: every bus carries ageS (seconds since its own last position); positions older than
+// STALE_S are marked stale and never used for an estimate. Routes are matched from position (the feed names none).
 import "server-only";
 import { ERDENET_CENTER, ERDENET_CREDIT, haversineKm, isErdenet } from "@/lib/geo";
 import { UA } from "@/lib/site";
@@ -18,10 +20,18 @@ export interface Station { id: string; name: string; lat: number; lng: number; r
 /** coords are [lat, lng]; color is the first route's. */
 export interface Path { name: string; routeIds: string[]; color: string; coords: [number, number][] }
 export interface Static { routes: Route[]; stations: Station[]; paths: Path[] }
-export interface Vehicle { id: string; name: string; lat: number; lng: number; speedKph: number; heading: number; updatedAt: string; routeId: string | null }
-/** `minutes` is always an estimate from live positions (the feed publishes no ETAs). */
-export interface Arrival { route: string; color: string; minutes: number; bus: string }
-export interface TripOption { route: string; color: string; waitMinutes: number | null; rideMinutes: number; bus: string | null }
+/** speedKph and heading are null when the feed did not send them (never made up). */
+export interface Vehicle { id: string; name: string; lat: number; lng: number; speedKph: number | null; heading: number | null; updatedAt: string; routeId: string | null }
+/** A bus as the API and tools show it: its age, and its route's name (destination) when matched. */
+export interface LiveVehicle extends Vehicle { ageS: number; stale: boolean; routeName: string | null; routeShort: string | null; routeColor: string | null }
+/** `minutes` is always an estimate from live positions (the feed publishes no ETAs); ageS is the bus's data age; stopped: standing still now. */
+export interface Arrival { route: string; routeName: string; color: string; minutes: number; bus: string; ageS: number; stopped?: true }
+export interface TripOption { route: string; color: string; waitMinutes: number | null; rideMinutes: number; bus: string | null; ageS: number | null }
+
+/** A position older than this (seconds) is stale: shown as such, never used for an estimate. */
+export const STALE_S = 60;
+/** Moving: the feed sent a speed of at least 3 km/h (an unknown speed counts as stopped). */
+export const moving = (kph: number | null): kph is number => kph !== null && kph >= 3;
 
 
 // ---- fetch + cache ------------------------------------------------------------------------------
@@ -105,9 +115,9 @@ export function parseVehicles(raw: unknown, paths: Path[]): Vehicle[] {
     const t = Date.parse(text(x.updatedAt, 40));
     const id = text(x.id, 40);
     if (!id || x.valid === false || !okLat(lat) || !okLng(lng) || Number.isNaN(t)) return [];
-    const speedKph = Number.isFinite(speed) && speed > 0 ? Math.round(speed * 3.6 * 10) / 10 : 0;
-    const h = Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : 0;
-    return [{ id, name: text(x.name, 40), lat, lng, speedKph, heading: h, updatedAt: new Date(t).toISOString(), routeId: routeOf(lat, lng, speedKph >= 3 ? h : undefined, paths) }];
+    const speedKph = Number.isFinite(speed) && speed >= 0 ? Math.round(speed * 36) / 10 : null;
+    const h = Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : null;
+    return [{ id, name: text(x.name, 40), lat, lng, speedKph, heading: h, updatedAt: new Date(t).toISOString(), routeId: routeOf(lat, lng, moving(speedKph) ? (h ?? undefined) : undefined, paths) }];
   });
 }
 
@@ -118,6 +128,18 @@ export const getVehicles = (): Promise<Vehicle[]> =>
     const [raw, st] = await Promise.all([feed("vehicles"), getStatic()]);
     return parseVehicles(raw, st.paths);
   });
+
+/** Every bus with its data age and route name joined from the network. */
+export async function liveVehicles(): Promise<LiveVehicle[]> {
+  const [vs, st] = await Promise.all([getVehicles(), getStatic()]);
+  const routes = new Map(st.routes.map((r) => [r.id, r]));
+  const now = Date.now();
+  return vs.map((v) => {
+    const ageS = Math.max(0, Math.round((now - Date.parse(v.updatedAt)) / 1000));
+    const r = v.routeId ? routes.get(v.routeId) : undefined;
+    return { ...v, ageS, stale: ageS > STALE_S, routeName: r?.name ?? null, routeShort: r?.short ?? null, routeColor: r?.color ?? null };
+  });
+}
 
 // ---- geometry (flat metres; fine at city scale) -------------------------------------------------
 
@@ -144,14 +166,19 @@ function project(coords: [number, number][], lat: number, lng: number, heading?:
   return { off, along, total };
 }
 
-/** The route of the nearest path within 150 m (heading-aware when moving), else null. */
+/**
+ * The route of the paths within 150 m (heading-aware when moving), only when one route is clearly nearest:
+ * any other route within 25 m of the best (a shared street) makes it null, never a guess.
+ */
 function routeOf(lat: number, lng: number, heading: number | undefined, paths: Path[]): string | null {
-  let best: { off: number; id: string } | null = null;
-  for (const p of paths) {
+  const near = paths.flatMap((p) => {
     const { off } = project(p.coords, lat, lng, heading);
-    if (off <= 150 && (!best || off < best.off)) best = { off, id: p.routeIds[0] };
-  }
-  return best?.id ?? null;
+    return off <= 150 ? p.routeIds.map((id) => ({ id, off })) : [];
+  });
+  if (!near.length) return null;
+  const best = Math.min(...near.map((c) => c.off));
+  const ids = new Set(near.filter((c) => c.off <= best + 25).map((c) => c.id));
+  return ids.size === 1 ? [...ids][0] : null;
 }
 
 type Pt = { lat: number; lng: number; heading?: number };
@@ -198,26 +225,33 @@ const minutesFor = (m: number, kph: number) => Math.max(1, Math.ceil((m / 1000 /
 
 /** Next buses at a stop, soonest first (at most 6). Estimates from live positions, never timetabled. */
 export async function arrivals(stationId: string): Promise<Arrival[]> {
-  const [st, vehicles] = await Promise.all([getStatic(), getVehicles()]);
+  const [st, vehicles] = await Promise.all([getStatic(), liveVehicles()]);
   const stop = st.stations.find((s) => s.id === stationId);
   if (!stop) return [];
-  const routes = new Map(st.routes.map((r) => [r.id, r]));
-  const now = Date.now();
   const out: Arrival[] = [];
   for (const v of vehicles) {
-    if (!v.routeId || !stop.routeIds.includes(v.routeId) || v.speedKph < 3 || now - Date.parse(v.updatedAt) > 5 * 60_000) continue;
-    let m = onRoute(st, v.routeId, v, stop);
+    if (!v.routeId || !v.routeShort || !stop.routeIds.includes(v.routeId) || v.stale) continue;
+    // A stopped bus (at a light, at a stop) still counts: projected without a heading, at a slow city speed.
+    const go = moving(v.speedKph);
+    const at = { lat: v.lat, lng: v.lng, heading: go ? (v.heading ?? undefined) : undefined };
+    let m = onRoute(st, v.routeId, at, stop);
     if (m === null) {
-      // Same rule as the city's own map: heading toward the stop, 1.4 x the straight line.
+      // Moving buses only, same rule as the city's own map: heading toward the stop, 1.4 x the straight line.
       const km = haversineKm(v, stop);
-      if (km > 10 || angle(v.heading, bearing((stop.lng - v.lng) * KX, (stop.lat - v.lat) * KY)) > 80) continue;
+      if (!go || v.heading === null || km > 10 || angle(v.heading, bearing((stop.lng - v.lng) * KX, (stop.lat - v.lat) * KY)) > 80) continue;
       m = 1400 * km;
     }
-    const minutes = minutesFor(m, v.speedKph);
-    const r = routes.get(v.routeId);
-    if (minutes <= 60 && r) out.push({ route: r.short, color: r.color, minutes, bus: v.name });
+    const minutes = minutesFor(m, go ? (v.speedKph ?? 15) : 15);
+    if (minutes <= 60) out.push({ route: v.routeShort, routeName: v.routeName ?? v.routeShort, color: v.routeColor ?? colour(null), minutes, bus: v.name, ageS: v.ageS, ...(go ? {} : { stopped: true as const }) });
   }
   return out.sort((a, b) => a.minutes - b.minutes).slice(0, 6);
+}
+
+/** Buses whose plate matches ("0216" finds "0216 ОРХ"), freshest first; null when under 3 letters or digits. */
+export async function findVehicles(plate: string): Promise<LiveVehicle[] | null> {
+  const q = norm(plate);
+  if (q.length < 3) return null;
+  return (await liveVehicles()).filter((v) => norm(v.name).includes(q)).sort((a, b) => a.ageS - b.ageS);
 }
 
 /** Direct buses between two stops: wait for the next live bus (null if none seen) and ride time. */
@@ -232,6 +266,6 @@ export async function trip(fromId: string, toId: string): Promise<TripOption[]> 
     const m = onRoute(st, r.id, from, to);
     if (m === null) return [];
     const bus = next.find((a) => a.route === r.short);
-    return [{ route: r.short, color: r.color, waitMinutes: bus?.minutes ?? null, rideMinutes: minutesFor(m, 15), bus: bus?.bus ?? null }];
+    return [{ route: r.short, color: r.color, waitMinutes: bus?.minutes ?? null, rideMinutes: minutesFor(m, 15), bus: bus?.bus ?? null, ageS: bus?.ageS ?? null }];
   }).sort((a, b) => (a.waitMinutes ?? 99) + a.rideMinutes - ((b.waitMinutes ?? 99) + b.rideMinutes));
 }

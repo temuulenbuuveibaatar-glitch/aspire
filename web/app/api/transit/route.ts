@@ -1,10 +1,12 @@
 import { requireUser, signedOut } from "@/lib/auth";
-import { arrivals, getStatic, getVehicles } from "@/lib/erdenet-transit";
+import { arrivals, getStatic, liveVehicles } from "@/lib/erdenet-transit";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 
 // GET /api/transit         -> Erdenet's live network: { vehicles, stations, paths, routes, updatedAt }
 // GET /api/transit?live=1  -> { vehicles, updatedAt } only (the client polls this every 10 s once it has the network)
-// GET /api/transit?stop=<station id> -> { arrivals } (minutes estimated from live positions)
+// GET /api/transit?stop=<station id> -> { arrivals } (minutes estimated from live positions, stale buses left out)
+// Each vehicle also carries ageS (seconds since its position), stale (ageS > 60) and routeName/routeShort/routeColor
+// (null when no route matched). Feed down: 503 { error: "unavailable" }, never an empty list that looks like "no buses".
 // Data: Orkhon ТКХДТ open feed, cached server-side (static 6 h, vehicles 10 s), so upstream sees at most one
 // call per 10 s per instance whatever the client traffic. The per-IP limit is generous because Mongolian
 // carriers put many people behind one CGNAT address; the per-user limit is the real guard.
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
       if (!/^[\w-]{1,40}$/.test(stop)) return Response.json({ error: "bad_stop" }, { status: 400 });
       return Response.json({ arrivals: await arrivals(stop) }, { headers });
     }
-    const vehicles = await getVehicles();
+    const vehicles = await liveVehicles();
     const updatedAt = vehicles.reduce<string | null>((max, v) => (!max || v.updatedAt > max ? v.updatedAt : max), null);
     if (url.searchParams.get("live") === "1") return Response.json({ vehicles, updatedAt }, { headers });
     const st = await getStatic();

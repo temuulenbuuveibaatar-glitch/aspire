@@ -3,9 +3,10 @@
 // 10 minutes while open, and again when the tab comes back into view. The device position is sent
 // in the request body (never the URL, so it stays out of request logs) only when the person turned
 // location sharing on; otherwise the city they set, if any; otherwise the server falls back to its
-// approximate network location.
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Ambient } from "@/lib/ambient-types";
+// approximate network location. The last good photo is kept on this device so the backdrop shows a
+// photo the moment the app opens, before the first snapshot arrives.
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { Ambient, AmbientPhoto } from "@/lib/ambient-types";
 import type { Lang } from "@/lib/lang";
 
 const REFRESH_MS = 10 * 60_000;
@@ -23,22 +24,27 @@ const round = (p: Fix, decimals: number): Fix => {
 
 /**
  * The device position rounded to `decimals` (4 = about 11 m), or null when unavailable or refused.
- * A coarse (network/Wi-Fi) fix is enough here and answers fast indoors; a fix from the last 10 minutes
- * is reused. Only the live map's "my location" button asks for high accuracy.
+ * Asks for GPS-grade accuracy first (a coarse Wi-Fi/IP fix can be kilometres off and gave wrong stops);
+ * if that times out, takes whatever fix the device has. A fix from the last 10 minutes is reused.
  */
 export function devicePosition(decimals = 4): Promise<Fix | null> {
   if (lastFix && Date.now() - lastFix.at < FIX_MAX_AGE_MS) return Promise.resolve(round(lastFix, decimals));
   if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
-  return new Promise((resolve) =>
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        lastFix = { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() };
-        resolve(round(lastFix, decimals));
-      },
-      () => resolve(null),
-      { enableHighAccuracy: false, maximumAge: FIX_MAX_AGE_MS, timeout: 15_000 },
-    ),
-  );
+  const ask = (high: boolean) =>
+    new Promise<GeolocationPosition | null>((resolve) =>
+      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
+        enableHighAccuracy: high,
+        maximumAge: high ? 60_000 : FIX_MAX_AGE_MS,
+        timeout: high ? 10_000 : 15_000,
+      }),
+    );
+  return ask(true)
+    .then((p) => p ?? ask(false))
+    .then((p) => {
+      if (!p) return null;
+      lastFix = { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() };
+      return round(lastFix, decimals);
+    });
 }
 
 /** The last fix without waiting (null when there is none yet), rounded to `decimals`. */
@@ -48,6 +54,91 @@ export function cachedPosition(decimals = 3): Fix | null {
 
 /** About 1 km: enough for the morning briefing's weather. */
 export const roundedPosition = () => devicePosition(2);
+
+/* ---- the last good photo, per device (localStorage) ---- */
+
+export interface CachedPhoto extends AmbientPhoto {
+  /** The place the photo is of (Ambient.place), so another city never shows it. */
+  place: string | null;
+  /** When it was kept (ms): Google Places content is kept a day at most. */
+  savedAt?: number;
+}
+
+const GOOGLE_HOST = /(^|\.)(googleusercontent|googleapis|google)\.com$/;
+const DAY_MS = 24 * 3600_000;
+
+const PHOTO_KEY = "aspire-photo-v1";
+const PHOTO_EVENT = "aspire:photo";
+const str = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
+
+/**
+ * Trust boundary: whatever sits in storage (or arrives from the API) is checked before it is kept or shown.
+ * A Google photo older than a day (or of unknown age) is dropped: Google limits caching Places content.
+ */
+export function parseCachedPhoto(raw: string | null, now = Date.now()): CachedPhoto | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<CachedPhoto> | null;
+    const a = v?.attribution;
+    if (!v || !str(v.url, 2048) || !v.url.startsWith("https://") || !a || typeof a.name !== "string" || typeof a.uri !== "string") return null;
+    const savedAt = typeof v.savedAt === "number" && Number.isFinite(v.savedAt) ? v.savedAt : undefined;
+    if (GOOGLE_HOST.test(new URL(v.url).hostname) && !(savedAt !== undefined && now - savedAt < DAY_MS)) return null;
+    return { url: v.url, attribution: { name: a.name.slice(0, 80), uri: a.uri.slice(0, 512) }, place: str(v.place, 120) ? v.place : null, ...(savedAt !== undefined && { savedAt }) };
+  } catch {
+    return null;
+  }
+}
+
+let photoRaw: string | null | undefined;
+let photoSnap: CachedPhoto | null = null;
+function photoSnapshot(): CachedPhoto | null {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(PHOTO_KEY);
+  } catch {
+    // storage blocked: no cache, the default skyline shows until the photo loads
+  }
+  if (raw !== photoRaw) {
+    photoRaw = raw;
+    photoSnap = parseCachedPhoto(raw);
+  }
+  return photoSnap;
+}
+function writePhoto(raw: string | null) {
+  try {
+    if (raw) localStorage.setItem(PHOTO_KEY, raw);
+    else localStorage.removeItem(PHOTO_KEY);
+  } catch {
+    return;
+  }
+  window.dispatchEvent(new Event(PHOTO_EVENT));
+}
+function subscribePhoto(cb: () => void): () => void {
+  const onStorage = (e: StorageEvent) => e.key === PHOTO_KEY && cb();
+  window.addEventListener(PHOTO_EVENT, cb);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(PHOTO_EVENT, cb);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** Keeps a good photo (with its credit and place) for the next open. */
+export function rememberPhoto(photo: AmbientPhoto | null | undefined, place: string | null) {
+  const p = parseCachedPhoto(JSON.stringify({ ...photo, place, savedAt: Date.now() }));
+  const cur = photoSnapshot();
+  if (p && (p.url !== cur?.url || p.place !== cur?.place)) writePhoto(JSON.stringify(p));
+}
+
+/** Drops the cached photo when its URL stopped loading (Google photo links can expire). */
+export function forgetPhoto(url: string) {
+  if (photoSnapshot()?.url === url) writePhoto(null);
+}
+
+/** The last good photo on this device; null on the server and during hydration. */
+export function useCachedPhoto(): CachedPhoto | null {
+  return useSyncExternalStore(subscribePhoto, photoSnapshot, () => null);
+}
 
 function isAmbient(x: unknown): x is Ambient {
   if (!x || typeof x !== "object") return false;
@@ -107,6 +198,7 @@ export function useAmbient({
       if (res?.ok) {
         const json: unknown = await res.json().catch(() => null);
         if (isAmbient(json)) {
+          if (json.photo) rememberPhoto(json.photo, json.place);
           byLang.current.set(`${l}|${share ? 1 : 0}|${c}`, { at: Date.now(), data: json });
           if (opts.current.lang === l) setData(json);
         }

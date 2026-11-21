@@ -94,11 +94,29 @@ describe("erdenet-transit", () => {
     vehicles = [south, { ...south, id: "n", name: "2222 ОРО", heading: 15 }, { ...south, id: "old", updatedAt: "2026-11-21T00:40:00Z" }];
     const a = await T.arrivals(hunt.id);
     expect(a).toHaveLength(1);
-    expect(a[0]).toMatchObject({ route: "Ч:3", color: "#53DBD0", bus: "1111 ОРО" });
+    expect(a[0]).toMatchObject({ route: "Ч:3", routeName: "Ч:3 БАЯН ТАЛ", color: "#53DBD0", bus: "1111 ОРО", ageS: 10 });
     // About 0.6 km away: at most 20 km/h counted, so 2 to 4 minutes, never less.
     expect(a[0].minutes).toBeGreaterThanOrEqual(2);
     expect(a[0].minutes).toBeLessThanOrEqual(4);
     expect(await T.arrivals("nope")).toEqual([]);
+  });
+
+  it("gives every bus its data age, marks positions over 60 s stale, and joins the route name", async () => {
+    vehicles = [south, { ...south, id: "s", name: "0216 ОРХ", updatedAt: "2026-11-21T00:56:29Z" }, { ...south, id: "x", lat: 10, lng: 10 }];
+    const [fresh, stale, lost] = await T.liveVehicles();
+    expect(fresh).toMatchObject({ ageS: 10, stale: false, routeId: "64", routeName: "Ч:3 БАЯН ТАЛ", routeShort: "Ч:3", routeColor: "#53DBD0", name: "1111 ОРО" });
+    expect(stale).toMatchObject({ ageS: 61, stale: true, routeShort: "Ч:3" });
+    expect(lost).toMatchObject({ routeId: null, routeName: null, routeShort: null, routeColor: null });
+    // A stale bus never gets an estimate, even when it is on the route and coming this way.
+    const { stations } = await T.getStatic();
+    const hunt = stations.find((s) => s.name === "Хунт")!;
+    expect((await T.arrivals(hunt.id)).map((a) => a.bus)).toEqual(["1111 ОРО"]);
+    vehicles = [{ ...south, updatedAt: "2026-11-21T00:56:00Z" }];
+    vi.setSystemTime(NOW.getTime() + 11_000); // past the 10 s cache
+    expect(await T.arrivals(hunt.id)).toEqual([]);
+    // Plate lookup: digits alone find the bus; too short a query finds nothing.
+    expect((await T.findVehicles("1111"))?.[0]).toMatchObject({ name: "1111 ОРО", stale: true });
+    expect(await T.findVehicles("11")).toBeNull();
   });
 
   it("finds stations by name and by distance, and knows Erdenet", async () => {
@@ -145,7 +163,66 @@ describe("erdenet-transit", () => {
     fail = true;
     vi.resetModules();
     const fresh = await import("@/lib/tools/local");
-    expect(await fresh.nextBus.run({ stop: "Хунт", route: "", to: "" }, here)).toMatchObject({ error: expect.stringMatching(/feed/) });
+    expect(await fresh.nextBus.run({ stop: "Хунт", route: "", to: "" }, here)).toMatchObject({ liveDataUnavailable: true, error: expect.stringMatching(/unavailable/) });
+    expect(await fresh.tripPlanner.run({ from: "Хунт", to: "Баян тал эцэс" }, here)).toMatchObject({ liveDataUnavailable: true });
+    expect(await fresh.nextBus.run({ stop: "", route: "", to: "", bus: "0216" }, here)).toMatchObject({ liveDataUnavailable: true });
+  });
+
+  it("tells the truth: data age on every bus, stale buses left out, plate lookups, and says when nothing reports", async () => {
+    const { nextBus, tripPlanner } = await import("@/lib/tools/local");
+    const here: ToolContext = { now: NOW, lang: "en", timeZone: "Asia/Ulaanbaatar", actions: [], device: { memory: {}, reminders: [], location: { lat: 49.0072, lng: 104.0381 } } };
+    const old = { ...south, id: "o", name: "0216 ОРХ", updatedAt: "2026-11-21T00:55:00Z" }; // 150 s old, same route, same place
+    vehicles = [south, old];
+    const r = (await nextBus.run({ stop: "Хунт", route: "", to: "", bus: "" }, here)) as { arrivals: { bus: string; ageS: number }[] };
+    expect(r.arrivals).toEqual([expect.objectContaining({ bus: "1111 ОРО", ageS: 10, routeName: "Ч:3 БАЯН ТАЛ" })]);
+    expect(nextBus.description).toMatch(/about N minutes \(estimate\)/);
+    expect(tripPlanner.description).toMatch(/over 30/);
+    const [opt] = ((await tripPlanner.run({ from: "Хунт", to: "Баян тал эцэс" }, here)) as { options: { bus: string; ageS: number }[] }).options;
+    expect(opt).toMatchObject({ bus: "1111 ОРО", ageS: 10 });
+
+    expect(await nextBus.run({ stop: "", route: "", to: "", bus: "0216" }, here)).toMatchObject({
+      bus: "0216 ОРХ",
+      route: "Ч:3",
+      routeName: "Ч:3 БАЯН ТАЛ",
+      speedKph: 22,
+      heading: 195,
+      ageS: 150,
+      stale: true,
+      source: "erdenet-live",
+    });
+    expect(await nextBus.run({ stop: "", route: "", to: "", bus: "9999" }, here)).toMatchObject({ error: expect.stringMatching(/No bus with plate "9999"/) });
+    expect(await nextBus.run({ stop: "", route: "", to: "", bus: "02" }, here)).toMatchObject({ error: expect.stringMatching(/at least 3/) });
+
+    // Every position stale: no estimate, and the answer says nothing is reporting rather than "no bus coming".
+    vehicles = [old];
+    vi.setSystemTime(NOW.getTime() + 11_000);
+    expect(await nextBus.run({ stop: "Хунт", route: "", to: "", bus: "" }, here)).toMatchObject({ arrivals: [], empty: expect.stringMatching(/last minute/) });
+
+    // Two plates match: the freshest is shown, the other is named, and the person is asked which.
+    vehicles = [{ ...south, id: "t", name: "1111 ОРХ", updatedAt: "2026-11-21T00:56:50Z" }, south];
+    vi.setSystemTime(NOW.getTime() + 22_000);
+    expect(await nextBus.run({ stop: "", route: "", to: "", bus: "1111" }, here)).toMatchObject({ bus: "1111 ОРО", alsoMatches: ["1111 ОРХ"], nearStop: expect.any(String) });
+  });
+
+  it("never invents speed or heading, and keeps a standing bus in the estimates (marked stopped)", async () => {
+    vehicles = [{ ...south, speed: 0 }, { ...south, id: "2", name: "2222 ОРО", speed: undefined, heading: "x" }];
+    const [parked, blank] = await T.getVehicles();
+    expect(parked).toMatchObject({ speedKph: 0, heading: 195, routeId: "64" });
+    expect(blank).toMatchObject({ speedKph: null, heading: null });
+    const { stations } = await T.getStatic();
+    const hunt = stations.find((s) => s.name === "Хунт")!;
+    const a = await T.arrivals(hunt.id);
+    expect(a.find((x) => x.bus === "1111 ОРО")).toMatchObject({ route: "Ч:3", stopped: true });
+  });
+
+  it("names a route only when one route is clearly nearest (a shared street gives null)", () => {
+    const street: [number, number][] = [[49.0, 104.0], [49.01, 104.0]];
+    const at = { id: "b", name: "1", lat: 49.005, lng: 104.0001, speed: 5, heading: 0, updatedAt: "2026-11-21T00:57:20Z" };
+    const one = [{ name: "A", routeIds: ["1"], color: "#fff", coords: street }];
+    expect(T.parseVehicles([at], one)[0].routeId).toBe("1");
+    const shared = [...one, { name: "B", routeIds: ["2"], color: "#fff", coords: street.map(([la, ln]) => [la, ln + 0.0001] as [number, number]) }];
+    expect(T.parseVehicles([at], shared)[0].routeId).toBeNull();
+    expect(T.parseVehicles([at], [{ ...one[0], routeIds: ["1", "2"] }])[0].routeId).toBeNull();
   });
 
   it("plans a direct trip with the live wait and an estimated ride", async () => {

@@ -1,7 +1,7 @@
 // v4 layer 3 shell (docs/design/aspire-v4-hud.md sections 3-6): the Jarvis frame. Corner brackets on
 // the viewport (.hud-frame::before), thin decorative rings behind the centre, and the readouts rail:
-// a two-column grid on top on phones, a sticky column on the left from 1024px. Values use the mono
-// face with tabular numerals. All strings arrive translated from the caller.
+// one swipeable row on top on phones (so the city photo stays in view), a sticky column on the left
+// from 1024px. Values use the mono face with tabular numerals. All strings arrive translated.
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,7 @@ function Readout({ icon, label, value, tone, onClick, hint }: HudReadout) {
       </span>
     </>
   );
-  const cls = "hud flex min-h-12 w-full items-center gap-3 px-3 py-2";
+  const cls = "hud flex h-full min-h-12 w-full items-center gap-3 px-3 py-2";
   return onClick ? (
     <button type="button" onClick={onClick} className={cn(cls, "press cursor-pointer")}>
       {body}
@@ -66,12 +66,12 @@ export function HudFrame({ children, readouts, clock }: HudFrameProps) {
 
       <header className="px-4 pt-[max(16px,env(safe-area-inset-top))] lg:sticky lg:top-0 lg:h-dvh lg:overflow-y-auto lg:py-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 lg:flex-col">
-          <time className="numeral text-value text-ink">{clock}</time>
+          <time className="numeral text-value text-ink [text-shadow:0_1px_12px_rgb(0_0_0/0.7)]">{clock}</time>
         </div>
         {readouts.length > 0 && (
-          <ul className="mt-3 grid grid-cols-2 gap-2 lg:mt-6 lg:grid-cols-1">
+          <ul className="-mx-4 mt-3 flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:mt-6 lg:grid lg:snap-none lg:grid-cols-1 lg:overflow-visible lg:px-0">
             {readouts.map((r) => (
-              <li key={r.id} className="min-w-0">
+              <li key={r.id} className="w-[min(46%,220px)] min-w-0 shrink-0 snap-start lg:w-auto">
                 <Readout {...r} />
               </li>
             ))}

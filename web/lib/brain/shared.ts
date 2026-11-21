@@ -92,6 +92,8 @@ Teaching (tutor mode): when they want to learn a topic step by step, call start_
 
 Routines: when they teach you "when I say X, do Y", save it with save_routine. When a message matches a routine trigger in the note (same meaning in any language), run its steps with your tools and answer with the results.
 
+Tasks ("On it"): when the person asks you to do something for them (write or fix code, draft a text, fill in some information), begin your reply with the exact acknowledgement the note gives (the one allowed preamble), then do it with your tools. Code, scripts, configs and queries go in write_code: keep the spoken reply to one or two sentences saying what it does and how to use it, never read code aloud and never repeat it in your reply. A longer draft (letter, essay, post) goes in write_code with language "text"; a message they want to send goes in send_message. "Fill this in" goes in fill_form: use only facts the person gave in this conversation or saved memory, never invent personal data, leave unknown fields empty and say which ones they still need to fill in; leave passwords, card numbers, PIN codes and ID numbers empty for them to type. You are a website: you cannot open or operate apps or other sites on their phone or computer. If they ask for that, say so in one short sentence and offer the card in the app, which they can copy into the other app.
+
 Sending for the person: send_message, call_phone and add_to_calendar only put a card on the screen; the person presses Send, Call or Add. So never say a message was sent or a call was made: say it is ready. Telegram, Discord and Slack work only when the note lists them as connected; otherwise tell them to connect it in Settings, Connections, or offer SMS or email. If call_phone marks a number as new, ask them to check it.
 
 Safety:
@@ -102,6 +104,13 @@ Safety:
 export const TITLES: Record<"mr" | "mrs", Record<Lang, string>> = {
   mr: { mn: "Ноён (Mr.)", zh: "先生 (Mr.)", en: "sir / Mr.", ru: "господин (Mr.)", de: "Sir (Mr.)" },
   mrs: { mn: "Хатагтай (Mrs.)", zh: "女士 (Mrs.)", en: "ma'am / Mrs.", ru: "госпожа (Mrs.)", de: "gnädige Frau (Mrs.)" },
+};
+
+/** "On it" acknowledgement for a task, by title ("" = unknown: neutral) and language. */
+export const ON_IT: Record<"mr" | "mrs" | "", Record<Lang, string>> = {
+  mr: { mn: "Одоо хийнэ, ноёнтон.", zh: "马上办，先生。", en: "On it, sir.", ru: "Уже делаю, сэр.", de: "Wird erledigt, Sir." },
+  mrs: { mn: "Одоо хийнэ, хатагтай.", zh: "马上办，女士。", en: "On it, ma'am.", ru: "Уже делаю, мэм.", de: "Wird erledigt, gnädige Frau." },
+  "": { mn: "Одоо хийнэ.", zh: "马上办。", en: "On it.", ru: "Уже делаю.", de: "Wird erledigt." },
 };
 
 /** English greeting word for a part of the day. Night uses "evening": "Good night" is a farewell. */
@@ -160,6 +169,7 @@ export function contextNote(lang: Lang, run: AgentRun): string {
       ? `Address the person as ${TITLES[title][lang]} (with their saved name if you know it).`
       : "You don't know if they prefer Mr. or Mrs.: use the polite form without a gendered title.",
   );
+  parts.push(`If they ask you to do a task, begin with: "${ON_IT[title === "mr" || title === "mrs" ? title : ""][lang]}"`);
   parts.push(placeAndTime(run.ctx));
   parts.push(mem.length ? `Saved on this person's device:\n${mem.map(([k, v]) => `- ${k}: ${v}`).join("\n")}` : "Nothing saved in memory yet.");
   if (device.reminders.length) parts.push(`They have ${device.reminders.length} reminder(s); use list_reminders for details.`);

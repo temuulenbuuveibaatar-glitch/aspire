@@ -2,9 +2,9 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { Backdrop, httpsUrl, timeOfDay } from "@/components/aspire/Backdrop";
+import { Backdrop, httpsUrl } from "@/components/aspire/Backdrop";
 import { HudFrame } from "@/components/aspire/HudFrame";
-import { Sky, skyFamily, stillSkyGradient } from "@/components/aspire/Sky";
+import { Sky, skyFamily } from "@/components/aspire/Sky";
 import type { AmbientSky } from "@/lib/ambient-types";
 
 const NO_SYMBOLS = /[\p{Extended_Pictographic}\u{2190}-\u{21FF}\u{2600}-\u{27BF}]/u;
@@ -33,6 +33,15 @@ describe("Backdrop", () => {
     expect(html).toContain('data-time="day"');
   });
 
+  it("draws no guessed grade before the time is known, and no weather over an unknown sky", () => {
+    const blank = renderToString(createElement(Backdrop, { photo, sky: snow, localHour: null, effects: true }));
+    expect(blank).not.toContain("<img");
+    expect(blank).not.toContain("data-time");
+    const unknown = renderToString(createElement(Backdrop, { photo: null, sky: { ...snow, known: false }, localHour: 23, effects: true }));
+    expect(unknown).not.toContain("<canvas");
+    expect(unknown).toContain('data-sky="clear"');
+  });
+
   it("refuses non-https photo and credit URLs", () => {
     const bad = { url: "javascript:alert(1)", attribution: { name: "X", uri: "http://evil.test" } };
     const html = renderToString(createElement(Backdrop, { photo: bad, sky: snow, localHour: 1, effects: false }));
@@ -43,10 +52,7 @@ describe("Backdrop", () => {
     expect(httpsUrl(42)).toBeNull();
   });
 
-  it("maps time of day and weather families", () => {
-    expect(timeOfDay(false, 12)).toBe("night");
-    expect(timeOfDay(true, 7)).toBe("dusk");
-    expect(timeOfDay(true, 13)).toBe("day");
+  it("maps weather families", () => {
     expect(skyFamily("hail")).toBe("rain");
     expect(skyFamily("cloudy")).toBe("cloud");
     expect(skyFamily("bogus")).toBe("clear");
@@ -60,7 +66,6 @@ describe("Sky", () => {
     expect(full).toContain("aspire-fade-in");
     expect(over).not.toContain("aspire-fade-in");
     expect(over).not.toContain("bg-[#060B16]");
-    expect(stillSkyGradient("snow", true, 12)).toBe("linear-gradient(180deg, #C9D6E3 0%, #EEF3F8 100%)");
   });
 });
 

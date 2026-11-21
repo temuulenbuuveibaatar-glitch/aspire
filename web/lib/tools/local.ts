@@ -1,8 +1,9 @@
 // Tools for buses, time, and the person's own device (reminders, memory). Calls live in connect.ts.
 // Buses: in Erdenet, the city's live open feed (Orkhon ТКХДТ): real stops, live buses, estimated
-// arrivals. Elsewhere, Google Maps transit. Every answer says its `source`.
+// arrivals. Elsewhere, Google Maps transit. Every answer says its `source`. Live answers carry each
+// bus's data age (ageS); stale buses never get an estimate; a dead feed is reported, never guessed around.
 // Clock times use the person's own time zone (ctx.timeZone), never a fixed offset.
-import { arrivals, CREDIT, findStations, getStatic, isErdenet, nearestStations, type Station, trip } from "@/lib/erdenet-transit";
+import { arrivals, CREDIT, findStations, findVehicles, getStatic, isErdenet, liveVehicles, moving, nearestStations, type Station, trip } from "@/lib/erdenet-transit";
 import { isGoogleMapsUrl } from "@/lib/links";
 import { directionsUrl, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
 import { clockIn, dayIn, validTimeZone, zonedTime, zoneOr } from "./time";
@@ -46,13 +47,22 @@ async function liveOrGoogle<T>(order: ReturnType<typeof erdenetOrder>, live: () 
   return down ? (FEED_DOWN as T) : none;
 }
 
+/** Why a stop has no arrivals: no bus coming, or no bus reporting at all (then nothing can be estimated). */
+const emptyReason = async () =>
+  (await liveVehicles()).some((v) => !v.stale)
+    ? "No live bus was found on a route to this stop (judged from live positions)."
+    : "No bus has reported its position in the last minute, so there is no live estimate. Say so; do not guess.";
+
 const notHere = (ctx: ToolContext) => ({
   error:
     inErdenet(ctx) === false
       ? "No live stop times for this city without a destination. Use get_directions with mode 'transit' for real departures, or find_places 'bus stop' for nearby stops."
       : "Location unknown: ask which city they are in (or suggest 'Use my location'), then use get_directions with mode 'transit'.",
 });
-const FEED_DOWN = { error: "Erdenet's live bus feed is not answering right now. Say so briefly and suggest trying again in a minute." };
+const FEED_DOWN = {
+  liveDataUnavailable: true,
+  error: "Live bus data unavailable: Erdenet's bus feed is not answering. Say exactly that; do not guess arrival times or bus positions. Suggest trying again in a minute.",
+};
 
 /** The person's city is added to a place name Google should find. */
 function placeFor(query: string, ctx: ToolContext): string {
@@ -91,28 +101,61 @@ const sameRoute = (line: string, asked: string) => {
   return !n || !!line.match(/\d+/g)?.includes(n);
 };
 
-const LIVE = { source: "erdenet-live", estimate: true, credit: CREDIT } as const;
+const SOURCE = { source: "erdenet-live", credit: CREDIT } as const;
+const LIVE = { ...SOURCE, estimate: true } as const;
+
+/** How every live bus answer must be told (part of the tool descriptions). */
+const TRUTH =
+  "Report only what the data says. Minutes are estimates: say 'about N minutes (estimate)'. ageS is how old that bus's position is: when it is over 30, say how old (e.g. 'position 45 seconds old'). Buses silent for over 60 s are left out of estimates. Routes are matched from each bus's position (null when unclear). stopped: the bus is standing still now (say so). If the result says live data is unavailable, say so and never guess.";
+
+/** One bus by its plate: route, destination, nearest stop, speed, heading and how old its position is. */
+async function busByPlate(plate: string) {
+  const found = await findVehicles(plate);
+  if (!found) return { bus: plate, error: "Ask for at least 3 digits or letters of the plate." };
+  const [v, ...rest] = found;
+  if (!v) return { bus: plate, error: `No bus with plate "${plate}" is in the live feed right now. Say so; do not guess where it is.`, ...SOURCE };
+  const [near] = await nearestStations(v.lat, v.lng, 1);
+  return {
+    bus: v.name,
+    ...(rest.length ? { alsoMatches: rest.map((x) => x.name), ambiguous: "Several buses match: ask which plate they mean." } : {}),
+    route: v.routeShort,
+    routeName: v.routeName,
+    ...(near ? { nearStop: near.name, nearStopM: near.distanceM } : {}),
+    // Unknown values stay unknown; a standing bus has no direction of travel.
+    speedKph: v.speedKph ?? "unknown",
+    ...(moving(v.speedKph) ? { heading: v.heading ?? "unknown" } : { stopped: true }),
+    ageS: v.ageS,
+    ...(v.stale ? { stale: true, note: `Its last position is ${v.ageS} s old: say it has not reported recently.` } : {}),
+    ...(v.routeShort ? {} : { noRoute: "Not on a known route right now (for example at the depot)." }),
+    ...SOURCE,
+  };
+}
 
 export const nextBus: Tool = {
   name: "get_next_bus",
   label: { mn: "Автобус", en: "Bus" },
   description:
-    "Next buses at a stop: minutes until each bus, route, bus plate. In Erdenet, Mongolia: live bus positions from the city's open feed (minutes are estimates, so say 'about'); stop names are Mongolian Cyrillic; an empty stop means the stop nearest the person. Elsewhere give a destination ('to') and real Google Maps transit departures are used, or use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
+    "Next buses at a stop: minutes until each bus, route, bus plate. In Erdenet, Mongolia: live bus positions from the city's open feed; stop names are Mongolian Cyrillic; an empty stop means the stop nearest the person; 'bus' with a plate (e.g. '0216') instead tells where that one bus is going, its speed and heading. " +
+    TRUTH +
+    " Elsewhere give a destination ('to') and real Google Maps transit departures are used, or use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
   parameters: {
     type: "object",
     properties: {
       stop: { type: "string", description: "Stop name as the person said it (in Erdenet in Mongolian Cyrillic, e.g. 'Баян тал'). Empty string = nearest stop." },
       route: { type: "string", description: "Route number to filter, e.g. '3'. Empty string for all routes." },
       to: { type: "string", description: "Where the person is going (stop or place), if they said; empty string otherwise" },
+      bus: { type: "string", description: "Erdenet bus plate the person asked about, e.g. '0216'. Empty string otherwise." },
     },
-    required: ["stop", "route", "to"],
+    required: ["stop", "route", "to", "bus"],
   },
   async run(input, ctx) {
     const stop = str(input.stop, 80);
     const route = str(input.route, 10);
     const to = str(input.to, 120);
+    const plate = str(input.bus, 20);
     const order = erdenetOrder(ctx, stop, to);
     const live = async () => {
+      if (plate) return busByPlate(plate);
       const p = await pickStop(stop, ctx);
       if ("error" in p) return order === "first" ? p : null; // a non-Erdenet stop: let `none` answer
       const list = (await arrivals(p.stop.id)).filter((a) => sameRoute(a.route, route));
@@ -120,8 +163,8 @@ export const nextBus: Tool = {
         stop: p.stop.name,
         ...(p.nearest ? { note: "Nearest stop to the person" } : {}),
         now: clockIn(ctx.now, ERDENET_ZONE),
-        arrivals: list.map(({ route: r, minutes, bus }) => ({ route: r, minutes, bus })),
-        ...(list.length ? {} : { empty: "No bus is heading to this stop right now, or the buses are not reporting." }),
+        arrivals: list.map(({ route: r, routeName, minutes, bus, ageS, stopped }) => ({ route: r, routeName, minutes, bus, ageS, ...(stopped ? { stopped } : {}) })),
+        ...(list.length ? {} : { empty: await emptyReason() }),
         ...LIVE,
       };
     };
@@ -143,7 +186,9 @@ export const tripPlanner: Tool = {
   name: "plan_trip",
   label: { mn: "Замын төлөвлөгөө", en: "Trip plan" },
   description:
-    "Bus between two stops: which route, how long to wait, how long the ride is. In Erdenet: the city's live feed (direct routes; minutes are estimates; stop names Mongolian Cyrillic). Elsewhere: Google Maps transit. For door-to-door routes anywhere, prefer get_directions.",
+    "Bus between two stops: which route, how long to wait, how long the ride is. In Erdenet: the city's live feed (direct routes; stop names Mongolian Cyrillic; waitMinutes null means no live bus is on its way). " +
+    TRUTH +
+    " Elsewhere: Google Maps transit. For door-to-door routes anywhere, prefer get_directions.",
   parameters: {
     type: "object",
     properties: {
@@ -162,7 +207,7 @@ export const tripPlanner: Tool = {
       if ("error" in a) return order === "first" ? a : null;
       const options = b ? await trip(a.stop.id, b.id) : [];
       if (!options.length) return null;
-      return { from: a.stop.name, to: b.name, options: options.map(({ route, waitMinutes, rideMinutes, bus }) => ({ route, waitMinutes, rideMinutes, bus })), ...LIVE };
+      return { from: a.stop.name, to: b.name, options: options.map(({ route, waitMinutes, rideMinutes, bus, ageS }) => ({ route, waitMinutes, rideMinutes, bus, ageS })), ...LIVE };
     };
     const google = async () => {
       const g = await googleTransit(from, to, ctx);

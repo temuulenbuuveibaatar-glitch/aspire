@@ -105,9 +105,8 @@ Grid: `grid-cols-[minmax(320px,1fr)_minmax(0,1.2fr)_minmax(360px,1fr)]`, max wid
 
 ## 7. Map
 
-- Maps JS through Google's inline bootstrap, injected only when `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` exists. Use `Promise.all` for `importLibrary("maps")` and `("marker")`. No mapId; dark JSON `styles`; `disableDefaultUI`.
-- `window.gm_authFailure` and a missing key both swap the map for a text list of the nearest stops and ETAs.
-- Layers: `TrafficLayer` always. `TransitLayer` outside Erdenet only.
+- v5: MapLibre GL (lazy `import()`, prefetched while idle on phones) + OpenFreeMap vector tiles (style `https://tiles.openfreemap.org/styles/dark`, override `NEXT_PUBLIC_MAP_STYLE_URL`), attribution "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" clear of the safe areas. No key, a full map in every country; no traffic or transit layers. WebGL missing or the style unreachable -> the nearest stops as a list plus an OpenStreetMap link. A "Loading map" status shows until the first paint.
+- Rotation and pitch are off (`touchPitch: false`, `maxPitch: 0`); the canvas renders at most at 2x.
 - Erdenet (`/api/transit`, which proxies dedtuv.erdenet.mn `static` with a 6 h cache and `vehicles` with a 10 s cache, User-Agent `Aspire/1.0 (+https://aspire-mn.vercel.app)`, never `nats-creds`):
   - Coordinate order verified from the samples: stations are GeoJSON `[lng, lat]`; `routePaths.coords` are `[lat, lng]`.
   - Each route path is a Polyline in its feed `color`.
@@ -139,6 +138,14 @@ Grid: `grid-cols-[minmax(320px,1fr)_minmax(0,1.2fr)_minmax(360px,1fr)]`, max wid
 - Animate only transform and opacity, except the map, which Google animates itself.
 - Under `still`: no particles (a static grade instead), no reticle spin, no bus glide, no pulse, no scan line.
 
+## 10b. v5 notes
+
+- Backdrop phases follow the real sun at the place (`lib/sun.ts`): midnight, night, evening, dawn, sunrise, day, afternoon, golden, sunset, dusk, each a photo filter plus a wash. Until the time is known only the plain base shows. No moon is drawn (its position is not computed), and an unknown sky (`known: false`) gets no particles, stars or sun glow. The photo drift stops under the full-screen map and on low-end devices.
+- Photo: Google Places, else a Wikimedia Commons 1600 px thumbnail credited with author and licence (fetched in parallel, failures not memoised). The last photo is cached on the device (`aspire-photo-v1`, Google ones a day at most), preloaded from the inline head script and shown with no fade; after the first snapshot only for the same place.
+- NewsStrip: newsdata.io headlines (server cache 1 h, client refresh 30 min), 3 on phones and 5 on desktop, each with source and age. The briefing card lists the headlines it speaks.
+- BusSheet: data age and the stale or feed-down warning first, then the matched route (null when two routes share the street), speed ("unknown" when the feed sends none) and heading (only while moving). Stop arrivals refresh with every poll, show each bus's data age over 30 s, and a dead feed replaces them.
+- TaskCard: code (language label, Copy, Download) and filled-in forms (Copy all); passwords, PINs, card, account and ID numbers are always left empty on the server.
+
 ## 11. Accessibility
 
 - All text is 16px or larger, on `.hud` glass at the .72 floor.
@@ -154,7 +161,7 @@ Grid: `grid-cols-[minmax(320px,1fr)_minmax(0,1.2fr)_minmax(360px,1fr)]`, max wid
 - New files:
   - `components/hud/Backdrop.tsx` (photo, grade and credit)
   - `components/hud/Readouts.tsx` (corner readouts, calendar row and transport strip)
-  - `components/hud/MapView.tsx` (Maps JS and the Erdenet overlay)
+  - `components/hud/MapView.tsx` (the map and the Erdenet overlay; v5: `components/aspire/LiveMap.tsx` on MapLibre)
   - `components/hud/MediaCard.tsx`
   - `components/hud/Reticle.tsx`
 - Changed files: `Sky.tsx` gets the `overlay` prop and loses the landing surfaces (dead code in v4).

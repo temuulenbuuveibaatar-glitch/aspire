@@ -44,7 +44,8 @@ export default function Privacy() {
           гаргахын тулд түр илгээгдэх боловч бид хадгалдаггүй. &quot;Санах ой&quot; хэсгээс хэзээ ч харж, устгах боломжтой. Нууц үг,
           картын дугаар, ПИН кодыг туслах хадгалахаас татгалзана. Тохиргооноос байршил хуваалцахыг асаасан үед л ойролцоогоор (~100 м
           хүртэл бөөрөнхийлсөн) байршил асуулттай хамт болон Google Maps Platform руу зөвхөн тухайн асуултад хариулахын тулд илгээгдэх
-          бөгөөд хадгалагдахгүй.
+          бөгөөд хадгалагдахгүй. Дараагийн нээлтэд шууд харуулахын тулд хамгийн сүүлийн арын зургийн холбоос, зурагчны нэр ба газрын
+          нэрийг төхөөрөмж дээр хадгална (Google-ийн зургийг нэг өдөр хүртэл).
         </p>
 
         <h2>Байршил ба орчны мэдээлэл</h2>
@@ -57,8 +58,9 @@ export default function Privacy() {
           хотын нэр) л илгээгдэнэ; байршил хуваалцах үед чиглэл эсвэл ойролцоох газар асуувал Google ойролцоогоор 100 м нарийвчлалтай
           байршил авна. Байршил хүсэлтийн биед явах тул сайтын бүртгэлд үлддэггүй; буудал хүртэлх зайг манай сервер нарийвчилсан байршлаас тооцоод мартана. Үр дүн серверийн санах ойд түр байгаад
           устана: цаг агаар 10 минут, дараагийн автобус 10 минут, замын хөдөлгөөн 20 минут, агаарын чанар 30 минут, урьдчилсан мэдээ 3
-          цаг, буудал, такси, хотын төв ба зураг нэг өдөр хүртэл. Арын зургийг Google Maps-ээс авах ба зурагчны нэрийг дэлгэц дээр
-          үргэлж харуулна. Эрдэнэт хотын автобусны шууд байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил
+          цаг, буудал, такси, хотын төв ба зураг нэг өдөр хүртэл. Арын зургийг Google Maps-ээс, эсвэл тэнд байхгүй бол Wikimedia
+          Commons-оос авна (Wikipedia руу ойролцоогоор 10 км хүртэл бөөрөнхийлсөн байршил илгээгдэнэ); зурагчны нэр ба лицензийг
+          дэлгэц дээр үргэлж харуулна. Эрдэнэт хотын автобусны шууд байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил
           огт илгээгдэхгүй. Төхөөрөмжийн байршлыг Тохиргоо эсвэл хөтчийн тохиргооноос хэзээ ч унтрааж болно.
         </p>
 
@@ -128,6 +130,9 @@ export default function Privacy() {
             бохирдол, газрын зураг (зурагчны нэрийг харуулна).
           </li>
           <li>Орхон ТКХДТ (dedtuv.erdenet.mn): Эрдэнэт хотын автобусны шууд байршил.</li>
+          <li>OpenFreeMap / OpenStreetMap: газрын зургийн хавтан, таны хөтөч шууд ачаална (таны IP хаяг ба харж буй газрын хэсэг).</li>
+          <li>newsdata.io: мэдээний гарчиг (зөвхөн таны улс ба хэл).</li>
+          <li>Wikipedia / Wikimedia Commons: Google-д зураг байхгүй үеийн арын зураг.</li>
         </ul>
         <p>
           Эдгээр компани өөрсдийн нөхцөлийн дагуу мэдээллийг аюулгүй байдлын зорилгоор богино хугацаанд хадгалж болно.{" "}
@@ -185,7 +190,8 @@ export default function Privacy() {
           device</b>. They are sent along with a question so it can be answered, and we don&apos;t keep them. You can see and delete them
           any time in &quot;Memory&quot;. The assistant refuses to store passwords, card numbers or PIN codes. Only when you turn on
           location sharing in Settings, a rounded location (about 100 m) is sent with your questions and to Google Maps Platform, only to
-          answer them, and is not stored.
+          answer them, and is not stored. The link to the last background photo, its credit and its place name are kept on your device so
+          the next open shows it at once (a Google photo for a day at most).
         </p>
 
         <h2>Your location and live conditions</h2>
@@ -199,8 +205,9 @@ export default function Privacy() {
           sharing on, Google receives your position to about 100 m; distances to stops are worked
           out from the precise position on our server and then forgotten. Results stay in server memory for a short time and are then
           discarded: weather and the next bus 10 minutes, traffic 20 minutes, air quality 30 minutes, the forecast 3 hours, and stops,
-          taxis, the city centre and the photo up to a day. The background photo comes from Google Maps, and its author is always
-          credited on screen. Live bus positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic
+          taxis, the city centre and the photo up to a day. The background photo comes from Google Maps or, when it has none, from
+          Wikimedia Commons (a position rounded to about 10 km is sent to Wikipedia); its author and licence are always credited on
+          screen. Live bus positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic
           camera service; your location is never sent to it. You can turn device location off at any time in Settings or in your
           browser settings.
         </p>
@@ -272,6 +279,9 @@ export default function Privacy() {
             photos (credited to their authors).
           </li>
           <li>Орхон ТКХДТ (dedtuv.erdenet.mn): live bus positions in Erdenet.</li>
+          <li>OpenFreeMap / OpenStreetMap: map tiles, loaded by your browser (your IP address and the map area you view).</li>
+          <li>newsdata.io: headlines (your country and language only).</li>
+          <li>Wikipedia / Wikimedia Commons: background photo when Google has none.</li>
         </ul>
         <p>
           These providers may keep data briefly for safety and abuse monitoring under their own terms.{" "}

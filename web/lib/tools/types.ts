@@ -47,7 +47,19 @@ export type ClientAction =
   /** In-app YouTube player (youtube-nocookie embed). videoId is 11 chars of [A-Za-z0-9_-]. */
   | { type: "video"; videoId: string; title: string; channel: string }
   /** In-app Spotify embed. id is the 22-char Spotify id. */
-  | { type: "spotify"; kind: "track" | "playlist"; id: string; title: string; artist: string };
+  | { type: "spotify"; kind: "track" | "playlist"; id: string; title: string; artist: string }
+  /** Code card ("On it"): monospace block with Copy and Download. language is a lowercase tag, "text" if unknown. */
+  | { type: "code"; language: string; title: string; code: string }
+  /** Filled-in form card ("On it"): label/value rows with Copy all. An empty value = not known, the person fills it. */
+  | { type: "form"; title: string; fields: FormField[] };
+
+export interface FormField {
+  label: string;
+  value: string;
+}
+
+/** The ClientAction variants TaskCard shows. */
+export type TaskAction = Extract<ClientAction, { type: "code" | "form" }>;
 
 /** The ClientAction variants MediaCard plays. */
 export type MediaAction = Extract<ClientAction, { type: "video" | "spotify" }>;
@@ -131,7 +143,7 @@ export interface Tool {
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, { type: string; description: string; enum?: string[] }>;
+    properties: Record<string, { type: string; description: string; enum?: string[]; items?: Record<string, unknown> }>;
     required: string[];
   };
   run(input: Record<string, unknown>, ctx: ToolContext): Promise<unknown>;

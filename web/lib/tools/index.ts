@@ -6,6 +6,8 @@ import { deleteRoutine, listRoutines, saveProgress, saveRoutine, startLesson } f
 import { cancelReminder, forget, listReminders, localTime, nextBus, remember, setReminder, tripPlanner } from "./local";
 import { findPlaces, getDirections } from "./maps";
 import { playMusic, playVideo } from "./media";
+import { newsTools } from "./news";
+import { taskTools } from "./tasks";
 import type { Tool, ToolContext } from "./types";
 import { airQuality, calculator, currency, encyclopedia, weather } from "./world";
 
@@ -39,6 +41,8 @@ export const TOOLS: Tool[] = [
   checkEmail,
   playVideo,
   playMusic,
+  ...newsTools,
+  ...taskTools,
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));

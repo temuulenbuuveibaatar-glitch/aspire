@@ -4,7 +4,7 @@
  * Aspire v4 "Jarvis HUD" design tokens and global styles.
  * Source of truth: docs/design/aspire-v4-hud.md (v3 tokens kept for untouched files).
  *
- * Layering: component classes (.hud, .panel, .press, .backdrop ...) live in
+ * Layering: component classes (.hud, .panel, .press ...) live in
  * @layer components so any Tailwind utility on the same element wins.
  */
 
@@ -363,52 +363,6 @@
       left top, left top, right top, right top,
       left bottom, left bottom, right bottom, right bottom;
     opacity: 0.8;
-  }
-
-  /* Backdrop grade (Backdrop.tsx): filters compose time x weather; tint and scrims sit above the photo. */
-  .backdrop {
-    --g-time: brightness(1);
-    --g-sky: saturate(1);
-    --scrim-bottom: 0.75;
-  }
-  .backdrop[data-time="night"] {
-    --g-time: brightness(0.55) saturate(0.7) hue-rotate(-10deg);
-  }
-  .backdrop:is([data-sky="cloud"], [data-sky="fog"]) {
-    --g-sky: saturate(0.6) contrast(0.9);
-  }
-  .backdrop[data-sky="snow"] {
-    --g-sky: brightness(1.05) saturate(0.7) hue-rotate(8deg);
-    --scrim-bottom: 0.85;
-  }
-  .backdrop[data-sky="rain"] {
-    --g-sky: brightness(0.8) saturate(0.8);
-  }
-  .backdrop[data-sky="storm"] {
-    --g-sky: brightness(0.62) saturate(0.75);
-  }
-  .backdrop-photo {
-    filter: var(--g-time) var(--g-sky);
-    animation: aspire-fade-in 600ms ease-out both;
-  }
-  .backdrop-tint {
-    opacity: 0;
-  }
-  .backdrop[data-time="night"] .backdrop-tint {
-    background: #0a1630;
-    opacity: 0.35;
-    mix-blend-mode: multiply;
-  }
-  .backdrop[data-time="dusk"] .backdrop-tint {
-    background: #ff9a5a;
-    opacity: 0.25;
-    mix-blend-mode: soft-light;
-  }
-  .backdrop-scrim {
-    background:
-      linear-gradient(to bottom, rgb(0 0 0 / 0.7), transparent 28vh),
-      linear-gradient(to top, rgb(0 0 0 / var(--scrim-bottom)), transparent 40vh),
-      radial-gradient(transparent 40%, rgb(0 0 0 / 0.55));
   }
 }
 

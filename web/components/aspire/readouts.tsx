@@ -1,9 +1,10 @@
 // The HUD readouts (docs/design/aspire-v4-hud.md sections 5-6): here-and-now facts from
 // /api/ambient, already translated, for HudFrame. A readout with no data is left out.
 
-import { Bus, CarFront, CarTaxiFront, Leaf, MapPin, Thermometer } from "lucide-react";
+import { Bus, CarFront, Leaf, MapPin, Thermometer } from "lucide-react";
 import type { HudReadout } from "@/components/aspire/HudFrame";
 import { AQI_ORDER, type Ambient } from "@/lib/ambient-types";
+import { busFresh } from "@/lib/greeting";
 import type { UI } from "@/lib/ui-text";
 
 type T = (typeof UI)["en"];
@@ -21,7 +22,7 @@ function placeLabel(a: Ambient | null, t: T): string {
   return `${a.place}, ${src}`;
 }
 
-export function hudReadouts(a: Ambient | null, t: T, opts: { imperial: boolean; openMap: () => void; openLocation: () => void }): HudReadout[] {
+export function hudReadouts(a: Ambient | null, t: T, opts: { imperial: boolean; openMap: () => void; openLocation: () => void; now: number | null }): HudReadout[] {
   const out: HudReadout[] = [];
   const h = t.hud;
   // A temperature from the network (IP) position is a guess: say so, and let the person fix the place.
@@ -39,16 +40,17 @@ export function hudReadouts(a: Ambient | null, t: T, opts: { imperial: boolean; 
     const delay = delayMin >= 1 ? ` +${Math.round(delayMin)} ${h.min}` : "";
     out.push({ id: "traffic", icon: <CarFront />, label: h.traffic, value: `${h.level[level]}${delay}`, tone: level === "light" ? "ok" : level === "moderate" ? "warn" : "bad" });
   }
-  if (a?.nextBus) {
-    const b = a.nextBus;
+  // The estimate counts down from when the server made it; gone once the bus is due, and a live
+  // (Erdenet) one is dropped after 2 min (the live map, one tap away, has the fresh estimate).
+  const b = a?.nextBus;
+  // `now` is null before the client has read its clock (prerender): no countdown then.
+  const now = opts.now;
+  const left = b && now != null ? b.departsInMin - (now - Date.parse(b.at)) / 60_000 : NaN;
+  if (b && left >= 0 && (b.source !== "erdenet-live" || busFresh(b.at, now))) {
     const approx = b.source === "erdenet-live" ? ` (${h.approx})` : "";
-    out.push({ id: "bus", icon: <Bus />, label: h.bus, value: `${b.line} ${Math.max(0, Math.round(b.departsInMin))} ${h.min}${approx}`, onClick: opts.openMap, hint: h.openMap });
+    out.push({ id: "bus", icon: <Bus />, label: h.bus, value: `${b.line} ${Math.max(1, Math.round(left))} ${h.min}${approx}`, onClick: opts.openMap, hint: h.openMap });
   }
-  const taxi = a?.taxis?.[0];
-  if (taxi) {
-    const km = taxi.distanceM >= 1000 ? `${(taxi.distanceM / 1000).toFixed(1)} km` : `${Math.round(taxi.distanceM)} m`;
-    out.push({ id: "taxi", icon: <CarTaxiFront />, label: h.taxi, value: `${km} ${taxi.name}`.slice(0, 40), onClick: opts.openMap, hint: h.openMap });
-  }
+  // Taxis stay on the map only (owner: no "nearest taxi" readout).
   out.push({ id: "map", icon: <MapPin />, label: h.map, value: placeLabel(a, t), tone: guessed ? "warn" : undefined, onClick: opts.openMap, hint: h.openMap });
   return out;
 }

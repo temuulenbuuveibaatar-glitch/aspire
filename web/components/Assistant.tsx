@@ -1,16 +1,18 @@
 "use client";
 
-// The main screen, v4 "Jarvis HUD" (docs/design/aspire-v4-hud.md): the person's own city photo
-// with the live weather over it (Backdrop), the HUD frame with here-and-now readouts (HudFrame),
-// the orb in a reticle at the centre, the conversation, and the live map (side panel on desktop,
-// full screen on phones). Sheet contents live in components/aspire/SettingsSheets.tsx.
+// The main screen, v5 "Jarvis HUD" (docs/design/aspire-v4-hud.md): the person's own city photo (from
+// this device's cache the moment the app opens) with the time of day and the live weather over it
+// (Backdrop), the HUD frame with here-and-now readouts (HudFrame), one-tap Map / News / Buses, the orb
+// in a reticle at the centre, the conversation with its code and form cards, the headlines
+// (NewsStrip), and the OpenStreetMap live map (side panel on desktop, full screen on phones). Sheet
+// contents live in components/aspire/SettingsSheets.tsx.
 //
 // Behaviour kept from v3: voice capture with silence detection (the mobile-safe listen() now in lib/use-voice.ts),
 // per-message language detection, /api/ask, /api/listen, /api/speak, the 401 guard, the Settings,
 // Connections and Memory sheets, Gmail, Calendar and bot links, the daily briefing, reminders and
 // the alarm banner, action and media cards, sign-out, and the device store with cloud sync.
 
-import { Maximize2, Menu, Sunrise } from "lucide-react";
+import { Bus, MapIcon, Maximize2, Menu, Newspaper, Sunrise } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -19,8 +21,9 @@ import { Backdrop } from "@/components/aspire/Backdrop";
 import { useDailyBriefing } from "@/components/aspire/BriefingCard";
 import { Composer } from "@/components/aspire/Composer";
 import { HudFrame } from "@/components/aspire/HudFrame";
-import { LiveMap } from "@/components/aspire/LiveMap";
+import { LiveMap, prefetchMap } from "@/components/aspire/LiveMap";
 import { MessageList, type ChatMessage } from "@/components/aspire/MessageList";
+import { NewsStrip } from "@/components/aspire/NewsStrip";
 import { hudReadouts } from "@/components/aspire/readouts";
 import { ConnectionsBody, MemoryBody, MenuBody, SettingsBody, WherePrompt } from "@/components/aspire/SettingsSheets";
 import { Sheet } from "@/components/aspire/Sheet";
@@ -33,6 +36,7 @@ import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
 import { detectTextLanguage, HTML_LANG, isLang, type Lang } from "@/lib/lang";
 import { buildSuggestions } from "@/lib/suggestions";
+import { phaseParam } from "@/lib/sun";
 import type { Channel, ClientAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 import { devicePosition, roundedPosition, useAmbient } from "@/lib/use-ambient";
@@ -48,8 +52,9 @@ const FLASH_MS = 2500;
 const CONDITIONS_EVERY_MS = 10 * 60_000;
 const LANG_KEY = "aspire-lang";
 const WHERE_KEY = "aspire-where";
+const NEWS_KEY = "aspire-news";
 const ENGINE: Record<string, string> = { elevenlabs: "ElevenLabs", azure: "Azure", gemini: "Gemini", omnivoice: "OmniVoice" };
-const GUARDED = /^\/api\/(ask|listen|speak|send|briefing|ambient|transit|calendar)$/;
+const GUARDED = /^\/api\/(ask|listen|speak|send|briefing|ambient|transit|calendar|news)$/;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const storeIn = (area: () => Storage) => ({
@@ -82,7 +87,7 @@ function startingLang(): Lang {
   return "en";
 }
 
-/** Demo override: ?sky=rain|snow|storm|fog|drizzle|sleet|hail|cloudy|partly|clear and &night=1. */
+/** Demo override: ?sky=rain|snow|storm|fog|drizzle|sleet|hail|cloudy|partly|clear and &night=1 (time of day: ?time=sunset, lib/sun). */
 function skyOverride(search: string): { kind: SkyKind; night: boolean } | null {
   const q = new URLSearchParams(search);
   const kind = q.get("sky")?.toLowerCase();
@@ -135,6 +140,7 @@ export default function Assistant() {
   const [sheet, setSheet] = useState<SheetName>(null);
   const [sheetWord, setSheetWord] = useState("");
   const [mapFull, setMapFull] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(true);
   const [whereAsked, setWhereAsked] = useState<boolean | null>(null);
   const [consented, setConsented] = useState(true);
   const [ready, setReady] = useState(false);
@@ -184,6 +190,7 @@ export default function Assistant() {
     // "Not now" lasts this session only, so the question comes back until a place is set.
     setWhereAsked(store.get(WHERE_KEY) === "1" || session.get(WHERE_KEY) === "1");
     setConsented(store.get("aspire-consent") === "1" || store.get("emee-consent") === "1");
+    setNewsOpen(store.get(NEWS_KEY) !== "0");
     setReady(true); // useDevice loads stored data in its own earlier effect
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -339,7 +346,7 @@ export default function Assistant() {
       }
       const actions = data.actions ?? [];
       if (actions.length) update((dev) => applyActions(dev, actions));
-      const cards = actions.filter((a) => isCard(a) || a.type === "video" || a.type === "spotify");
+      const cards = actions.filter((a) => isCard(a) || a.type === "video" || a.type === "spotify" || a.type === "code" || a.type === "form");
       setMessages((m) => [...m, { id: uid(), role: "assistant", text: data.reply!, lang: l, steps: data.steps ?? [], cards, sources: data.sources ?? [] }]);
       await speak(data.reply, l);
     },
@@ -422,6 +429,13 @@ export default function Assistant() {
       mapPanel.current.querySelector<HTMLElement>("[role=region]")?.focus();
     } else openFullMap();
   };
+  const newsBox = useRef<HTMLDivElement>(null);
+  const toggleNews = () => {
+    const open = !newsOpen;
+    setNewsOpen(open);
+    store.set(NEWS_KEY, open ? "1" : "0");
+    if (open) requestAnimationFrame(() => newsBox.current?.scrollIntoView({ block: "nearest", behavior: prefs.calm ? "auto" : "smooth" }));
+  };
 
   // On-screen keyboard (iOS never resizes the layout viewport): lift the composer above it.
   useEffect(() => {
@@ -472,13 +486,16 @@ export default function Assistant() {
     : (ambient?.sky ?? { kind: "clear", intensity: 0, isDay: deviceHour == null || (deviceHour >= 5 && deviceHour < 21), windKph: 0, cloudCover: null, known: false });
   const localHour = override ? (override.night ? 23 : 13) : (ambient?.localHour ?? deviceHour);
   const shown = useMemo(() => (override && ambient ? { ...ambient, sky: { ...ambient.sky, kind: override.kind, known: true } } : ambient), [override, ambient]);
-  const greetingText = useMemo(() => greeting(lang, title, localHour ?? 12, shown, first), [lang, title, shown, localHour, first]);
+  const greetingText = useMemo(
+    () => greeting(lang, title, localHour ?? 12, shown, first, minute == null ? null : minute * 60_000),
+    [lang, title, shown, localHour, first, minute],
+  );
   const starters = useMemo(
     () => buildSuggestions({ ambient: shown, hour: localHour, lang, tags: deviceTags ? deviceTags.split(",") : [] }),
     [shown, localHour, lang, deviceTags],
   );
   const imperial = prefs.units === "imperial" || (prefs.units === "auto" && /-(US|LR|MM)$/i.test(deviceTags.split(",")[0] ?? ""));
-  const readouts = hudReadouts(shown, t, { imperial, openMap, openLocation: () => openSheet("settings") });
+  const readouts = hudReadouts(shown, t, { imperial, openMap, openLocation: () => openSheet("settings"), now: minute == null ? null : minute * 60_000 });
   const erdenet = (!!ambient?.coords && isErdenet(ambient.coords.lat, ambient.coords.lng)) || ambient?.nextBus?.source === "erdenet-live";
   const mapStops = erdenet ? [] : (ambient?.stops ?? []).flatMap((s) => (s.lat != null && s.lng != null ? [{ name: s.name, lat: s.lat, lng: s.lng }] : []));
   const orbWeather = {
@@ -489,6 +506,30 @@ export default function Assistant() {
   };
   const sphere = empty ? (desktop ? 200 : short ? 128 : 160) : desktop ? 120 : 96;
   const pill = orbState !== "idle" ? word : flash;
+  // The photo credit (bottom-left): Backdrop says when it is actually on screen.
+  const [credit, setCredit] = useState(false);
+  const quick: { id: string; icon: typeof Bus; label: string; onClick: () => void; expanded?: boolean; map?: boolean }[] = [
+    { id: "map", icon: MapIcon, label: t.hud.map, onClick: openMap, map: true },
+    { id: "news", icon: Newspaper, label: t.hud.news, onClick: toggleNews, expanded: newsOpen },
+    ...(erdenet ? [{ id: "bus", icon: Bus, label: t.hud.buses, onClick: openFullMap, map: true }] : []),
+  ];
+  // Phones: fetch the map library while idle, so the first tap on Map or Buses shows a map, not a dark box.
+  useEffect(() => {
+    if (!ready || desktop) return;
+    const load = () => void prefetchMap();
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(load, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(load, 2000);
+    return () => window.clearTimeout(id);
+  }, [ready, desktop]);
+  // Only once the screen language is known, so the first request is not wasted on the "en" default.
+  const news = newsOpen && langReady && (
+    <div ref={newsBox} id="aspire-news" className="scroll-mt-4">
+      <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 5 : 3} />
+    </div>
+  );
 
   // A notable change in conditions is announced at most once per 10 minutes (the first is in the greeting).
   const [conditionsNote, setConditionsNote] = useState("");
@@ -527,7 +568,18 @@ export default function Assistant() {
           {t.skipToConversation}
         </a>
         {/* Calm and reduced motion still show the weather (one still frame); the opaque full-screen map pauses it. */}
-        <Backdrop photo={ambient?.photo ?? null} sky={sky} localHour={localHour} effects={prefs.skyEffects && !mapFull} label={t.hud.photo} />
+        <Backdrop
+          photo={ambient?.photo ?? null}
+          sky={sky}
+          localHour={localHour}
+          effects={prefs.skyEffects && !mapFull}
+          label={t.hud.photo}
+          coords={ambient?.coords ?? null}
+          place={ambient?.place ?? null}
+          phase={phaseParam(search) ?? (override?.night ? "midnight" : null)}
+          loaded={ambient != null}
+          onCredit={setCredit}
+        />
 
         {/* Under the full-screen map: inert, and on phones not rendered at all (no hidden canvas loops). */}
         <div inert={sheet !== null || whereOpen || mapFull} hidden={mapFull && !desktop} className="relative z-[1]">
@@ -545,6 +597,27 @@ export default function Assistant() {
                     <Menu className="size-6" aria-hidden />
                   </button>
                 </div>
+
+                {/* ---- one tap to the map, the headlines and (Erdenet) the live buses ---- */}
+                <nav aria-label={t.hud.quick} className="mt-2">
+                  <ul className="flex flex-wrap gap-2">
+                    {quick.map(({ id, icon: Icon, label, onClick, expanded, map: isMap }) => (
+                      <li key={id}>
+                        <button
+                          type="button"
+                          onClick={onClick}
+                          onPointerDown={isMap ? () => void prefetchMap() : undefined}
+                          aria-expanded={expanded}
+                          aria-controls={expanded ? "aspire-news" : undefined}
+                          className="press hud inline-flex min-h-12 items-center gap-2 px-4 text-body font-medium text-ink"
+                        >
+                          <Icon className="size-5 shrink-0 text-hud" aria-hidden />
+                          {label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
 
                 {/* ---- the orb in its reticle, the status pill, and (empty state) the greeting ---- */}
                 <section aria-labelledby={empty ? "aspire-greeting" : undefined} className="flex flex-col items-center pt-[2vh]">
@@ -599,6 +672,8 @@ export default function Assistant() {
                   )}
                 </section>
 
+                {!desktop && news && <div className="mx-auto mt-4 max-w-[720px]">{news}</div>}
+
                 <MessageList
                   className="mx-auto mt-4 max-w-[720px]"
                   messages={messages}
@@ -614,7 +689,7 @@ export default function Assistant() {
                 void askBrain(q.text, q.lang);
               }}
                   address={title}
-                  briefing={briefing ? { text: briefing.text, lang: briefing.lang, gmailError: briefing.gmailError } : null}
+                  briefing={briefing ? { text: briefing.text, lang: briefing.lang, gmailError: briefing.gmailError, headlines: briefing.headlines } : null}
                   onReplayBriefing={() => {
                     if (!briefing || phase !== "idle") return;
                     voice.unlock();
@@ -628,7 +703,7 @@ export default function Assistant() {
 
               {/* desktop: the live map beside the chat, with a full-screen toggle */}
               {desktop && (
-                <aside ref={mapPanel} aria-label={t.hud.map} className="sticky top-6 mt-4 self-start">
+                <aside ref={mapPanel} aria-label={t.hud.map} className="sticky top-6 mt-4 max-h-[calc(100dvh-3rem)] self-start overflow-y-auto pb-2">
                   <div className="hud mb-2 flex items-center justify-between px-3">
                     <h2 className="text-label tracking-[0.12em] text-ink-muted uppercase">{t.hud.map}</h2>
                     <button type="button" onClick={openFullMap} aria-label={t.hud.fullscreen} title={t.hud.fullscreen} className={iconBtn}>
@@ -636,6 +711,7 @@ export default function Assistant() {
                     </button>
                   </div>
                   {!mapFull && map(false)}
+                  {news && <div className="mt-4">{news}</div>}
                 </aside>
               )}
             </main>
@@ -646,7 +722,7 @@ export default function Assistant() {
             className="pointer-events-none fixed inset-x-0 z-20 bg-gradient-to-t from-bg/85 via-bg/50 to-transparent px-4 pt-8 lg:pl-[276px]"
             style={{
               bottom: "var(--kb, 0px)",
-              paddingBottom: `var(--kb-pad, calc(max(8px, env(safe-area-inset-bottom)) + ${ambient?.photo ? 56 : 0}px))`,
+              paddingBottom: `var(--kb-pad, calc(max(8px, env(safe-area-inset-bottom)) + ${credit ? 56 : 0}px))`,
             }}
           >
             <Composer
