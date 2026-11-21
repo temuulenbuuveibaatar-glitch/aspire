@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aspire Settings</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.png" alt="" width="44" height="44">
+    <div class="grow">
+      <h1>Aspire</h1>
+      <p class="muted" id="version"></p>
+    </div>
+    <select id="lang" aria-label="Language">
+      <option value="mn">Монгол</option>
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+      <option value="ru">Русский</option>
+      <option value="de">Deutsch</option>
+    </select>
+  </header>
+
+  <section id="setup-box" hidden>
+    <p class="muted" data-t="setupHint"></p>
+    <button id="setup-all" data-t="setupAll"></button>
+  </section>
+
+  <section>
+    <h2 data-t="brain"></h2>
+    <p class="muted" data-t="brainHint"></p>
+    <label class="choice"><input type="radio" name="provider" value="local"><span data-t="local"></span></label>
+    <label class="choice"><input type="radio" name="provider" value="claude"><span data-t="claude"></span></label>
+    <label class="choice"><input type="radio" name="provider" value="openai"><span data-t="openai"></span></label>
+    <div id="key-box" hidden>
+      <div class="row">
+        <input id="key" type="password" autocomplete="off" spellcheck="false">
+        <button id="save-key" data-t="save"></button>
+      </div>
+      <div class="row" id="model-row" hidden>
+        <input id="model" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="muted" data-t="keyHint"></p>
+      <button id="forget-key" class="ghost" data-t="forget"></button>
+    </div>
+    <p class="state" id="brain-state"></p>
+  </section>
+
+  <section>
+    <h2 data-t="localTitle"></h2>
+    <p class="muted" id="local-what"></p>
+    <button id="install-local" data-t="download"></button>
+    <div class="bar" id="local-bar" hidden><div></div></div>
+    <p class="state" id="local-state"></p>
+  </section>
+
+  <section>
+    <h2>Hermes Agent</h2>
+    <p class="muted" data-t="hermesHint"></p>
+    <button id="install-hermes" data-t="install"></button>
+    <p class="state" id="hermes-state"></p>
+    <p class="muted small" id="hermes-note"></p>
+    <div class="row">
+      <input id="task" type="text" autocomplete="off">
+      <button id="run-task" data-t="run"></button>
+    </div>
+    <pre id="task-out" hidden></pre>
+  </section>
+
+  <section>
+    <h2 data-t="pairTitle"></h2>
+    <p class="muted" data-t="pairHint"></p>
+    <div class="row">
+      <input id="code" type="text" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-FGHJK">
+      <button id="pair" data-t="pair"></button>
+    </div>
+    <p class="state" id="pair-state"></p>
+    <button id="unpair" class="ghost" data-t="unpair" hidden></button>
+  </section>
+
+  <section>
+    <label class="choice"><input type="checkbox" id="autostart"><span data-t="autostart"></span></label>
+    <p class="muted small" id="data-dir"></p>
+  </section>
+</main>
+</body>
+</html>

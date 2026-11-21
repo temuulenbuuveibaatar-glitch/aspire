@@ -1,0 +1,21 @@
+{
+  "identifier": "aspire-local",
+  "description": "The bundled settings page: every Aspire command, including keychain, downloads and installs.",
+  "windows": ["settings"],
+  "permissions": [
+    "core:default",
+    "allow-app-status",
+    "allow-set-autostart",
+    "allow-set-lang",
+    "allow-brain-status",
+    "allow-brain-set",
+    "allow-brain-forget",
+    "allow-brain-chat",
+    "allow-local-install",
+    "allow-hermes-install",
+    "allow-hermes-run",
+    "allow-pair",
+    "allow-unpair",
+    "allow-pairing-status"
+  ]
+}
