@@ -24,6 +24,11 @@
     </select>
   </header>
 
+  <section id="setup-box" hidden>
+    <p class="muted" data-t="setupHint"></p>
+    <button id="setup-all" data-t="setupAll"></button>
+  </section>
+
   <section>
     <h2 data-t="brain"></h2>
     <p class="muted" data-t="brainHint"></p>
@@ -69,7 +74,7 @@
     <h2 data-t="pairTitle"></h2>
     <p class="muted" data-t="pairHint"></p>
     <div class="row">
-      <input id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456">
+      <input id="code" type="text" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-FGHJK">
       <button id="pair" data-t="pair"></button>
     </div>
     <p class="state" id="pair-state"></p>

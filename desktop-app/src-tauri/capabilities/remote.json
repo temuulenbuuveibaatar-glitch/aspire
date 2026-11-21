@@ -1,14 +1,18 @@
 {
   "identifier": "aspire-remote",
-  "description": "The Aspire web app in the main window: chat with the chosen brain, ask Hermes Agent (each task needs a native Allow), read pairing status. No keychain, file or install commands.",
-  "windows": ["main"],
+  "description": "The Aspire web app in the main window: chat with the chosen brain (size and rate limited) and read the brain and pairing status. No Hermes, keychain, file, install or confirm commands.",
+  "windows": [
+    "main"
+  ],
   "remote": {
-    "urls": ["https://aspire-mn.vercel.app", "https://aspire-mn.vercel.app/*"]
+    "urls": [
+      "https://aspire-mn.vercel.app",
+      "https://aspire-mn.vercel.app/*"
+    ]
   },
   "permissions": [
     "allow-brain-status",
     "allow-brain-chat",
-    "allow-hermes-run",
     "allow-pairing-status"
   ]
 }

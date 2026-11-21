@@ -1,7 +1,10 @@
 name: Desktop
 
 # Builds Aspire Desktop (desktop-app/, Tauri 2 + Rust) for Windows (.msi, -setup.exe) and macOS
-# (universal .dmg). Unsigned. Pushing a v* tag also creates a draft GitHub Release.
+# (universal .dmg) from the committed Cargo.lock (--locked), with SHA256SUMS for every build.
+# Unsigned for now. A v* tag also drafts a GitHub Release with build provenance attestations
+# (check a file with: gh attestation verify <file> --repo <owner>/<repo>).
+# Third-party actions are pinned to full commit SHAs; bump them together with their comments.
 on:
   push:
     branches: [desktop-app]
@@ -9,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -22,51 +25,113 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            rust-targets: x86_64-pc-windows-msvc
+            targets: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc
           - os: macos-latest
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            targets: aarch64-apple-darwin x86_64-apple-darwin
             args: --target universal-apple-darwin
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: desktop-app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust-targets }}
+      - name: Rust toolchain (rustup is preinstalled on the runners)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.targets }}
 
-      - uses: swatinem/rust-cache@v2
+      # Branch builds only: a release never restores a cache that a branch push could have written.
+      - name: Cache Rust builds
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: desktop-app/src-tauri -> target
 
-      - name: Install Tauri CLI
+      - name: Check Cargo.lock
+        working-directory: desktop-app/src-tauri
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              echo "::error::Commit desktop-app/src-tauri/Cargo.lock before tagging a release."
+              exit 1
+            fi
+            echo "::warning::Cargo.lock is not committed. This branch build generates one; commit the Cargo.lock artifact."
+            cargo generate-lockfile
+          fi
+
+      - name: Install the Tauri CLI
         working-directory: desktop-app
         run: npm ci
 
-      - name: Build (and draft a release on v* tags)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop-app
-          args: ${{ matrix.args }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: Aspire Desktop ${{ github.ref_name }}
-          releaseBody: Unsigned installers. See desktop-app/README.md for first-run steps.
-          releaseDraft: true
-          prerelease: false
+      - name: Build
+        working-directory: desktop-app
+        run: node node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }} -- --locked
 
-      - uses: actions/upload-artifact@v4
+      - name: Collect installers and SHA-256 sums
+        run: |
+          mkdir dist
+          shopt -s nullglob
+          cp desktop-app/src-tauri/target/*/release/bundle/msi/*.msi \
+             desktop-app/src-tauri/target/*/release/bundle/nsis/*-setup.exe \
+             desktop-app/src-tauri/target/*/release/bundle/dmg/*.dmg dist/
+          cd dist
+          sums="$(sha256sum -- * 2>/dev/null || shasum -a 256 -- *)"
+          echo "$sums" > "SHA256SUMS-$RUNNER_OS.txt"
+          cat "SHA256SUMS-$RUNNER_OS.txt"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aspire-desktop-${{ runner.os }}
           if-no-files-found: error
-          path: |
-            desktop-app/src-tauri/target/*/release/bundle/msi/*.msi
-            desktop-app/src-tauri/target/*/release/bundle/nsis/*-setup.exe
-            desktop-app/src-tauri/target/*/release/bundle/dmg/*.dmg
+          path: dist/*
+
+      - name: Upload Cargo.lock
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Cargo.lock
+          path: desktop-app/src-tauri/Cargo.lock
+
+  # Only this job can write to the repository, and only for v* tags.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: aspire-desktop-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.msi
+            dist/*-setup.exe
+            dist/*.dmg
+
+      - name: Draft the release
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat SHA256SUMS-*.txt > SHA256SUMS.txt
+          rm SHA256SUMS-*.txt
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "Aspire Desktop $TAG" \
+            --notes "Unsigned installers. Check a download against SHA256SUMS.txt, or run: gh attestation verify <file> --repo $GITHUB_REPOSITORY. First-run steps are in desktop-app/README.md." \
+            ./*

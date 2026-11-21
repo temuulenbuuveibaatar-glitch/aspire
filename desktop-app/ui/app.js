@@ -23,6 +23,9 @@ const T = {
     localWhat: "Downloads the official llama.cpp server ({server}, github.com/ggml-org/llama.cpp) and Qwen2.5 1.5B Instruct ({model}, huggingface.co/Qwen). Downloads resume if interrupted and are checked with SHA-256.",
     download: "Download and start",
     resume: "Resume download",
+    startAgain: "Start again",
+    setupAll: "Download and install everything",
+    setupHint: "One click downloads the local model (Qwen2.5 1.5B with the llama.cpp server) and installs Hermes Agent. Nothing is downloaded before you click.",
     localRunning: "Installed and running.",
     localInstalled: "Installed. It starts when needed.",
     localMissing: "Not downloaded yet.",
@@ -45,7 +48,7 @@ const T = {
     run: "Run",
     working: "Working...",
     pairTitle: "Link to your Aspire account",
-    pairHint: "In Aspire, open Settings > Desktop to get a 6-digit code. Every action from Aspire asks you first in a window here.",
+    pairHint: "In Aspire, open Settings > Desktop to get a 10-character code. Every action from Aspire asks you first in a window here.",
     pair: "Link",
     unpair: "Unlink this computer",
     p_unpaired: "Not linked.",
@@ -73,6 +76,9 @@ const T = {
     localWhat: "Албан ёсны llama.cpp сервер ({server}, github.com/ggml-org/llama.cpp) болон Qwen2.5 1.5B Instruct ({model}, huggingface.co/Qwen)-ийг татна. Тасарвал үргэлжлүүлж, SHA-256-аар шалгана.",
     download: "Татаж эхлүүлэх",
     resume: "Татахыг үргэлжлүүлэх",
+    startAgain: "Дахин асаах",
+    setupAll: "Бүгдийг татаж суулгах",
+    setupHint: "Нэг товшилтоор дотоод загвар (llama.cpp сервертэй Qwen2.5 1.5B)-ыг татаж, Hermes Agent-ийг суулгана. Таныг дарахаас өмнө юу ч татахгүй.",
     localRunning: "Суусан, ажиллаж байна.",
     localInstalled: "Суусан. Хэрэгтэй үед асна.",
     localMissing: "Хараахан татаагүй.",
@@ -95,7 +101,7 @@ const T = {
     run: "Ажиллуулах",
     working: "Ажиллаж байна...",
     pairTitle: "Aspire бүртгэлтэй холбох",
-    pairHint: "Aspire-ийн Тохиргоо > Desktop хэсгээс 6 оронтой код авна. Aspire-аас ирсэн үйлдэл бүр энд цонхоор эхлээд асууна.",
+    pairHint: "Aspire-ийн Тохиргоо > Desktop хэсгээс 10 тэмдэгттэй код авна. Aspire-аас ирсэн үйлдэл бүр энд цонхоор эхлээд асууна.",
     pair: "Холбох",
     unpair: "Энэ компьютерийг салгах",
     p_unpaired: "Холбогдоогүй.",
@@ -123,6 +129,9 @@ const T = {
     localWhat: "下载官方 llama.cpp 服务器（{server}，github.com/ggml-org/llama.cpp）和 Qwen2.5 1.5B Instruct（{model}，huggingface.co/Qwen）。中断后可继续下载，并用 SHA-256 校验。",
     download: "下载并启动",
     resume: "继续下载",
+    startAgain: "重新启动",
+    setupAll: "全部下载并安装",
+    setupHint: "一键下载本地模型（Qwen2.5 1.5B 及 llama.cpp 服务器）并安装 Hermes Agent。点击之前不会下载任何内容。",
     localRunning: "已安装，正在运行。",
     localInstalled: "已安装，需要时自动启动。",
     localMissing: "尚未下载。",
@@ -145,7 +154,7 @@ const T = {
     run: "运行",
     working: "正在处理...",
     pairTitle: "关联你的 Aspire 账号",
-    pairHint: "在 Aspire 的 设置 > Desktop 中获取 6 位数字代码。来自 Aspire 的每个操作都会先在这里弹窗询问你。",
+    pairHint: "在 Aspire 的 设置 > Desktop 中获取 10 位字符代码。来自 Aspire 的每个操作都会先在这里弹窗询问你。",
     pair: "关联",
     unpair: "取消关联此电脑",
     p_unpaired: "未关联。",
@@ -173,6 +182,9 @@ const T = {
     localWhat: "Скачивает официальный сервер llama.cpp ({server}, github.com/ggml-org/llama.cpp) и Qwen2.5 1.5B Instruct ({model}, huggingface.co/Qwen). Загрузка продолжается после обрыва и проверяется по SHA-256.",
     download: "Скачать и запустить",
     resume: "Продолжить загрузку",
+    startAgain: "Запустить снова",
+    setupAll: "Скачать и установить всё",
+    setupHint: "Одним нажатием скачивается локальная модель (Qwen2.5 1.5B с сервером llama.cpp) и устанавливается Hermes Agent. До нажатия ничего не скачивается.",
     localRunning: "Установлено и работает.",
     localInstalled: "Установлено. Запускается при необходимости.",
     localMissing: "Ещё не скачано.",
@@ -195,7 +207,7 @@ const T = {
     run: "Запустить",
     working: "Выполняется...",
     pairTitle: "Связать с аккаунтом Aspire",
-    pairHint: "В Aspire откройте Настройки > Desktop и получите 6-значный код. Каждое действие из Aspire сначала спросит вас в окне здесь.",
+    pairHint: "В Aspire откройте Настройки > Desktop и получите 10-символьный код. Каждое действие из Aspire сначала спросит вас в окне здесь.",
     pair: "Связать",
     unpair: "Отвязать этот компьютер",
     p_unpaired: "Не связано.",
@@ -223,6 +235,9 @@ const T = {
     localWhat: "Lädt den offiziellen llama.cpp-Server ({server}, github.com/ggml-org/llama.cpp) und Qwen2.5 1.5B Instruct ({model}, huggingface.co/Qwen). Downloads werden nach Abbruch fortgesetzt und per SHA-256 geprüft.",
     download: "Laden und starten",
     resume: "Download fortsetzen",
+    startAgain: "Erneut starten",
+    setupAll: "Alles laden und installieren",
+    setupHint: "Ein Klick lädt das lokale Modell (Qwen2.5 1.5B mit dem llama.cpp-Server) und installiert Hermes Agent. Vor dem Klick wird nichts geladen.",
     localRunning: "Installiert und aktiv.",
     localInstalled: "Installiert. Startet bei Bedarf.",
     localMissing: "Noch nicht geladen.",
@@ -245,7 +260,7 @@ const T = {
     run: "Ausführen",
     working: "Arbeite...",
     pairTitle: "Mit deinem Aspire-Konto verbinden",
-    pairHint: "Öffne in Aspire Einstellungen > Desktop für einen 6-stelligen Code. Jede Aktion von Aspire fragt dich hier zuerst in einem Fenster.",
+    pairHint: "Öffne in Aspire Einstellungen > Desktop für einen 10-stelligen Code. Jede Aktion von Aspire fragt dich hier zuerst in einem Fenster.",
     pair: "Verbinden",
     unpair: "Diesen Computer trennen",
     p_unpaired: "Nicht verbunden.",
@@ -275,6 +290,15 @@ function setState(el, text, kind) {
   el.className = `state${kind ? ` ${kind}` : ""}`;
 }
 
+// The last error of an action, by status element id; render() keeps showing it for a while.
+const errs = {};
+
+function show(el, text, kind) {
+  const e = errs[el.id];
+  if (e && Date.now() < e.until) setState(el, e.msg, "bad");
+  else setState(el, text, kind);
+}
+
 function applyLang() {
   document.documentElement.lang = lang;
   $("lang").value = lang;
@@ -296,7 +320,7 @@ function render(s) {
   $("model-row").hidden = chosen !== "openai";
   $("forget-key").hidden = chosen === "local" || !s.keys[chosen];
   if (document.activeElement !== $("model")) $("model").value = s.openaiModel;
-  setState($("brain-state"), t(s.brain.ready ? "brainReady" : "brainWaiting", { model: s.brain.model }), s.brain.ready ? "ok" : "");
+  show($("brain-state"), t(s.brain.ready ? "brainReady" : "brainWaiting", { model: s.brain.model }), s.brain.ready ? "ok" : "");
 
   // Local model
   const L = s.local;
@@ -304,17 +328,18 @@ function render(s) {
   $("local-what").textContent = t("localWhat", { server: mb(L.serverBytes), model: mb(L.modelBytes) });
   $("install-local").hidden = L.installed && !p.error;
   $("install-local").disabled = p.running;
-  $("install-local").textContent = t(p.error ? "resume" : "download");
+  // "Start again" when the files are there but the server failed; "Resume" when a download stopped.
+  $("install-local").textContent = t(L.installed && p.error ? "startAgain" : p.error || L.partial > 0 ? "resume" : "download");
   const bar = $("local-bar");
   bar.hidden = !(p.running && p.total > 0);
   bar.firstElementChild.style.width = p.total ? `${Math.min(100, (p.done / p.total) * 100).toFixed(1)}%` : "0";
   if (p.running) {
     const pct = p.total ? ` ${mb(p.done)} / ${mb(p.total)}` : "";
-    setState($("local-state"), `${t(`step_${p.step}`)}${pct}`);
+    show($("local-state"), `${t(`step_${p.step}`)}${pct}`);
   } else if (p.error) {
-    setState($("local-state"), p.error, "bad");
+    show($("local-state"), p.error, "bad");
   } else {
-    setState($("local-state"), t(L.running ? "localRunning" : L.installed ? "localInstalled" : "localMissing"), L.running ? "ok" : "");
+    show($("local-state"), t(L.running ? "localRunning" : L.installed ? "localInstalled" : "localMissing"), L.running ? "ok" : "");
   }
 
   // Hermes
@@ -322,18 +347,19 @@ function render(s) {
   const hp = H.progress;
   $("install-hermes").disabled = hp.running;
   $("install-hermes").textContent = t(H.installed ? "reinstall" : "install");
-  if (hp.running) setState($("hermes-state"), t(`hstep_${hp.step}`));
-  else if (hp.error) setState($("hermes-state"), hp.error, "bad");
-  else if (!H.installed) setState($("hermes-state"), t("hermesMissing"));
-  else if (H.provider) setState($("hermes-state"), t("hermesInstalled", { provider: H.provider === "anthropic" ? "Claude" : "OpenAI" }), "ok");
-  else setState($("hermes-state"), t("hermesNeedsCloud"));
+  if (hp.running) show($("hermes-state"), t(`hstep_${hp.step}`));
+  else if (hp.error) show($("hermes-state"), hp.error, "bad");
+  else if (!H.installed) show($("hermes-state"), t("hermesMissing"));
+  else if (H.provider) show($("hermes-state"), t("hermesInstalled", { provider: H.provider === "anthropic" ? "Claude" : "OpenAI" }), "ok");
+  else show($("hermes-state"), t("hermesNeedsCloud"));
+  $("setup-box").hidden = (L.installed && H.installed) || p.running || hp.running;
   $("hermes-note").textContent = hp.note ?? "";
   $("run-task").disabled = busy || H.busy || !H.installed || !H.provider;
 
   // Pairing
   const P = s.pairing;
   const device = P.device ?? "";
-  setState($("pair-state"), t(`p_${P.status}`, { device }), P.status === "connected" ? "ok" : P.status === "unlinked" ? "bad" : "");
+  show($("pair-state"), t(`p_${P.status}`, { device }), P.status === "connected" ? "ok" : P.status === "unlinked" ? "bad" : "");
   $("unpair").hidden = !P.paired;
 
   if (document.activeElement !== $("autostart")) $("autostart").checked = s.autostart;
@@ -349,10 +375,11 @@ async function refresh() {
 }
 
 async function act(fn, stateEl) {
+  if (stateEl) delete errs[stateEl.id];
   try {
     await fn();
   } catch (e) {
-    if (stateEl) setState(stateEl, String(e), "bad");
+    if (stateEl) errs[stateEl.id] = { msg: String(e), until: Date.now() + 10000 };
     return false;
   } finally {
     await refresh();
@@ -401,6 +428,10 @@ function bind() {
 
   $("install-local").addEventListener("click", () => act(() => invoke("local_install"), $("local-state")));
   $("install-hermes").addEventListener("click", () => act(() => invoke("hermes_install"), $("hermes-state")));
+  $("setup-all").addEventListener("click", () => {
+    act(() => invoke("local_install"), $("local-state"));
+    act(() => invoke("hermes_install"), $("hermes-state"));
+  });
 
   $("run-task").addEventListener("click", async () => {
     const task = $("task").value.trim();
@@ -420,7 +451,8 @@ function bind() {
   });
 
   $("pair").addEventListener("click", async () => {
-    const code = $("code").value.replace(/\D/g, "");
+    // Sent as typed (ABCDE-FGHJK); Rust normalises it the way the server does.
+    const code = $("code").value;
     const ok = await act(() => invoke("pair", { code }), $("pair-state"));
     if (ok) $("code").value = "";
   });

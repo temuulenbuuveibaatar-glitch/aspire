@@ -1,0 +1,11 @@
+{
+  "identifier": "aspire-confirm",
+  "description": "The Allow / Deny windows: each reads and answers only its own prompt.",
+  "windows": [
+    "confirm-*"
+  ],
+  "permissions": [
+    "allow-confirm-info",
+    "allow-confirm-answer"
+  ]
+}

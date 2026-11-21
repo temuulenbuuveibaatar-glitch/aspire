@@ -66,3 +66,9 @@ pre {
   max-height: 260px;
   overflow: auto;
 }
+
+/* The Allow / Deny window (confirm.html): the whole text scrolls, the buttons stay in view. */
+body.confirm { display: flex; flex-direction: column; height: 100vh; padding: 16px; gap: 12px; }
+body.confirm h1 { font-size: 16px; }
+body.confirm pre { flex: 1; max-height: none; margin: 0; }
+.buttons { display: flex; justify-content: flex-end; gap: 8px; }

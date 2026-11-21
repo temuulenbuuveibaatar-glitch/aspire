@@ -1,20 +1,28 @@
-// Desktop actions for the person's Aspire account. Pairing trades the 6-digit code from Aspire
-// Settings > Desktop for a device token (kept in the OS keychain). Then Aspire polls for jobs
-// every 2 seconds; each job is shown in a native dialog that says exactly what will happen and
-// runs only on Allow. Only five fixed kinds exist (open_app, open_url, type_text, save_file,
-// fill_form), each checked again here; nothing from the server is ever run as a command.
+// Desktop actions for the person's Aspire account. Pairing trades the 10-character code from
+// Aspire Settings > Desktop for a device token (kept in the OS keychain). Then Aspire polls for
+// jobs every 2 seconds; each job is checked here, resolved (open_app finds the exact app first),
+// shown in full in the Allow / Deny window (confirm.rs) and runs only on Allow, before the job
+// expires. Only five fixed kinds exist (open_app, open_url, type_text, save_file, fill_form);
+// nothing from the server is ever run as a command.
+use crate::confirm::confirm;
 use crate::state::{lock, Shared, DESKTOP_TOKEN, SITE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
+// The same limits as the server (web/lib/desktop.ts).
 const TEXT_MAX: usize = 2000;
+const LABEL_MAX: usize = 100;
+const VALUE_MAX: usize = 500;
 const FILE_MAX: usize = 200 * 1024;
 const FIELDS_MAX: usize = 20;
+const JOB_TTL_MS: u64 = 5 * 60_000;
+const TEXT_EXT: [&str; 8] = ["txt", "md", "csv", "tsv", "json", "log", "ics", "vcf"];
+const CODE_ALPHABET: &str = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CODE_LEN: usize = 10;
 const FOCUS_DELAY: Duration = Duration::from_secs(3);
 
 #[derive(Clone, Default, Serialize)]
@@ -30,6 +38,9 @@ struct Job {
     kind: String,
     #[serde(default)]
     payload: Value,
+    /// Time left before the server expires the job.
+    #[serde(default, rename = "expiresInMs")]
+    expires_in_ms: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -38,7 +49,7 @@ struct Next {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Words for the native dialogs, in the five Aspire languages.
+// Words for the Allow / Deny window, in the five Aspire languages.
 
 pub struct Words {
     pub title: &'static str,
@@ -56,56 +67,56 @@ const EN: Words = Words {
     title: "Aspire wants to do this on your computer",
     allow: "Allow",
     deny: "Deny",
-    open_app: "Open the app \"{app}\".",
+    open_app: "Open the app \"{app}\":\n{target}",
     open_url: "Open this page in your browser:\n{url}",
-    type_text: "Type this text. After you allow it, click the window to type into within 3 seconds:\n\n{text}",
+    type_text: "Type this text. After you allow it, click the window to type into within 3 seconds. [Enter] and [Tab] mark the keys that will be pressed:\n\n{text}",
     save_file: "Save the file \"{name}\" ({kb} KB) in {dir}.",
     fill_form: "Fill a form. After you allow it, click its first field within 3 seconds; Aspire types each value and presses Tab between them:\n\n{fields}",
-    hermes: "Let Hermes Agent do this task on your computer? For up to 10 minutes it may run programs and change files without asking again.\n\nTask:\n{task}",
+    hermes: "Let Hermes Agent do this task on your computer? For up to 10 minutes it may run programs and change files. Commands Hermes considers dangerous are blocked.\n\nTask:\n{task}",
 };
 const MN: Words = Words {
     title: "Aspire таны компьютер дээр үүнийг хийх гэж байна",
     allow: "Зөвшөөрөх",
     deny: "Татгалзах",
-    open_app: "\"{app}\" програмыг нээх.",
+    open_app: "\"{app}\" програмыг нээх:\n{target}",
     open_url: "Энэ хуудсыг хөтөч дээр нээх:\n{url}",
-    type_text: "Энэ текстийг бичих. Зөвшөөрснөөс хойш 3 секундэд бичих цонхоо дарна уу:\n\n{text}",
+    type_text: "Энэ текстийг бичих. Зөвшөөрснөөс хойш 3 секундэд бичих цонхоо дарна уу. [Enter], [Tab] нь дарагдах товчийг заана:\n\n{text}",
     save_file: "\"{name}\" файлыг ({kb} KB) {dir} хавтсанд хадгалах.",
     fill_form: "Маягт бөглөх. Зөвшөөрснөөс хойш 3 секундэд эхний талбарыг нь дарна уу. Aspire утга бүрийг бичээд хооронд нь Tab дарна:\n\n{fields}",
-    hermes: "Hermes Agent энэ ажлыг таны компьютер дээр хийх үү? Тэр 10 минут хүртэл дахин асуулгүйгээр програм ажиллуулж, файл өөрчилж болно.\n\nДаалгавар:\n{task}",
+    hermes: "Hermes Agent энэ ажлыг таны компьютер дээр хийх үү? Тэр 10 минут хүртэл програм ажиллуулж, файл өөрчилж болно. Hermes аюултай гэж үзсэн командууд хаагдана.\n\nДаалгавар:\n{task}",
 };
 const ZH: Words = Words {
     title: "Aspire 想在你的电脑上执行以下操作",
     allow: "允许",
     deny: "拒绝",
-    open_app: "打开应用“{app}”。",
+    open_app: "打开应用“{app}”：\n{target}",
     open_url: "在浏览器中打开此网页：\n{url}",
-    type_text: "输入这段文字。允许后请在 3 秒内点击要输入的窗口：\n\n{text}",
+    type_text: "输入这段文字。允许后请在 3 秒内点击要输入的窗口。[Enter] 和 [Tab] 表示将按下的键：\n\n{text}",
     save_file: "将文件“{name}”（{kb} KB）保存到 {dir}。",
     fill_form: "填写表单。允许后请在 3 秒内点击第一个输入框；Aspire 会逐项输入，并在每项之间按 Tab：\n\n{fields}",
-    hermes: "让 Hermes Agent 在你的电脑上执行此任务吗？在最多 10 分钟内，它可能不再询问就运行程序和修改文件。\n\n任务：\n{task}",
+    hermes: "让 Hermes Agent 在你的电脑上执行此任务吗？在最多 10 分钟内，它可能运行程序和修改文件。Hermes 认为危险的命令会被阻止。\n\n任务：\n{task}",
 };
 const RU: Words = Words {
     title: "Aspire хочет сделать это на вашем компьютере",
     allow: "Разрешить",
     deny: "Отклонить",
-    open_app: "Открыть приложение «{app}».",
+    open_app: "Открыть приложение «{app}»:\n{target}",
     open_url: "Открыть эту страницу в браузере:\n{url}",
-    type_text: "Напечатать этот текст. После разрешения в течение 3 секунд щёлкните окно, куда печатать:\n\n{text}",
+    type_text: "Напечатать этот текст. После разрешения в течение 3 секунд щёлкните окно, куда печатать. [Enter] и [Tab] показывают клавиши, которые будут нажаты:\n\n{text}",
     save_file: "Сохранить файл «{name}» ({kb} КБ) в {dir}.",
     fill_form: "Заполнить форму. После разрешения в течение 3 секунд щёлкните первое поле; Aspire введёт каждое значение и нажмёт Tab между ними:\n\n{fields}",
-    hermes: "Разрешить Hermes Agent выполнить эту задачу на вашем компьютере? До 10 минут он может запускать программы и менять файлы, не спрашивая снова.\n\nЗадача:\n{task}",
+    hermes: "Разрешить Hermes Agent выполнить эту задачу на вашем компьютере? До 10 минут он может запускать программы и менять файлы. Команды, которые Hermes считает опасными, блокируются.\n\nЗадача:\n{task}",
 };
 const DE: Words = Words {
     title: "Aspire möchte das auf deinem Computer tun",
     allow: "Erlauben",
     deny: "Ablehnen",
-    open_app: "Die App „{app}“ öffnen.",
+    open_app: "Die App „{app}“ öffnen:\n{target}",
     open_url: "Diese Seite im Browser öffnen:\n{url}",
-    type_text: "Diesen Text tippen. Klicke nach dem Erlauben innerhalb von 3 Sekunden in das Zielfenster:\n\n{text}",
+    type_text: "Diesen Text tippen. Klicke nach dem Erlauben innerhalb von 3 Sekunden in das Zielfenster. [Enter] und [Tab] zeigen die Tasten, die gedrückt werden:\n\n{text}",
     save_file: "Die Datei „{name}“ ({kb} KB) in {dir} speichern.",
     fill_form: "Ein Formular ausfüllen. Klicke nach dem Erlauben innerhalb von 3 Sekunden in das erste Feld; Aspire tippt jeden Wert und drückt dazwischen Tab:\n\n{fields}",
-    hermes: "Soll Hermes Agent diese Aufgabe auf deinem Computer erledigen? Bis zu 10 Minuten lang kann er Programme starten und Dateien ändern, ohne erneut zu fragen.\n\nAufgabe:\n{task}",
+    hermes: "Soll Hermes Agent diese Aufgabe auf deinem Computer erledigen? Bis zu 10 Minuten lang kann er Programme starten und Dateien ändern. Befehle, die Hermes für gefährlich hält, werden blockiert.\n\nAufgabe:\n{task}",
 };
 
 pub fn words(lang: &str) -> &'static Words {
@@ -140,18 +151,23 @@ pub fn fill(t: &str, vars: &[(&str, &str)]) -> String {
     out
 }
 
-/// No control characters (tab and newline kept) and no bidi overrides, so the dialog shows
-/// exactly what will run.
+/// Characters that change what the person reads without showing: zero-width, joiners, soft
+/// hyphen, bidi marks and overrides, line and paragraph separators, BOM.
+fn invisible(c: char) -> bool {
+    matches!(c, '\u{00ad}' | '\u{061c}' | '\u{180e}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
+}
+
+/// No control or invisible characters (tab and newline kept); other spaces become a plain
+/// space. So the Allow window shows exactly what will be typed or run.
 pub fn clean(s: &str) -> String {
     s.replace("\r\n", "\n")
         .chars()
-        .filter(|&c| {
-            (c == '\n' || c == '\t' || !c.is_control())
-                && !matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
-        })
+        .filter(|&c| matches!(c, '\n' | '\t') || !(c.is_control() || invisible(c)))
+        .map(|c| if c.is_whitespace() && !matches!(c, '\n' | '\t') { ' ' } else { c })
         .collect()
 }
 
+/// For status lines only, never for text the person approves.
 pub fn preview(s: &str, max: usize) -> String {
     let n = s.chars().count();
     if n <= max {
@@ -160,23 +176,22 @@ pub fn preview(s: &str, max: usize) -> String {
     format!("{}... ({n} characters)", s.chars().take(max).collect::<String>())
 }
 
-/// A native Allow / Deny dialog; false when closed.
-pub async fn confirm(app: &AppHandle, text: &str) -> bool {
-    let w = words(&app.state::<Shared>().settings().lang);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .message(text)
-        .title(w.title)
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom(w.allow.to_string(), w.deny.to_string()))
-        .show(move |ok| {
-            let _ = tx.send(ok);
-        });
-    rx.await.unwrap_or(false)
+/// Typed text as the Allow window shows it: every Enter and Tab key press is visible.
+fn keys_visible(t: &str) -> String {
+    t.replace('\t', "[Tab]").replace('\n', "[Enter]\n")
 }
 
 // ---------------------------------------------------------------------------------------------
 // Job payload checks (the server checks too; this side does not trust it).
+
+/// A checked job, ready to run exactly as it was shown.
+enum Action {
+    OpenApp { name: String, target: String },
+    OpenUrl(tauri::Url),
+    Type(String),
+    Save { name: String, content: String },
+    Fill(Vec<String>),
+}
 
 fn s<'a>(p: &'a Value, k: &str) -> &'a str {
     p[k].as_str().unwrap_or("")
@@ -207,10 +222,14 @@ fn text(p: &Value) -> Result<String, String> {
     Ok(t)
 }
 
+/// A plain text file name in one folder: no separators, no "..", no Windows device names
+/// (also COM¹-COM³ / LPT¹-LPT³ and "con .txt"), and a text extension only.
 fn safe_file_name(n: &str) -> bool {
-    let stem = n.split('.').next().unwrap_or("").to_ascii_lowercase();
+    let stem: String = n.split('.').next().unwrap_or("").trim_end().to_lowercase();
+    let c: Vec<char> = stem.chars().collect();
     let reserved = matches!(stem.as_str(), "con" | "prn" | "aux" | "nul")
-        || ((stem.starts_with("com") || stem.starts_with("lpt")) && stem.len() == 4 && stem.as_bytes()[3].is_ascii_digit());
+        || ((stem.starts_with("com") || stem.starts_with("lpt")) && c.len() == 4 && (c[3].is_ascii_digit() || "¹²³".contains(c[3])));
+    let text_ext = n.rsplit_once('.').is_some_and(|(_, e)| TEXT_EXT.contains(&e.to_ascii_lowercase().as_str()));
     n.chars().next().is_some_and(char::is_alphanumeric)
         && n.chars().count() <= 100
         && n.chars().all(|c| c.is_alphanumeric() || " ._()-".contains(c))
@@ -218,12 +237,13 @@ fn safe_file_name(n: &str) -> bool {
         && !n.ends_with(' ')
         && !n.contains("..")
         && !reserved
+        && text_ext
 }
 
 fn file(p: &Value) -> Result<(String, String), String> {
     let name = clean(s(p, "name")).trim().to_string();
     if !safe_file_name(&name) {
-        return Err("The file name is not valid.".into());
+        return Err("Only text files (.txt .md .csv .tsv .json .log .ics .vcf) with a plain name can be saved.".into());
     }
     let content = p["content"].as_str().ok_or("The file has no content.")?;
     if content.len() > FILE_MAX {
@@ -237,7 +257,16 @@ fn fields(p: &Value) -> Result<Vec<(String, String)>, String> {
     if list.is_empty() || list.len() > FIELDS_MAX {
         return Err(format!("A form needs 1 to {FIELDS_MAX} fields."));
     }
-    let out: Vec<(String, String)> = list.iter().map(|f| (clean(s(f, "label")), clean(s(f, "value")))).collect();
+    let mut out = Vec::new();
+    for f in list {
+        // A tab or newline inside a value would move to another field.
+        let label = clean(s(f, "label")).replace(['\t', '\n'], " ").trim().to_string();
+        let value = clean(s(f, "value")).replace(['\t', '\n'], " ").trim().to_string();
+        if label.is_empty() || label.chars().count() > LABEL_MAX || value.chars().count() > VALUE_MAX {
+            return Err(format!("Every field needs a label of up to {LABEL_MAX} characters and a value of up to {VALUE_MAX}."));
+        }
+        out.push((label, value));
+    }
     if out.iter().map(|(_, v)| v.chars().count()).sum::<usize>() > TEXT_MAX {
         return Err(format!("The form values are longer than {TEXT_MAX} characters."));
     }
@@ -248,26 +277,33 @@ fn aspire_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().home_dir().map_err(|e| e.to_string())?.join("Aspire"))
 }
 
-fn describe(app: &AppHandle, job: &Job) -> Result<String, String> {
+/// Checks a job and returns the full text for the Allow window and the exact action to run.
+async fn prepare(app: &AppHandle, job: &Job) -> Result<(String, Action), String> {
     let w = words(&app.state::<Shared>().settings().lang);
     let p = &job.payload;
     Ok(match job.kind.as_str() {
-        "open_app" => fill(w.open_app, &[("app", app_name(p)?.as_str())]),
-        "open_url" => fill(w.open_url, &[("url", https_url(p)?.as_str())]),
-        "type_text" => fill(w.type_text, &[("text", preview(&text(p)?, 700).as_str())]),
+        "open_app" => {
+            let (name, target) = resolve_app(&app_name(p)?).await?;
+            (fill(w.open_app, &[("app", name.as_str()), ("target", target.as_str())]), Action::OpenApp { name, target })
+        }
+        "open_url" => {
+            let u = https_url(p)?;
+            (fill(w.open_url, &[("url", u.as_str())]), Action::OpenUrl(u))
+        }
+        "type_text" => {
+            let t = text(p)?;
+            (fill(w.type_text, &[("text", keys_visible(&t).as_str())]), Action::Type(t))
+        }
         "save_file" => {
             let (name, content) = file(p)?;
             let kb = content.len().div_ceil(1024).to_string();
             let dir = aspire_dir(app)?.display().to_string();
-            fill(w.save_file, &[("name", name.as_str()), ("kb", kb.as_str()), ("dir", dir.as_str())])
+            (fill(w.save_file, &[("name", name.as_str()), ("kb", kb.as_str()), ("dir", dir.as_str())]), Action::Save { name, content })
         }
         "fill_form" => {
-            let lines: Vec<String> = fields(p)?
-                .iter()
-                .enumerate()
-                .map(|(i, (l, v))| format!("{}. {}: {}", i + 1, preview(l, 60), preview(v, 120)))
-                .collect();
-            fill(w.fill_form, &[("fields", lines.join("\n").as_str())])
+            let f = fields(p)?;
+            let lines: Vec<String> = f.iter().enumerate().map(|(i, (l, v))| format!("{}. {l}: {v}", i + 1)).collect();
+            (fill(w.fill_form, &[("fields", lines.join("\n").as_str())]), Action::Fill(f.into_iter().map(|(_, v)| v).collect()))
         }
         k => return Err(format!("Unknown job kind \"{}\".", preview(&clean(k), 40))),
     })
@@ -324,9 +360,9 @@ fn save_file(app: &AppHandle, name: &str, content: &str) -> Result<String, Strin
 }
 
 /// Best label match: exact, then starts with, then contains (3+ letters); shortest wins.
-fn best<T>(name: &str, items: impl Iterator<Item = (String, T)>) -> Option<T> {
+fn best<T>(name: &str, items: impl Iterator<Item = (String, T)>) -> Option<(String, T)> {
     let want = name.to_lowercase();
-    let mut pick: Option<(u8, usize, T)> = None;
+    let mut pick: Option<(u8, usize, String, T)> = None;
     for (label, item) in items {
         let l = label.to_lowercase();
         if l.contains("uninstall") {
@@ -341,11 +377,22 @@ fn best<T>(name: &str, items: impl Iterator<Item = (String, T)>) -> Option<T> {
         } else {
             continue;
         };
-        if pick.as_ref().map_or(true, |(r, len, _)| (rank, l.len()) < (*r, *len)) {
-            pick = Some((rank, l.len(), item));
+        if pick.as_ref().map_or(true, |(r, len, _, _)| (rank, l.len()) < (*r, *len)) {
+            pick = Some((rank, l.len(), label, item));
         }
     }
-    pick.map(|(_, _, t)| t)
+    pick.map(|(_, _, label, t)| (label, t))
+}
+
+/// Shells, terminals and script hosts are never opened from a job, whatever they are called.
+fn is_shell(name: &str, target: &str) -> bool {
+    const ANY: [&str; 13] = [
+        "powershell", "pwsh", "terminal", "command prompt", "iterm", "script editor", "wscript", "cscript", "mshta", "osascript",
+        "git bash", "wezterm", "alacritty",
+    ];
+    const EXACT: [&str; 9] = ["cmd", "bash", "zsh", "sh", "console", "kitty", "warp", "hyper", "ghostty"];
+    let (n, t) = (name.to_lowercase(), target.to_lowercase());
+    ANY.iter().any(|x| n.contains(x) || t.contains(x)) || EXACT.contains(&n.as_str()) || t.ends_with("cmd.exe") || t.ends_with("\\cmd.lnk")
 }
 
 #[cfg(windows)]
@@ -363,21 +410,20 @@ fn collect_links(dir: &std::path::Path, depth: u8, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// (Name to show, exact target): a Start menu shortcut, or an installed app's AppID.
 #[cfg(windows)]
-async fn open_app(app: &AppHandle, name: &str) -> Result<String, String> {
-    // 1. Start menu shortcuts (all users and this user): instant.
+async fn find_app(name: &str) -> Result<(String, String), String> {
+    // 1. Start menu shortcuts (all users and this user).
     let mut links = Vec::new();
     for var in ["APPDATA", "ProgramData"] {
         if let Some(base) = std::env::var_os(var) {
             collect_links(&PathBuf::from(base).join(r"Microsoft\Windows\Start Menu\Programs"), 4, &mut links);
         }
     }
-    let found = best(name, links.into_iter().filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_string(), p))));
-    if let Some(path) = found {
-        app.opener().open_path(path.to_string_lossy().to_string(), None::<&str>).map_err(|e| e.to_string())?;
-        return Ok(format!("Opened {name}."));
+    if let Some((label, path)) = best(name, links.into_iter().filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_string(), p)))) {
+        return Ok((label, path.display().to_string()));
     }
-    // 2. Store apps (Notepad, Calculator, ...): a fixed PowerShell query, then the AppsFolder.
+    // 2. Installed apps (Notepad, Calculator, ...): a fixed PowerShell query with no input from the job.
     let out = tokio::process::Command::new("powershell.exe")
         .args([
             "-NoProfile",
@@ -397,80 +443,95 @@ async fn open_app(app: &AppHandle, name: &str) -> Result<String, String> {
         _ => Vec::new(),
     };
     let apps = list.iter().filter_map(|a| Some((a["Name"].as_str()?.to_string(), a["AppID"].as_str()?.to_string())));
-    if let Some(id) = best(name, apps) {
-        if id.chars().all(|c| c.is_alphanumeric() || "._-!{}\\:~ ".contains(c)) {
-            use std::os::windows::process::CommandExt;
-            std::process::Command::new("explorer.exe")
-                .arg(format!("shell:AppsFolder\\{id}"))
-                .creation_flags(crate::local::CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            return Ok(format!("Opened {name}."));
-        }
+    match best(name, apps) {
+        Some((label, id)) if id.chars().all(|c| c.is_alphanumeric() || "._-!{}\\:~ ".contains(c)) => Ok((label, format!("shell:AppsFolder\\{id}"))),
+        _ => Err(format!("No app named \"{name}\" was found on this computer.")),
     }
-    Err(format!("No app named \"{name}\" was found on this computer."))
 }
 
+/// (Name to show, exact target): an .app bundle in the usual folders.
 #[cfg(target_os = "macos")]
-async fn open_app(app: &AppHandle, name: &str) -> Result<String, String> {
+async fn find_app(name: &str) -> Result<(String, String), String> {
     let mut dirs: Vec<PathBuf> = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities"]
         .into_iter()
         .map(PathBuf::from)
         .collect();
-    if let Ok(h) = app.path().home_dir() {
-        dirs.push(h.join("Applications"));
+    if let Some(h) = std::env::var_os("HOME") {
+        dirs.push(PathBuf::from(h).join("Applications"));
     }
+    let is_app = |p: &PathBuf| p.extension().is_some_and(|x| x == "app");
     let mut apps = Vec::new();
     for d in &dirs {
-        for e in std::fs::read_dir(d).into_iter().flatten().flatten() {
-            let p = e.path();
-            if p.extension().is_some_and(|x| x == "app") {
+        for p in std::fs::read_dir(d).into_iter().flatten().flatten().map(|e| e.path()) {
+            if is_app(&p) {
                 apps.push(p);
+            } else if p.is_dir() {
+                // One level of folders, e.g. /Applications/Microsoft Office/...
+                apps.extend(std::fs::read_dir(&p).into_iter().flatten().flatten().map(|e| e.path()).filter(is_app));
             }
         }
     }
-    let found = best(name, apps.into_iter().filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_string(), p))));
-    let mut cmd = tokio::process::Command::new("/usr/bin/open");
-    match &found {
-        Some(p) => cmd.arg(p),
-        None => cmd.arg("-a").arg(name),
-    };
-    let ok = cmd.status().await.map_err(|e| e.to_string())?.success();
-    if ok {
-        Ok(format!("Opened {name}."))
-    } else {
-        Err(format!("No app named \"{name}\" was found on this computer."))
+    best(name, apps.into_iter().filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_string(), p))))
+        .map(|(label, p)| (label, p.display().to_string()))
+        .ok_or_else(|| format!("No app named \"{name}\" was found on this computer."))
+}
+
+/// Finds the exact app before asking, so the Allow window names what will really open.
+async fn resolve_app(name: &str) -> Result<(String, String), String> {
+    let (label, target) = find_app(name).await?;
+    let (label, target) = (clean(&label), clean(&target));
+    if is_shell(&label, &target) {
+        return Err(format!("Aspire does not open terminals or script hosts (\"{label}\")."));
+    }
+    Ok((label, target))
+}
+
+async fn launch(app: &AppHandle, target: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if target.starts_with("shell:AppsFolder\\") {
+            use std::os::windows::process::CommandExt;
+            std::process::Command::new("explorer.exe")
+                .arg(target)
+                .creation_flags(crate::local::CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            app.opener().open_path(target, None::<&str>).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        let ok = tokio::process::Command::new("/usr/bin/open").arg(target).status().await.map_err(|e| e.to_string())?.success();
+        if ok { Ok(()) } else { Err("The app did not open.".into()) }
     }
 }
 
-async fn run(app: &AppHandle, job: &Job) -> Result<String, String> {
-    let p = &job.payload;
-    match job.kind.as_str() {
-        "open_app" => open_app(app, &app_name(p)?).await,
-        "open_url" => {
-            let u = https_url(p)?;
+async fn run(app: &AppHandle, action: Action) -> Result<String, String> {
+    match action {
+        Action::OpenApp { name, target } => {
+            launch(app, &target).await?;
+            Ok(format!("Opened {name}."))
+        }
+        Action::OpenUrl(u) => {
             app.opener().open_url(u.as_str(), None::<&str>).map_err(|e| e.to_string())?;
             Ok(format!("Opened {}.", u.host_str().unwrap_or("the page")))
         }
-        "type_text" => {
-            let t = text(p)?;
+        Action::Type(t) => {
             let n = t.chars().count();
             tokio::time::sleep(FOCUS_DELAY).await;
             type_parts(app, vec![t]).await?;
             Ok(format!("Typed {n} characters."))
         }
-        "save_file" => {
-            let (name, content) = file(p)?;
-            save_file(app, &name, &content)
-        }
-        "fill_form" => {
-            let f = fields(p)?;
-            let n = f.len();
+        Action::Save { name, content } => save_file(app, &name, &content),
+        Action::Fill(values) => {
+            let n = values.len();
             tokio::time::sleep(FOCUS_DELAY).await;
-            type_parts(app, f.into_iter().map(|(_, v)| v).collect()).await?;
+            type_parts(app, values).await?;
             Ok(format!("Filled {n} fields."))
         }
-        k => Err(format!("Unknown job kind \"{}\".", preview(&clean(k), 40))),
     }
 }
 
@@ -498,23 +559,49 @@ pub fn pairing_status(app: AppHandle) -> Value {
     status(&app)
 }
 
-fn device_name() -> String {
-    let os = if cfg!(windows) { "Windows" } else { "Mac" };
-    match std::env::var("COMPUTERNAME").ok().filter(|h| !h.trim().is_empty()) {
-        Some(h) => format!("{} ({os})", preview(h.trim(), 40)),
-        None => format!("Aspire Desktop ({os})"),
-    }
+#[cfg(target_os = "macos")]
+fn host_name() -> Option<String> {
+    let run = |cmd: &str, args: &[&str]| {
+        std::process::Command::new(cmd)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    run("/usr/sbin/scutil", &["--get", "ComputerName"]).or_else(|| run("/bin/hostname", &[]))
 }
 
-/// Trades the 6-digit code from Aspire Settings > Desktop for a device token.
+#[cfg(windows)]
+fn host_name() -> Option<String> {
+    std::env::var("COMPUTERNAME").ok()
+}
+
+/// The computer's own name, so two computers of one person never replace each other's link.
+fn device_name(st: &Shared) -> String {
+    let os = if cfg!(windows) { "Windows" } else { "Mac" };
+    if let Some(h) = host_name().map(|h| clean(&h).trim().to_string()).filter(|h| !h.is_empty()) {
+        return format!("{} ({os})", preview(&h, 40));
+    }
+    let mut s = st.settings();
+    if s.machine_tag.is_empty() {
+        s.machine_tag = crate::local::random_hex()[..4].to_string();
+        let _ = st.save_settings(s.clone());
+    }
+    format!("Aspire Desktop {} ({os})", s.machine_tag)
+}
+
+/// Trades the 10-character code from Aspire Settings > Desktop for a device token.
 #[tauri::command]
 pub async fn pair(app: AppHandle, code: String) -> Result<String, String> {
-    let code = code.trim().to_string();
-    if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
-        return Err("Enter the 6-digit code from Aspire Settings > Desktop.".into());
+    // Normalised the way the server does it: upper case, no spaces or dashes.
+    let code: String = code.to_uppercase().chars().filter(|c| !c.is_whitespace() && *c != '-').collect();
+    if code.chars().count() != CODE_LEN || !code.chars().all(|c| CODE_ALPHABET.contains(c)) {
+        return Err("Enter the 10-character code from Aspire Settings > Desktop.".into());
     }
     let st = app.state::<Shared>();
-    let device = device_name();
+    let device = device_name(&st);
     let resp = st
         .http
         .post(format!("{SITE}/api/desktop/pair"))
@@ -528,6 +615,7 @@ pub async fn pair(app: AppHandle, code: String) -> Result<String, String> {
         404 => return Err("Desktop pairing is not available on the Aspire server yet.".into()),
         400 => return Err("That code is wrong or expired. Get a new one in Aspire Settings > Desktop.".into()),
         429 => return Err("Too many tries. Wait a minute and try again.".into()),
+        503 => return Err("Desktop linking is not available on the Aspire server right now.".into()),
         s => return Err(format!("Aspire answered {s}.")),
     }
     let v: Value = resp.json().await.map_err(|_| "Aspire sent an unexpected answer.".to_string())?;
@@ -556,25 +644,37 @@ pub fn unpair(app: AppHandle) -> Result<(), String> {
 }
 
 async fn handle(app: &AppHandle, st: &Shared, token: &str, job: Job) {
-    let (ok, denied, message) = match describe(app, &job) {
-        Err(e) => (false, false, e),
-        Ok(text) => {
-            if confirm(app, &text).await {
-                match run(app, &job).await {
-                    Ok(m) => (true, false, m),
-                    Err(e) => (false, false, e),
-                }
+    // Timed on this computer's clock, and never longer than the server keeps a job.
+    let deadline = Instant::now() + Duration::from_millis(job.expires_in_ms.unwrap_or(JOB_TTL_MS).min(JOB_TTL_MS));
+    let expired = || (false, "expired", "The request expired before it was allowed.".to_string());
+    let (ok, outcome, message) = match prepare(app, &job).await {
+        Err(e) => (false, "failed", e),
+        Ok((text, action)) => {
+            let allowed = confirm(app, &text, deadline).await;
+            if Instant::now() >= deadline {
+                expired()
+            } else if !allowed {
+                (false, "denied", "The person did not allow it.".to_string())
             } else {
-                (false, true, "The person did not allow it.".to_string())
+                match run(app, action).await {
+                    Ok(m) => (true, "done", m),
+                    Err(e) => (false, "failed", e),
+                }
             }
         }
     };
-    lock(&st.pairing).last = Some(format!("{}: {}", job.kind, if ok { "done" } else if denied { "denied" } else { "failed" }));
+    lock(&st.pairing).last = Some(format!("{}: {outcome}", preview(&clean(&job.kind), 20)));
     let _ = st
         .http
         .post(format!("{SITE}/api/desktop/result"))
         .bearer_auth(token)
-        .json(&json!({ "jobId": job.id, "ok": ok, "denied": denied, "message": preview(&message, 500) }))
+        .json(&json!({
+            "jobId": job.id,
+            "ok": ok,
+            "denied": outcome == "denied",
+            "expired": outcome == "expired",
+            "message": preview(&message, 500),
+        }))
         .timeout(Duration::from_secs(20))
         .send()
         .await;
@@ -619,7 +719,8 @@ pub async fn poll_loop(app: AppHandle) {
                 st.clear_secret(DESKTOP_TOKEN);
                 set_status(&st, "unlinked");
             }
-            404 => {
+            // 404: the routes are not deployed; 503: the server cannot link devices (no database).
+            404 | 503 => {
                 set_status(&st, "server_missing");
                 wait = Duration::from_secs(60);
             }

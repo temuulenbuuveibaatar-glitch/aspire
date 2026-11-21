@@ -3,9 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 pub const SERVICE: &str = "mn.aspire.desktop";
@@ -29,11 +29,13 @@ pub struct Settings {
     pub device_name: Option<String>,
     /// UI and dialog language, one of LANGS, or empty until the settings page picks one.
     pub lang: String,
+    /// A random tag for the device name when the computer has no usable name.
+    pub machine_tag: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { provider: "local".into(), openai_model: "gpt-5-mini".into(), device_name: None, lang: String::new() }
+        Self { provider: "local".into(), openai_model: "gpt-5-mini".into(), device_name: None, lang: String::new(), machine_tag: String::new() }
     }
 }
 
@@ -62,6 +64,28 @@ pub struct Shared {
     pub llama_start: tokio::sync::Mutex<()>,
     pub pairing: Mutex<crate::desktop::PairState>,
     pub hermes_busy: AtomicBool,
+    /// Open Allow / Deny windows, by id (see confirm.rs).
+    pub prompts: Mutex<HashMap<u32, crate::confirm::Prompt>>,
+    pub next_prompt: AtomicU32,
+    /// brain_chat from the remote page: one call at a time, a limited number per minute.
+    pub chat_busy: AtomicBool,
+    pub chat_rate: Mutex<(Instant, u32)>,
+}
+
+/// Clears a busy flag when dropped, so an error or a panic never leaves it set.
+pub struct Busy<'a>(&'a AtomicBool);
+
+impl<'a> Busy<'a> {
+    /// None when the flag is already set.
+    pub fn take(flag: &'a AtomicBool) -> Option<Self> {
+        (!flag.swap(true, Ordering::SeqCst)).then_some(Self(flag))
+    }
+}
+
+impl Drop for Busy<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl Shared {
@@ -96,6 +120,10 @@ impl Shared {
             llama_start: tokio::sync::Mutex::new(()),
             pairing: Mutex::default(),
             hermes_busy: AtomicBool::new(false),
+            prompts: Mutex::default(),
+            next_prompt: AtomicU32::new(1),
+            chat_busy: AtomicBool::new(false),
+            chat_rate: Mutex::new((Instant::now(), 0)),
         })
     }
 

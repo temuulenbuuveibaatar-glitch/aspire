@@ -1,8 +1,9 @@
 // The local brain: the official llama.cpp server build (pinned release) and Qwen2.5 1.5B Instruct
 // (Q4_K_M GGUF from the official Qwen repo). Both are downloaded only after the person clicks
 // Download in Settings, resumed when interrupted, and checked against the published size and
-// SHA-256. llama-server runs as a child process on 127.0.0.1 with a random key and is killed
-// when Aspire quits.
+// SHA-256. llama-server runs as a child process on 127.0.0.1 with a random key and no web UI,
+// and ends with Aspire: on quit, and also when Aspire crashes or is killed (a Windows job
+// object; on macOS the next launch ends a leftover copy found through its PID file).
 use crate::state::{lock, Progress, Shared};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -46,8 +47,9 @@ pub const MODEL: Asset = Asset {
     size: 1_117_320_736,
     sha256: "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
 };
+/// Pinned to a commit of the Qwen repo, so the size and SHA-256 above stay valid.
 pub const MODEL_URL: &str =
-    "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf";
+    "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf";
 pub const MODEL_ALIAS: &str = "qwen2.5-1.5b";
 const EXE: &str = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
 const NOT_INSTALLED: &str = "The local model is not downloaded yet. Open Aspire Settings and choose Download.";
@@ -58,6 +60,77 @@ pub struct Llama {
     child: Child,
     port: u16,
     key: String,
+}
+
+/// Windows: a job object that ends its processes when it is dropped, or when Aspire exits in
+/// any way (the system closes the handle then).
+#[cfg(windows)]
+pub struct KillJob(usize);
+
+#[cfg(windows)]
+impl KillJob {
+    fn new() -> Option<Self> {
+        use windows_sys::Win32::System::JobObjects::*;
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return None;
+            }
+            let job = KillJob(job as usize);
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let size = std::mem::size_of_val(&info) as u32;
+            let ok = SetInformationJobObject(job.0 as _, JobObjectExtendedLimitInformation, &info as *const _ as *const _, size);
+            (ok != 0).then_some(job)
+        }
+    }
+
+    fn assign(&self, process: std::os::windows::io::RawHandle) -> bool {
+        unsafe { windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(self.0 as _, process as _) != 0 }
+    }
+
+    /// A new job holding `process` (and everything it starts later).
+    pub fn with(process: std::os::windows::io::RawHandle) -> Option<Self> {
+        let job = Self::new()?;
+        job.assign(process).then_some(job)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for KillJob {
+    fn drop(&mut self) {
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(self.0 as _);
+        }
+    }
+}
+
+fn pid_file(st: &Shared) -> PathBuf {
+    st.data_dir.join("llama-server.pid")
+}
+
+/// At launch: ends a llama-server left running by an Aspire that did not quit normally.
+pub fn kill_stale(st: &Shared) {
+    let path = pid_file(st);
+    let Ok(text) = fs::read_to_string(&path) else { return };
+    let _ = fs::remove_file(&path);
+    let Ok(pid) = text.trim().parse::<u32>() else { return };
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let filter = format!("PID eq {pid}");
+        let out = Command::new("tasklist").args(["/FI", filter.as_str(), "/FO", "CSV", "/NH"]).creation_flags(CREATE_NO_WINDOW).output();
+        if out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).to_lowercase().contains("\"llama-server.exe\"")) {
+            let _ = Command::new("taskkill").args(["/PID", pid.to_string().as_str(), "/F"]).creation_flags(CREATE_NO_WINDOW).status();
+        }
+    }
+    #[cfg(unix)]
+    {
+        let out = Command::new("/bin/ps").args(["-p", pid.to_string().as_str(), "-o", "comm="]).output();
+        if out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim_end().ends_with("llama-server")) {
+            let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+        }
+    }
 }
 
 fn io(e: std::io::Error) -> String {
@@ -118,7 +191,9 @@ pub fn running(st: &Shared) -> bool {
 
 pub fn status(app: &AppHandle) -> Value {
     let st = app.state::<Shared>();
+    let part = |dir: &str, name: &str| fs::metadata(st.data_dir.join(dir).join(format!("{name}.part"))).map(|m| m.len()).unwrap_or(0);
     json!({
+        "partial": part("downloads", LLAMA.name) + part("models", MODEL.name),
         "installed": installed(&st),
         "running": running(&st),
         "progress": lock(&st.local_progress).clone(),
@@ -250,23 +325,32 @@ async fn install(app: &AppHandle) -> Result<(), String> {
         let archive = st.data_dir.join("downloads").join(LLAMA.name);
         download(&st, &server_url(), &archive, &LLAMA, "server").await?;
         set_progress(&st, "extract", 0, 0);
+        // Unpacked next to the final folder and moved in only when complete, so a failed
+        // unpack never looks installed.
         let dir = llama_dir(&st);
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).map_err(io)?;
-        let (a, d) = (archive.clone(), dir.clone());
+        let tmp = dir.with_extension("tmp");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).map_err(io)?;
+        let (a, d) = (archive.clone(), tmp.clone());
         tauri::async_runtime::spawn_blocking(move || extract(&a, &d)).await.map_err(|e| e.to_string())??;
-        let _ = fs::remove_file(&archive);
-        let exe = server_exe(&st).ok_or("llama-server was not found in the downloaded archive.")?;
+        let exe = find(&tmp, EXE, 2).ok_or("llama-server was not found in the downloaded archive.")?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).map_err(io)?;
         }
         let _ = exe;
+        let _ = fs::remove_dir_all(&dir);
+        fs::rename(&tmp, &dir).map_err(io)?;
+        let _ = fs::remove_file(&archive);
     }
     let model = model_path(&st);
     if !model.is_file() {
         download(&st, MODEL_URL, &model, &MODEL, "model").await?;
+    }
+    // Start it now only when it is the chosen brain; otherwise it starts when chosen.
+    if st.settings().provider != "local" {
+        return Ok(());
     }
     set_progress(&st, "starting", 0, 0);
     ensure_running(app).await.map(|_| ())
@@ -299,7 +383,7 @@ pub fn local_install(app: AppHandle) {
     });
 }
 
-fn random_hex() -> String {
+pub fn random_hex() -> String {
     let mut b = [0u8; 24];
     let _ = getrandom::getrandom(&mut b);
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -324,7 +408,9 @@ pub async fn ensure_running(app: &AppHandle) -> Result<(u16, String), String> {
     let mut cmd = Command::new(&exe);
     cmd.arg("-m")
         .arg(&model)
-        .args(["--host", "127.0.0.1", "--port", port_s.as_str(), "-c", "8192", "--jinja", "-a", MODEL_ALIAS])
+        .args(["--host", "127.0.0.1", "--port", port_s.as_str(), "-c", "16384", "--jinja", "--no-webui", "-a", MODEL_ALIAS])
+        // llama-server reads --api-key from LLAMA_API_KEY (common/arg.cpp), so the key never
+        // shows in the process list.
         .env("LLAMA_API_KEY", &key)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -338,6 +424,15 @@ pub async fn ensure_running(app: &AppHandle) -> Result<(u16, String), String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     let child = cmd.spawn().map_err(|e| format!("Could not start llama-server: {e}"))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        static JOB: std::sync::OnceLock<Option<KillJob>> = std::sync::OnceLock::new();
+        if let Some(job) = JOB.get_or_init(KillJob::new) {
+            job.assign(child.as_raw_handle());
+        }
+    }
+    let _ = fs::write(pid_file(&st), child.id().to_string());
     *lock(&st.llama) = Some(Llama { child, port, key: key.clone() });
     let health = format!("http://127.0.0.1:{port}/health");
     for _ in 0..240 {
@@ -366,10 +461,11 @@ pub async fn warm(app: AppHandle) {
     }
 }
 
-fn stop_inner(st: &Shared) {
+pub fn stop_inner(st: &Shared) {
     if let Some(mut l) = lock(&st.llama).take() {
         let _ = l.child.kill();
         let _ = l.child.wait();
+        let _ = fs::remove_file(pid_file(st));
     }
 }
 
