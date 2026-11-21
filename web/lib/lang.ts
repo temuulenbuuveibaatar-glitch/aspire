@@ -14,6 +14,9 @@ export const LANG_NAMES: Record<Lang, { native: string; english: string; code: s
   de: { native: "Deutsch", english: "German", code: "DE" },
 };
 
+/** BCP 47 tag for `lang` attributes and Intl (Chinese is written in simplified script). */
+export const HTML_LANG: Record<Lang, string> = { mn: "mn", zh: "zh-Hans", en: "en", ru: "ru", de: "de" };
+
 export function isLang(x: unknown): x is Lang {
   return typeof x === "string" && (LANGS as readonly string[]).includes(x);
 }

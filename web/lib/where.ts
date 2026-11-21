@@ -1,5 +1,5 @@
 // Where the person is, from the request: shared by /api/ask and /api/briefing.
-import { haversineKm } from "@/lib/maps";
+import { haversineKm } from "@/lib/geo";
 import type { DeviceContext } from "@/lib/tools";
 import { validTimeZone } from "@/lib/tools/time";
 
@@ -51,16 +51,19 @@ export function whereFrom(
   device: Pick<DeviceContext, "location">,
 ): Where {
   const network = headerPair(headers.get("x-vercel-ip-latitude"), headers.get("x-vercel-ip-longitude"));
+  const bodyCity = cleanText(body.city, 80);
   const networkFits = !device.location || !network || haversineKm(device.location, network) <= 50;
   const timeZone =
     validTimeZone(body.tz) ?? validTimeZone(body.timeZone) ?? (networkFits ? validTimeZone(headers.get("x-vercel-ip-timezone")) : null);
-  const city = cleanText(body.city, 80) ?? (networkFits ? cleanText(headers.get("x-vercel-ip-city"), 80, true) : undefined);
+  const city = bodyCity ?? (networkFits ? cleanText(headers.get("x-vercel-ip-city"), 80, true) : undefined);
   const country = cleanText(headers.get("x-vercel-ip-country"), 2)?.toUpperCase();
   return {
     ...(timeZone ? { timeZone } : {}),
     ...(city ? { city } : {}),
     ...(country && /^[A-Z]{2}$/.test(country) && networkFits ? { country } : {}),
-    ...(network ? { approxLocation: network } : {}),
+    // A city the person set beats the IP position: tools then geocode the city instead of reading
+    // the weather at the network position under the city's name.
+    ...(network && !bodyCity ? { approxLocation: network } : {}),
   };
 }
 

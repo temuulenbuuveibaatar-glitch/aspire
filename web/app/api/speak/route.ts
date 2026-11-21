@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
-// POST { text, lang, voice?: "jarvis" | "friday" } -> audio
+// POST { text, lang, voice?: "jarvis" | "friday" } -> audio, with X-Voice-Engine: elevenlabs | azure | gemini | omnivoice
 export async function POST(req: Request) {
   const limited = rateLimit(req, "speak", 30);
   if (limited) return limited;
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   try {
     const audio = await synthesize(text, body.lang, body.voice === "friday" ? "friday" : "jarvis");
     return new Response(audio.body, {
-      headers: { "Content-Type": audio.contentType, "Cache-Control": "no-store" },
+      headers: { "Content-Type": audio.contentType, "Cache-Control": "no-store", "X-Voice-Engine": audio.engine },
     });
   } catch (e) {
     if (e instanceof SpeechOffline) {

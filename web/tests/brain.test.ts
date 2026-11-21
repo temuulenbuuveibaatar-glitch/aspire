@@ -29,7 +29,7 @@ describe("brain chain (any AI)", () => {
     await expect(ask("hi", "en")).rejects.toBeInstanceOf(NoBrainConfigured);
   });
 
-  it("falls back from a failing Gemini to a local Qwen that uses the bus tool", async () => {
+  it("falls back from a failing Gemini to a local Qwen that uses a tool", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "");
     vi.stubEnv("GEMINI_API_KEY", "g-test");
@@ -47,9 +47,7 @@ describe("brain chain (any AI)", () => {
             {
               message: {
                 content: null,
-                tool_calls: [
-                  { id: "c1", type: "function", function: { name: "get_next_bus", arguments: '{"stop":"Төв талбай","route":""}' } },
-                ],
+                tool_calls: [{ id: "c1", type: "function", function: { name: "get_local_time", arguments: '{"time_zone":""}' } }],
               },
             },
           ],
@@ -60,13 +58,13 @@ describe("brain chain (any AI)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { ask } = await import("@/lib/brain");
-    const out = await ask("Автобус хэзээ ирэх вэ?", "mn", [], undefined, undefined, { timeZone: "Asia/Ulaanbaatar" }); // a phone on Mongolian time
+    const out = await ask("Хэдэн цаг болж байна?", "mn", [], undefined, undefined, { timeZone: "Asia/Ulaanbaatar" }); // a phone on Mongolian time
 
     expect(out.brain).toBe("local");
     expect(out.reply).toBe("12-р автобус 5 минутын дараа ирнэ."); // markdown removed for speech
-    // the bus tool really ran and its result went back to the model
+    // the tool really ran and its result went back to the model
     const toolMsg = localBodies[1].messages.find((m) => m.role === "tool");
-    expect(toolMsg?.content).toContain('"id":"center"');
+    expect(toolMsg?.content).toContain('"timezone":"Asia/Ulaanbaatar"');
     // the reply language was requested explicitly
     expect(localBodies[0].messages[0].content).toContain("Reply only in Mongolian");
   });
@@ -187,7 +185,7 @@ describe("Jarvis tone and every city", () => {
   it("the note gives the local time of day and city, from the person's time zone", async () => {
     const { contextNote } = await import("@/lib/brain/shared");
     const note = contextNote("en", runAt("2026-11-20T19:30:00Z", { timeZone: "Europe/Berlin", city: "Berlin", country: "DE" }));
-    expect(note).toContain("Friday 20:30, evening (time zone Europe/Berlin)");
+    expect(note).toContain("Friday 2026-11-20 20:30, evening (time zone Europe/Berlin)");
     expect(note).toContain('"Good evening"');
     expect(note).toContain("They are in Berlin (DE), approximately, from their network");
     expect(note).toContain("sir / Mr.");
@@ -300,5 +298,94 @@ describe("Jarvis tone and every city", () => {
     expect(out.reply).toBe("Good evening, sir. How is it going?");
     expect(bodies[0].messages[0].content).toContain("16:00, afternoon (time zone America/Sao_Paulo)");
     expect(bodies[0].messages[0].content).toContain("They are in Sao Paulo");
+  });
+});
+
+describe("brain v4: Jarvis persona, media, calendar, Erdenet live buses", () => {
+  it("registers the calendar and media tools for every provider", async () => {
+    const { TOOL_SPECS } = await import("@/lib/brain/shared");
+    const names = TOOL_SPECS.map((t) => t.name);
+    for (const n of ["get_calendar", "play_music", "play_video", "add_to_calendar", "get_next_bus", "find_places", "call_phone"]) expect(names).toContain(n);
+  });
+
+  it("the system prompt is Jarvis and guides the new tools", async () => {
+    const { SYSTEM } = await import("@/lib/brain/shared");
+    expect(SYSTEM).toMatch(/^You are Jarvis/);
+    expect(SYSTEM).toMatch(/British butler/);
+    expect(SYSTEM).toMatch(/proactive line/);
+    expect(SYSTEM).toMatch(/play_music/);
+    expect(SYSTEM).toMatch(/get_calendar/);
+    expect(SYSTEM).toContain("Орхон ТКХДТ");
+    expect(SYSTEM).toMatch(/get_next_bus with an empty stop/);
+    expect(SYSTEM).toMatch(/find_places "taxi"/);
+    expect(SYSTEM).toMatch(/never ask where they start/);
+    expect(SYSTEM).not.toMatch(/sample timetable/);
+  });
+
+  it("the note carries the local date, so 'tomorrow' needs no extra tool call", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const run = { ctx: { now: new Date("2026-11-21T01:03:00Z"), device: { memory: {}, reminders: [] }, actions: [], timeZone: "Asia/Ulaanbaatar" }, steps: [], sources: [] };
+    expect(contextNote("en", run)).toContain("Saturday 2026-11-21 09:03, morning");
+  });
+
+  it("Claude gets the note as system text after the cached prompt, and the question last", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+    vi.stubEnv("BRAIN_ORDER", "claude");
+    type Req = { system: Array<{ text: string; cache_control?: unknown }>; messages: Array<{ role: string; content: unknown }> };
+    const requests: Req[] = [];
+    const create = vi.fn(async (req: Req) => {
+      requests.push(req);
+      return { stop_reason: "end_turn", content: [{ type: "text", text: "Light becomes sugar, sir." }] };
+    });
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: class {
+        beta = { messages: { create } };
+      },
+    }));
+    const { ask } = await import("@/lib/brain");
+    const history = [
+      { role: "assistant" as const, text: "Good morning, sir." },
+      { role: "user" as const, text: "hi" },
+      { role: "assistant" as const, text: " " },
+      { role: "assistant" as const, text: "Good morning." },
+    ];
+    await ask("Explain photosynthesis", "en", history);
+    const { system, messages } = requests[0];
+    expect(system[0].cache_control).toBeTruthy();
+    expect(system[1].text).toMatch(/Reply only in English/);
+    expect(messages.at(-1)).toEqual({ role: "user", content: "Explain photosynthesis" });
+    expect(messages[0]).toEqual({ role: "user", content: "hi" }); // a leading greeting from the assistant is dropped
+    expect(messages.some((m) => m.role === "system")).toBe(false);
+    expect(messages).toHaveLength(3); // the empty turn is dropped (Claude rejects empty text)
+    vi.doUnmock("@anthropic-ai/sdk");
+  });
+
+  it("a reply that is only a leaked symbol falls through to the next brain", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+    vi.stubEnv("GEMINI_API_KEY", "g-test");
+    vi.stubEnv("BRAIN_ORDER", "claude,gemini");
+    const arrow = String.fromCodePoint(0x2191);
+    const create = vi.fn(async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: arrow }, { type: "thinking", thinking: "" }] }));
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: class {
+        beta = { messages: { create } };
+      },
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => json({ candidates: [{ content: { role: "model", parts: [{ text: "Light becomes sugar, sir." }] } }] })));
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { ask } = await import("@/lib/brain");
+    const out = await ask("Explain photosynthesis", "en");
+    expect(out).toMatchObject({ brain: "gemini", reply: "Light becomes sugar, sir." });
+    quiet.mockRestore();
+    vi.doUnmock("@anthropic-ai/sdk");
+  });
+
+  it("forSpeech removes leaked control tags and keeps ordinary text", async () => {
+    const { forSpeech } = await import("@/lib/brain/shared");
+    expect(forSpeech("<thinking_mode>disabled</thinking_mode>Good morning, sir.")).toBe("Good morning, sir.");
+    expect(forSpeech("<result先生，早上好。")).toBe("先生，早上好。");
+    expect(forSpeech("<resultGood morning, sir.")).toBe("Good morning, sir.");
+    expect(forSpeech("<result\nGood morning, sir.")).toBe("Good morning, sir.");
+    expect(forSpeech("Keep x < 5, sir.")).toBe("Keep x < 5, sir.");
   });
 });

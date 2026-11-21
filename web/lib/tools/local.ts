@@ -1,56 +1,61 @@
 // Tools for buses, time, and the person's own device (reminders, memory). Calls live in connect.ts.
-// Buses: Google Maps transit first (real departures, any city) when a key is set and Google knows
-// transit there. Erdenet's sample timetable is used only for Erdenet. Every answer says its `source`.
+// Buses: in Erdenet, the city's live open feed (Orkhon ТКХДТ): real stops, live buses, estimated
+// arrivals. Elsewhere, Google Maps transit. Every answer says its `source`.
 // Clock times use the person's own time zone (ctx.timeZone), never a fixed offset.
+import { arrivals, CREDIT, findStations, getStatic, isErdenet, nearestStations, type Station, trip } from "@/lib/erdenet-transit";
 import { isGoogleMapsUrl } from "@/lib/links";
-import { directionsUrl, haversineKm, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
-import { findStop, localMinutes, nextArrivals, planTrip, timetable } from "@/lib/transit";
+import { directionsUrl, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
 import { clockIn, dayIn, validTimeZone, zonedTime, zoneOr } from "./time";
 import { bool, str, type Tool, type ToolContext } from "./types";
 
-/** Erdenet's centre, only to tell whether the person is in Erdenet (where the sample timetable applies). */
-const ERDENET_CENTER = { lat: 49.0333, lng: 104.0833 };
-const ERDENET_RADIUS_KM = 30;
 const ERDENET_NAME = /erdenet|эрдэнэт|额尔登特/i;
+const ERDENET_ZONE = "Asia/Ulaanbaatar";
 
 /**
  * Is the person in Erdenet? true or false when we know where they are, null when we do not.
  * The device location wins, then the network city, then the network position.
  */
-export function inErdenet(ctx: ToolContext): boolean | null {
+function inErdenet(ctx: ToolContext): boolean | null {
   const at = ctx.device.location;
-  if (at) return haversineKm(at, ERDENET_CENTER) <= ERDENET_RADIUS_KM;
+  if (at) return isErdenet(at.lat, at.lng);
   if (ctx.city) return ERDENET_NAME.test(ctx.city);
-  if (ctx.approxLocation) return haversineKm(ctx.approxLocation, ERDENET_CENTER) <= ERDENET_RADIUS_KM;
-  return null;
+  return ctx.approxLocation ? isErdenet(ctx.approxLocation.lat, ctx.approxLocation.lng) : null;
 }
 
-/** Mongolia's zones: with no place known, a Mongolian clock is the only hint that allows Erdenet's timetable. */
+/** Mongolian zones: with no place known, a Mongolian clock is the only hint that allows Erdenet's feed. */
 const MONGOLIAN_ZONE = /^Asia\/(Ulaanbaatar|Ulan_Bator|Choibalsan|Hovd)$/;
 
 /**
- * May the Erdenet sample timetable answer? Only when the person is in Erdenet, names Erdenet, or
- * nothing is known about their place except a Mongolian time zone. Never as a default for anyone else.
+ * Erdenet's live feed: "first" when the person is in Erdenet or names it (before Google), "after"
+ * when only a Mongolian clock is known (after Google, which also knows Ulaanbaatar), else "never".
  */
-function timetableApplies(ctx: ToolContext, ...said: string[]): boolean {
-  if (said.some((s) => ERDENET_NAME.test(s))) return true;
-  const known = inErdenet(ctx);
-  if (known !== null) return known;
-  return MONGOLIAN_ZONE.test(validTimeZone(ctx.timeZone) ?? "");
+function erdenetOrder(ctx: ToolContext, ...said: string[]): "first" | "after" | "never" {
+  const known = said.some((s) => ERDENET_NAME.test(s)) || inErdenet(ctx);
+  if (known !== null) return known ? "first" : "never";
+  return MONGOLIAN_ZONE.test(validTimeZone(ctx.timeZone) ?? "") ? "after" : "never";
 }
 
-/** Why the sample timetable did not answer: elsewhere, or the place is unknown. */
-const notErdenet = (ctx: ToolContext) => ({
+/** Live first (Erdenet), else Google first; null results fall through; the feed failing is reported only in Erdenet. */
+async function liveOrGoogle<T>(order: ReturnType<typeof erdenetOrder>, live: () => Promise<T | null>, google: () => Promise<T | null>, none: T): Promise<T> {
+  const steps = order === "first" ? [live, google] : order === "after" ? [google, live] : [google];
+  let down = false;
+  for (const step of steps) {
+    const r = await step().catch(() => ((down = order === "first"), null));
+    if (r) return r;
+  }
+  return down ? (FEED_DOWN as T) : none;
+}
+
+const notHere = (ctx: ToolContext) => ({
   error:
     inErdenet(ctx) === false
-      ? "No timetable for this city: the sample timetable is only for Erdenet. Use get_directions with mode 'transit' (needs a destination) for real departures, or find_places 'bus stop' for nearby stops."
-      : "Location unknown: ask which city they are in (or suggest 'Use my location' in Settings), then use get_directions with mode 'transit'.",
+      ? "No live stop times for this city without a destination. Use get_directions with mode 'transit' for real departures, or find_places 'bus stop' for nearby stops."
+      : "Location unknown: ask which city they are in (or suggest 'Use my location'), then use get_directions with mode 'transit'.",
 });
+const FEED_DOWN = { error: "Erdenet's live bus feed is not answering right now. Say so briefly and suggest trying again in a minute." };
 
-/** An Erdenet sample stop becomes a full place name Google can find; elsewhere the person's city is added. */
+/** The person's city is added to a place name Google should find. */
 function placeFor(query: string, ctx: ToolContext): string {
-  const stop = timetableApplies(ctx, query) ? findStop(query) : undefined;
-  if (stop) return `${stop.names.en}, ${timetable.city}, Mongolia`;
   const city = ctx.city?.trim();
   return city && !query.toLowerCase().includes(city.toLowerCase()) ? `${query}, ${city}` : query;
 }
@@ -61,38 +66,76 @@ async function googleTransit(from: string, to: string, ctx: ToolContext): Promis
   return transitOptions({ from: placeFor(from, ctx), to: placeFor(to, ctx), now: ctx.now, lang: ctx.lang ?? "en", timeZone: ctx.timeZone }).catch(() => []);
 }
 
+/**
+ * An Erdenet stop by its Mongolian name (the match nearest the person), else the stop nearest the
+ * person when their device location is in Erdenet. Otherwise an error listing the stop names.
+ */
+async function pickStop(query: string, ctx: ToolContext): Promise<{ stop: Station; nearest: boolean } | { error: string; stops: string[] }> {
+  const at = ctx.device.location;
+  const [hit] = await findStations(query, at);
+  if (hit) return { stop: hit, nearest: false };
+  if (at && isErdenet(at.lat, at.lng)) {
+    const [near] = await nearestStations(at.lat, at.lng, 1);
+    if (near) return { stop: near, nearest: true };
+  }
+  const { stations } = await getStatic();
+  return {
+    error: `Unknown Erdenet stop "${query}". Stop names are Mongolian Cyrillic: retry with the closest name from 'stops', or ask which stop they mean.`,
+    stops: [...new Set(stations.map((s) => s.name))],
+  };
+}
+
+/** "3" matches "Ч:3", "1" matches "Ч:1-Ч:2"; no number matches every route. */
+const sameRoute = (line: string, asked: string) => {
+  const n = asked.match(/\d+/)?.[0];
+  return !n || !!line.match(/\d+/g)?.includes(n);
+};
+
+const LIVE = { source: "erdenet-live", estimate: true, credit: CREDIT } as const;
+
 export const nextBus: Tool = {
   name: "get_next_bus",
   label: { mn: "Автобус", en: "Bus" },
   description:
-    "Next buses at a stop: minutes until each bus, route number, departure time. Anywhere in the world, give a destination ('to') and real Google Maps transit departures are used. Without a destination it only works in Erdenet, Mongolia (Erdenet's sample timetable; its stop list is in the instructions). Elsewhere, use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
+    "Next buses at a stop: minutes until each bus, route, bus plate. In Erdenet, Mongolia: live bus positions from the city's open feed (minutes are estimates, so say 'about'); stop names are Mongolian Cyrillic; an empty stop means the stop nearest the person. Elsewhere give a destination ('to') and real Google Maps transit departures are used, or use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
   parameters: {
     type: "object",
     properties: {
-      stop: { type: "string", description: "Stop name as the person said it (any language), or an Erdenet stop id such as 'center'" },
-      route: { type: "string", description: "Route number to filter, e.g. '12'. Empty string for all routes." },
+      stop: { type: "string", description: "Stop name as the person said it (in Erdenet in Mongolian Cyrillic, e.g. 'Баян тал'). Empty string = nearest stop." },
+      route: { type: "string", description: "Route number to filter, e.g. '3'. Empty string for all routes." },
       to: { type: "string", description: "Where the person is going (stop or place), if they said; empty string otherwise" },
     },
     required: ["stop", "route", "to"],
   },
   async run(input, ctx) {
     const stop = str(input.stop, 80);
-    if (!stop) return { error: "stop is required" };
     const route = str(input.route, 10);
     const to = str(input.to, 120);
-    const google = (await googleTransit(stop, to, ctx)).filter((o) => !route || o.line === route);
-    if (google.length) {
+    const order = erdenetOrder(ctx, stop, to);
+    const live = async () => {
+      const p = await pickStop(stop, ctx);
+      if ("error" in p) return order === "first" ? p : null; // a non-Erdenet stop: let `none` answer
+      const list = (await arrivals(p.stop.id)).filter((a) => sameRoute(a.route, route));
       return {
-        stop: google[0].stop || stop,
+        stop: p.stop.name,
+        ...(p.nearest ? { note: "Nearest stop to the person" } : {}),
+        now: clockIn(ctx.now, ERDENET_ZONE),
+        arrivals: list.map(({ route: r, minutes, bus }) => ({ route: r, minutes, bus })),
+        ...(list.length ? {} : { empty: "No bus is heading to this stop right now, or the buses are not reporting." }),
+        ...LIVE,
+      };
+    };
+    const google = async () => {
+      const g = (await googleTransit(stop, to, ctx)).filter((o) => !route || o.line === route);
+      if (!g.length) return null;
+      return {
+        stop: g[0].stop || stop,
         now: clockIn(ctx.now, zoneOr(ctx.timeZone)),
-        arrivals: google.map((o) => ({ route: o.line, routeName: o.lineName, minutes: o.waitMinutes, time: o.departs, towards: o.headsign })),
-        tomorrow: [],
+        arrivals: g.map((o) => ({ route: o.line, routeName: o.lineName, minutes: o.waitMinutes, time: o.departs, towards: o.headsign })),
         source: "google",
       };
-    }
-    if (!timetableApplies(ctx, stop, to)) return notErdenet(ctx);
-    const r = nextArrivals(stop, localMinutes(ctx.now), { route: route || undefined });
-    return "error" in r ? r : { ...r, city: timetable.city, source: "sample-timetable" };
+    };
+    return liveOrGoogle<object>(order, live, google, notHere(ctx));
   },
 };
 
@@ -100,11 +143,11 @@ export const tripPlanner: Tool = {
   name: "plan_trip",
   label: { mn: "Замын төлөвлөгөө", en: "Trip plan" },
   description:
-    "Bus between two stops: which route, when it leaves, when it arrives, how long to wait. Uses Google Maps transit anywhere it has data; Erdenet's sample timetable (direct routes only) only in Erdenet. For door-to-door routes anywhere, prefer get_directions.",
+    "Bus between two stops: which route, how long to wait, how long the ride is. In Erdenet: the city's live feed (direct routes; minutes are estimates; stop names Mongolian Cyrillic). Elsewhere: Google Maps transit. For door-to-door routes anywhere, prefer get_directions.",
   parameters: {
     type: "object",
     properties: {
-      from: { type: "string", description: "Start stop or place name" },
+      from: { type: "string", description: "Start stop or place name. Empty string = the stop nearest the person (Erdenet)." },
       to: { type: "string", description: "Destination stop or place name" },
     },
     required: ["from", "to"],
@@ -112,20 +155,29 @@ export const tripPlanner: Tool = {
   async run(input, ctx) {
     const from = str(input.from, 80);
     const to = str(input.to, 80);
-    const google = await googleTransit(from, to, ctx);
-    if (google.length) {
+    if (!to) return { error: "to is required" };
+    const order = erdenetOrder(ctx, from, to);
+    const live = async () => {
+      const [a, [b]] = await Promise.all([pickStop(from, ctx), findStations(to, ctx.device.location)]);
+      if ("error" in a) return order === "first" ? a : null;
+      const options = b ? await trip(a.stop.id, b.id) : [];
+      if (!options.length) return null;
+      return { from: a.stop.name, to: b.name, options: options.map(({ route, waitMinutes, rideMinutes, bus }) => ({ route, waitMinutes, rideMinutes, bus })), ...LIVE };
+    };
+    const google = async () => {
+      const g = await googleTransit(from, to, ctx);
+      if (!g.length) return null;
       const mapsUrl = directionsUrl(placeFor(from, ctx), placeFor(to, ctx), "transit");
       if (isGoogleMapsUrl(mapsUrl)) ctx.actions.push({ type: "map", title: to, url: mapsUrl });
       return {
-        from: google[0].stop || from,
+        from: g[0].stop || from,
         to,
-        options: google.map((o) => ({ route: o.line, departs: o.departs, arrives: o.arrives, waitMinutes: o.waitMinutes, rideMinutes: o.rideMinutes, stops: o.stops })),
+        options: g.map((o) => ({ route: o.line, departs: o.departs, arrives: o.arrives, waitMinutes: o.waitMinutes, rideMinutes: o.rideMinutes, stops: o.stops })),
         source: "google",
       };
-    }
-    if (!timetableApplies(ctx, from, to)) return notErdenet(ctx);
-    const r = planTrip(from, to, localMinutes(ctx.now));
-    return "error" in r ? r : { ...r, city: timetable.city, source: "sample-timetable" };
+    };
+    const none = order !== "first" ? notHere(ctx) : { error: "No direct Erdenet bus found between these stops. Suggest get_directions with mode 'transit' or 'walk'." };
+    return liveOrGoogle<object>(order, live, google, none);
   },
 };
 

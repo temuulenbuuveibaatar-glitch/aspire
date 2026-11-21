@@ -1,6 +1,9 @@
+import "server-only";
 // Google Maps Platform client (server only: the key comes from GOOGLE_MAPS_API_KEY and is
 // sent only in the X-Goog-Api-Key header, never in URLs, logs or error messages).
-// APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby), Weather API, Air Quality API.
+// APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby, photo media), Weather API, Air Quality API.
+import type { AmbientPhoto } from "@/lib/ambient-types";
+import { googleLanguage, haversineKm, type LatLng } from "@/lib/geo";
 import type { Lang } from "@/lib/lang";
 import { validTimeZone } from "@/lib/tools/time";
 
@@ -79,13 +82,7 @@ async function google<T>(url: string, opts: { body?: unknown; fieldMask?: string
 }
 
 // ---- helpers ------------------------------------------------------------------------------
-export interface LatLng {
-  lat: number;
-  lng: number;
-}
-
-const GOOGLE_LANG: Record<Lang, string> = { mn: "mn", zh: "zh-CN", en: "en", ru: "ru", de: "de" };
-export const googleLanguage = (lang: Lang): string => GOOGLE_LANG[lang] ?? "en";
+export { googleLanguage, haversineKm, type LatLng };
 
 /** "49.03,104.08" -> coordinates; anything else -> null (free text). */
 export function parseLatLng(s: string): LatLng | null {
@@ -100,14 +97,6 @@ const waypoint = (s: string) => {
   const p = parseLatLng(s);
   return p ? { location: { latLng: { latitude: p.lat, longitude: p.lng } } } : { address: s };
 };
-
-export function haversineKm(a: LatLng, b: LatLng): number {
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat);
-  const dLng = rad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h));
-}
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const seconds = (d: unknown) => (typeof d === "string" ? parseFloat(d) || 0 : 0);
@@ -208,6 +197,7 @@ async function requestRoutes(opts: {
   alternatives?: boolean;
   /** The person's IANA zone: used for clock times when Google sends none. */
   timeZone?: string;
+  background?: boolean;
 }) {
   const body: Record<string, unknown> = {
     origin: waypoint(opts.origin),
@@ -217,7 +207,7 @@ async function requestRoutes(opts: {
   };
   if (opts.departureTime && opts.mode !== "walk") body.departureTime = opts.departureTime;
   if (opts.alternatives) body.computeAlternativeRoutes = true;
-  const data = await google<{ routes?: GRoute[] }>(ROUTES_URL, { body, fieldMask: ROUTE_FIELDS });
+  const data = await google<{ routes?: GRoute[] }>(ROUTES_URL, { body, fieldMask: ROUTE_FIELDS, background: opts.background });
   return data.routes ?? [];
 }
 
@@ -302,8 +292,16 @@ export interface TransitOption {
 }
 
 /** Real departures by public transport (soonest first). Empty when Google has no transit here. */
-export async function transitOptions(opts: { from: string; to: string; now: Date; lang: Lang; timeZone?: string }): Promise<TransitOption[]> {
-  const routes = await requestRoutes({ origin: opts.from, destination: opts.to, mode: "transit", departureTime: opts.now.toISOString(), lang: opts.lang, alternatives: true });
+export async function transitOptions(opts: { from: string; to: string; now: Date; lang: Lang; timeZone?: string; background?: boolean }): Promise<TransitOption[]> {
+  const routes = await requestRoutes({
+    origin: opts.from,
+    destination: opts.to,
+    mode: "transit",
+    departureTime: opts.now.toISOString(),
+    lang: opts.lang,
+    alternatives: true,
+    background: opts.background,
+  });
   const out: TransitOption[] = [];
   for (const r of routes) {
     const rides = allSteps(r).filter((s) => s.travelMode === "TRANSIT" && s.transitDetails?.stopDetails?.departureTime);
@@ -374,10 +372,11 @@ export async function searchPlaces(opts: { query: string; near?: LatLng; openNow
 }
 
 /** Place name -> coordinates (Places Text Search, Pro fields only). */
-export async function geocode(query: string, lang: Lang = "en"): Promise<{ name: string } & LatLng> {
+export async function geocode(query: string, lang: Lang = "en", opts: CallOpts = {}): Promise<{ name: string } & LatLng> {
   const data = await google<{ places?: GPlace[] }>(PLACES_URL, {
     body: { textQuery: query, languageCode: googleLanguage(lang), pageSize: 1 },
     fieldMask: "places.displayName,places.formattedAddress,places.location",
+    background: opts.background,
   });
   const p = data.places?.[0];
   if (typeof p?.location?.latitude !== "number" || typeof p.location.longitude !== "number") throw new MapsError(`Place not found: ${query}`);
@@ -538,14 +537,10 @@ export interface WeatherSnapshot {
   cloudCover: number | null;
   windKph: number | null;
   windDirDeg: number | null;
-  precipChance: number | null;
-  /** Quantitative precipitation forecast, millimetres. */
-  qpfMm: number | null;
   humidity: number | null;
   tempC: number;
   feelsC: number;
   timeZone: string | null;
-  days: WeatherSnapshotDay[];
 }
 
 interface GCondition {
@@ -555,19 +550,13 @@ interface GCondition {
 
 const conditionType = (t: unknown) => (typeof t === "string" && /^[A-Z_]{1,80}$/.test(t) ? t : null);
 
-/**
- * Google Weather API currentConditions + 3-day forecast, structured for the live sky.
- * Field names per https://developers.google.com/maps/documentation/weather/reference/rest
- * (weatherCondition.type, isDaytime, cloudCover, wind.speed.value, wind.direction.degrees,
- * precipitation.probability.percent, precipitation.qpf.quantity, relativeHumidity,
- * temperature.degrees, feelsLikeTemperature.degrees, timeZone.id). Metric units.
- * The forecast is optional: if only it fails, `days` is empty.
- */
+// Google Weather API, structured for the live sky. Field names per
+// https://developers.google.com/maps/documentation/weather/reference/rest. Metric units.
 const weatherWhere = (lat: number, lng: number, lang: Lang) =>
   `location.latitude=${lat}&location.longitude=${lng}&unitsSystem=METRIC&languageCode=${encodeURIComponent(googleLanguage(lang))}`;
 
 /** Google Weather currentConditions only (one call). Throws when there is no data. */
-export async function weatherCurrent(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<Omit<WeatherSnapshot, "days">> {
+export async function weatherCurrent(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<WeatherSnapshot> {
   const c = await google<{
     timeZone?: { id?: string };
     isDaytime?: boolean;
@@ -577,7 +566,6 @@ export async function weatherCurrent(lat: number, lng: number, lang: Lang = "en"
     relativeHumidity?: number;
     cloudCover?: number;
     wind?: { speed?: { value?: number }; direction?: { degrees?: number } };
-    precipitation?: { probability?: { percent?: number }; qpf?: { quantity?: number } };
   }>(`https://weather.googleapis.com/v1/currentConditions:lookup?${weatherWhere(lat, lng, lang)}`, { background: opts.background });
   const tempC = fin(c.temperature?.degrees);
   if (tempC === null) throw new MapsError("No weather data here");
@@ -588,8 +576,6 @@ export async function weatherCurrent(lat: number, lng: number, lang: Lang = "en"
     cloudCover: fin(c.cloudCover),
     windKph: fin(c.wind?.speed?.value),
     windDirDeg: fin(c.wind?.direction?.degrees),
-    precipChance: fin(c.precipitation?.probability?.percent),
-    qpfMm: fin(c.precipitation?.qpf?.quantity),
     humidity: fin(c.relativeHumidity),
     tempC,
     feelsC: fin(c.feelsLikeTemperature?.degrees) ?? tempC,
@@ -615,12 +601,6 @@ export async function weatherDays(lat: number, lng: number, lang: Lang = "en", o
     text: d.daytimeForecast?.weatherCondition?.description?.text ?? "",
     precipChance: fin(d.daytimeForecast?.precipitation?.probability?.percent),
   }));
-}
-
-export async function weatherSnapshot(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<WeatherSnapshot> {
-  const [cur, fc] = await Promise.allSettled([weatherCurrent(lat, lng, lang, opts), weatherDays(lat, lng, lang, opts)]);
-  if (cur.status === "rejected") throw cur.reason;
-  return { ...cur.value, days: fc.status === "fulfilled" ? fc.value : [] };
 }
 
 /**
@@ -669,30 +649,108 @@ export interface NearbyStop extends LatLng {
   mapsUrl: string;
 }
 
+export interface NearbyTaxi extends NearbyStop {
+  phone: string | null;
+}
+
 const GOOGLE_MAPS_LINK = /^https:\/\/(?:maps\.google\.com|www\.google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)\//;
+const NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
+const POINT_FIELDS = "places.id,places.displayName,places.location,places.googleMapsUri";
+type GPoint = GPlace & { id?: string; nationalPhoneNumber?: string };
+
+const circle = (p: LatLng, radius: number) => ({ circle: { center: { latitude: p.lat, longitude: p.lng }, radius } });
+
+/** A Places result with a position and a safe Google Maps link, or null. */
+function toPoint(p: GPoint): NearbyStop | null {
+  const lat = p.location?.latitude;
+  const lng = p.location?.longitude;
+  const name = p.displayName?.text;
+  if (typeof lat !== "number" || typeof lng !== "number" || !name) return null;
+  const id = typeof p.id === "string" && /^[\w-]{1,300}$/.test(p.id) ? p.id : "";
+  const search = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${id ? `&query_place_id=${id}` : ""}`;
+  return { id, name, lat, lng, mapsUrl: p.googleMapsUri && GOOGLE_MAPS_LINK.test(p.googleMapsUri) ? p.googleMapsUri : search };
+}
 
 /** Up to 5 bus / transit stops within 1 km, nearest first (Places API (New) searchNearby). */
 export async function nearbyTransitStops(near: LatLng, lang: Lang = "en", opts: CallOpts = {}): Promise<NearbyStop[]> {
-  const data = await google<{ places?: Array<GPlace & { id?: string }> }>("https://places.googleapis.com/v1/places:searchNearby", {
+  const data = await google<{ places?: GPoint[] }>(NEARBY_URL, {
     body: {
       includedTypes: ["bus_stop", "bus_station", "transit_station"],
       maxResultCount: 5,
       rankPreference: "DISTANCE",
       languageCode: googleLanguage(lang),
-      locationRestriction: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 1000 } },
+      locationRestriction: circle(near, 1000),
     },
-    fieldMask: "places.id,places.displayName,places.location,places.googleMapsUri",
+    fieldMask: POINT_FIELDS,
     background: opts.background,
   });
-  const out: NearbyStop[] = [];
-  for (const p of data.places ?? []) {
-    const lat = p.location?.latitude;
-    const lng = p.location?.longitude;
-    const name = p.displayName?.text;
-    if (typeof lat !== "number" || typeof lng !== "number" || !name) continue;
-    const id = typeof p.id === "string" && /^[\w-]{1,300}$/.test(p.id) ? p.id : "";
-    const search = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${id ? `&query_place_id=${id}` : ""}`;
-    out.push({ id, name, lat, lng, mapsUrl: p.googleMapsUri && GOOGLE_MAPS_LINK.test(p.googleMapsUri) ? p.googleMapsUri : search });
+  return (data.places ?? [])
+    .map(toPoint)
+    .filter((x) => x !== null)
+    .slice(0, 5);
+}
+
+/**
+ * Taxi stands (searchNearby taxi_stand) and taxi companies (searchText "taxi") within about 5 km,
+ * with their phone numbers. Unsorted: the caller ranks them by its own, precise, position.
+ */
+export async function nearbyTaxis(near: LatLng, lang: Lang = "en", opts: CallOpts = {}): Promise<NearbyTaxi[]> {
+  const fieldMask = `${POINT_FIELDS},places.nationalPhoneNumber`;
+  const languageCode = googleLanguage(lang);
+  const [stands, named] = await Promise.allSettled([
+    google<{ places?: GPoint[] }>(NEARBY_URL, {
+      body: { includedTypes: ["taxi_stand"], maxResultCount: 4, rankPreference: "DISTANCE", languageCode, locationRestriction: circle(near, 5000) },
+      fieldMask,
+      background: opts.background,
+    }),
+    google<{ places?: GPoint[] }>(PLACES_URL, {
+      body: { textQuery: "taxi", languageCode, pageSize: 5, locationBias: circle(near, 5000) },
+      fieldMask,
+      background: opts.background,
+    }),
+  ]);
+  if (stands.status === "rejected" && named.status === "rejected") throw stands.reason;
+  const seen = new Set<string>();
+  const out: NearbyTaxi[] = [];
+  for (const p of [stands, named].flatMap((r) => (r.status === "fulfilled" ? (r.value.places ?? []) : []))) {
+    const pt = toPoint(p);
+    if (!pt || seen.has(pt.id || pt.name)) continue;
+    seen.add(pt.id || pt.name);
+    const phone = typeof p.nationalPhoneNumber === "string" && /^[+\d][\d ()+-]{2,29}$/.test(p.nationalPhoneNumber) ? p.nationalPhoneNumber : null;
+    out.push({ ...pt, phone });
   }
-  return out.slice(0, 5);
+  return out;
+}
+
+const PHOTO_NAME = /^places\/[\w-]{1,300}\/photos\/[\w-]{1,1000}$/;
+const PHOTO_HOST = /^https:\/\/[a-z0-9.-]+\.(?:googleusercontent\.com|ggpht\.com|google\.com|googleapis\.com)\//i;
+
+/**
+ * A scenic photo for a text query near a position: Places searchText (photos only), then the
+ * photo media endpoint with skipHttpRedirect, which returns a public photoUri without our key.
+ * Prefers a landscape photo. The author credit must be shown with it.
+ */
+export async function placePhoto(query: string, near: LatLng, opts: CallOpts = {}): Promise<AmbientPhoto | null> {
+  type GPhoto = { name?: string; widthPx?: number; heightPx?: number; authorAttributions?: Array<{ displayName?: string; uri?: string }> };
+  const data = await google<{ places?: Array<{ googleMapsUri?: string; photos?: GPhoto[] }> }>(PLACES_URL, {
+    body: { textQuery: query, pageSize: 5, locationBias: circle(near, 20_000) },
+    fieldMask: "places.photos,places.googleMapsUri",
+    background: opts.background,
+  });
+  const photos = (data.places ?? []).flatMap((p) => (p.photos ?? []).filter((ph) => PHOTO_NAME.test(ph.name ?? "")).map((ph) => ({ ph, place: p.googleMapsUri })));
+  const pick = photos.find(({ ph }) => (ph.widthPx ?? 0) > (ph.heightPx ?? 0)) ?? photos[0];
+  if (!pick) return null;
+  const media = await google<{ photoUri?: string }>(`https://places.googleapis.com/v1/${pick.ph.name}/media?maxWidthPx=1600&skipHttpRedirect=true`, {
+    background: opts.background,
+  });
+  if (typeof media.photoUri !== "string" || !PHOTO_HOST.test(media.photoUri)) return null;
+  const author = pick.ph.authorAttributions?.[0];
+  const authorUri = author?.uri?.startsWith("//") ? `https:${author.uri}` : author?.uri;
+  const uri = authorUri && GOOGLE_MAPS_LINK.test(authorUri) ? authorUri : pick.place && GOOGLE_MAPS_LINK.test(pick.place) ? pick.place : "https://www.google.com/maps";
+  const name =
+    (author?.displayName ?? "")
+      .replace(/[\u0000-\u001f<>]/g, "")
+      .trim()
+      .slice(0, 80) || "Google Maps";
+  return { url: media.photoUri, attribution: { name, uri } };
 }

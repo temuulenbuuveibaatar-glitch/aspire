@@ -22,17 +22,6 @@ describe("ui-text: no emojis, every city", () => {
     }
     expect(LANGS.map((l) => LANG_NAMES[l].code)).toEqual(["MN", "ZH", "EN", "RU", "DE"]);
   });
-
-  it("suggestion chips are global: no Erdenet, no tugrik, short", () => {
-    for (const lang of LANGS) {
-      const chips = UI[lang].suggestions;
-      expect(chips.length).toBeGreaterThanOrEqual(4);
-      for (const c of chips) {
-        expect(c).not.toMatch(/erdenet|эрдэнэт|额尔登特|tugrik|төгрөг|тугрик|图格里克|Tugrik|MNT/i);
-        expect(c.length).toBeLessThanOrEqual(48);
-      }
-    }
-  });
 });
 
 describe("Jarvis greeting", () => {

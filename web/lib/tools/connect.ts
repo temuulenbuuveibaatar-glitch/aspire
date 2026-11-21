@@ -124,7 +124,7 @@ export const addToCalendar: Tool = {
   name: "add_to_calendar",
   label: { mn: "Календарь", en: "Calendar" },
   description:
-    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' button; the person presses it to save. Times are the person's own local time. Get the local time first for words like 'tomorrow'.",
+    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' card; nothing is saved until the person presses it, so say it is ready to add, never that it was added. Times are the person's own local time. Get the local time first for words like 'tomorrow'. Use get_calendar to check what is already on.",
   parameters: {
     type: "object",
     properties: {

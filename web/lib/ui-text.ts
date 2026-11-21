@@ -25,6 +25,42 @@ export interface NotableText {
   bus: string;
 }
 
+/** v4 HUD: readouts, the location prompt, the map and the weather card. */
+export interface HudText {
+  weather: string;
+  air: string;
+  traffic: string;
+  bus: string;
+  taxi: string;
+  map: string;
+  gps: string;
+  set: string;
+  approx: string;
+  min: string;
+  feels: string;
+  today: string;
+  whereTitle: string;
+  whereWhy: string;
+  allow: string;
+  setCity: string;
+  notNow: string;
+  myCity: string;
+  cityPlaceholder: string;
+  cityHelp: string;
+  openMap: string;
+  fullscreen: string;
+  voiceVia: string;
+  noLocation: string;
+  photo: string;
+  /** The AQI abbreviation in the readout. */
+  aqiShort: string;
+  /** The browser refused or could not get a location fix. */
+  denied: string;
+  aqi: Record<"good" | "moderate" | "sensitive" | "unhealthy" | "very_unhealthy" | "hazardous", string>;
+  level: Record<"light" | "moderate" | "heavy", string>;
+  kinds: Record<"clear" | "partly" | "cloudy" | "fog" | "drizzle" | "rain" | "storm" | "snow" | "sleet" | "hail", string>;
+}
+
 // Short on-screen labels. The screen follows the language the person last spoke.
 // No emojis, no arrow glyphs, no exclamation marks in greetings.
 export const UI: Record<
@@ -52,7 +88,6 @@ export const UI: Record<
     nothingSaved: string;
     remove: string;
     call: string;
-    reminderNow: string;
     close: string;
     settings: string;
     voice: string;
@@ -88,25 +123,18 @@ export const UI: Record<
     save: string;
     invalidLink: string;
     alwaysOn: string;
-    comingSoon: string;
     mic: string;
     stop: string;
     newChat: string;
     menu: string;
-    /** Starter chips for the empty state: short, polite, true in any city. */
-    suggestions: string[];
     greeting: GreetingText;
     signInTitle: string;
     continueGoogle: string;
-    emailMeCode: string;
     emailLabel: string;
     codeLabel: string;
     verify: string;
     codeSent: string;
-    orTapLink: string;
     signOut: string;
-    signedOutNotice: string;
-    wrongCode: string;
     /** Memory sheet, Learning list: the lesson level and one readable progress line. */
     lessonLevel: Record<"beginner" | "intermediate" | "advanced", string>;
     lessonLine: string;
@@ -143,8 +171,6 @@ export const UI: Record<
     botCancel: string;
     // v3 main screen (components/Assistant.tsx)
     skipToConversation: string;
-    live: string;
-    locationOff: string;
     location: string;
     display: string;
     textSize: string;
@@ -170,6 +196,7 @@ export const UI: Record<
     language: string;
     /** Sentence 2 of the greeting when one thing is notable right now. `{route}` and `{n}` are filled in. */
     notable: NotableText;
+    hud: HudText;
   }
 > = {
   mn: {
@@ -195,7 +222,6 @@ export const UI: Record<
     nothingSaved: "Одоогоор юу ч хадгалаагүй.",
     remove: "Устгах",
     call: "Залгах",
-    reminderNow: "Сануулга",
     close: "Хаах",
     settings: "Тохиргоо",
     voice: "Дуу хоолой",
@@ -231,24 +257,18 @@ export const UI: Record<
     save: "Хадгалах",
     invalidLink: "Энэ холбоос буруу байна",
     alwaysOn: "SMS, дуудлага, имэйл ноорог үргэлж ажиллана — таны утасны апп нээгдэнэ.",
-    comingSoon: "Удахгүй нэмэгдэнэ",
     mic: "Микрофон",
     stop: "Зогсоох",
     newChat: "Шинэ яриа",
     menu: "Цэс",
-    suggestions: ["Өнөөдөр бороо орох уу?", "Гадаа алхахад агаар цэвэр үү?", "Хотын төв рүү автобусаар яаж очих вэ?", "Өглөөний мэдээг минь уншаад өгөөч", "Маргааш 8 цагт сануулаарай", "Надад шинэ зүйл зааж өгөөч"],
     greeting: { morning: "Өглөөний мэнд", afternoon: "Өдрийн мэнд", evening: "Оройн мэнд", sir: "эрхэм ээ", madam: "хатагтай", howIsItGoing: "Бүх зүйл сайн байна уу?" },
     signInTitle: "Нэвтрэх",
     continueGoogle: "Google-ээр үргэлжлүүлэх",
-    emailMeCode: "Имэйлээр код авах",
     emailLabel: "Имэйл хаяг",
     codeLabel: "6 оронтой код",
     verify: "Баталгаажуулах",
     codeSent: "Таны имэйл рүү нэвтрэх код илгээлээ.",
-    orTapLink: "Эсвэл имэйл доторх холбоосыг дарахад л болно.",
     signOut: "Гарах",
-    signedOutNotice: "Нэвтрэлтийн хугацаа дууссан. Дахин нэвтэрнэ үү.",
-    wrongCode: "Код буруу эсвэл хугацаа нь дууссан байна. Дахин оролдоно уу.",
     lessonLevel: { beginner: "Анхан", intermediate: "Дунд", advanced: "Ахисан" },
     lessonLine: "{level}, {step}-р алхам, {score}%",
     connectGmail: "Gmail холбох",
@@ -282,8 +302,6 @@ export const UI: Record<
     botCopied: "Хуулагдлаа",
     botCancel: "Болих",
     skipToConversation: "Яриа руу шилжих",
-    live: "Одоогийн нөхцөл",
-    locationOff: "Байршил унтраалттай",
     location: "Байршил",
     display: "Дэлгэц",
     textSize: "Үсгийн хэмжээ",
@@ -308,6 +326,7 @@ export const UI: Record<
     suggestionsLabel: "Санал",
     language: "Хэл",
     notable: { rain: "Гадаа бороо орж байна.", snow: "Гадаа цас орж байна.", storm: "Гадаа аянгатай бороо орж байна.", air: "Өнөөдөр агаар эрүүл мэндэд хортой байна.", traffic: "Замын түгжрэл их байна.", bus: "{route} автобус {n} минутын дараа ирнэ." },
+    hud: { weather: "Цаг агаар", air: "Агаар", traffic: "Замын хөдөлгөөн", bus: "Дараагийн автобус", taxi: "Ойрын такси", map: "Газрын зураг", gps: "GPS", set: "Сонгосон", approx: "ойролцоо", min: "мин", aqi: {"good": "Сайн", "moderate": "Дунд зэрэг", "sensitive": "Эмзэг бүлэгт хортой", "unhealthy": "Эрүүл бус", "very_unhealthy": "Маш эрүүл бус", "hazardous": "Аюултай"}, level: {"light": "Чөлөөтэй", "moderate": "Дунд зэрэг", "heavy": "Түгжрэлтэй"}, kinds: {"clear": "Цэлмэг", "partly": "Багавтар үүлтэй", "cloudy": "Үүлэрхэг", "fog": "Манан", "drizzle": "Шиврээ бороо", "rain": "Бороо", "storm": "Аадар", "snow": "Цас", "sleet": "Нойтон цас", "hail": "Мөндөр"}, feels: "Мэдрэгдэх {t}", today: "Өнөөдөр", whereTitle: "Та хаана байна вэ?", whereWhy: "Жарвис таны утасны нарийн байршлаар яг байгаа газрын цаг агаар, зураг, агаар, замын хөдөлгөөн, автобусыг харуулна. Байршлыг зөвхөн тухайн хүсэлтэд ашиглаж, хэзээ ч хадгалахгүй.", allow: "Нарийн байршлаа ашиглах", setCity: "Хотоо сонгох", notNow: "Одоо биш", myCity: "Миний хот", cityPlaceholder: "жишээ нь Эрдэнэт", cityHelp: "GPS унтраалттай эсвэл ажиллахгүй үед ашиглана.", openMap: "Шууд газрын зургийг нээх", fullscreen: "Бүтэн дэлгэц", voiceVia: "Дуу: {name}", noLocation: "Байршил тодорхойгүй", photo: "Зураг", aqiShort: "АЧИ", denied: "Байршил ашиглахыг зөвшөөрсөнгүй. Хотоо сонгоно уу." },
   },
   zh: {
     idle: "按下说话",
@@ -332,7 +351,6 @@ export const UI: Record<
     nothingSaved: "还没有保存任何内容。",
     remove: "删除",
     call: "拨打",
-    reminderNow: "提醒",
     close: "关闭",
     settings: "设置",
     voice: "声音",
@@ -368,24 +386,18 @@ export const UI: Record<
     save: "保存",
     invalidLink: "链接无效",
     alwaysOn: "短信、电话和邮件草稿随时可用，会打开您手机上的应用。",
-    comingSoon: "即将推出",
     mic: "麦克风",
     stop: "停止",
     newChat: "新对话",
     menu: "菜单",
-    suggestions: ["今天会下雨吗？", "空气适合出去散步吗？", "坐公交怎么去市中心？", "给我读今天的早间简报", "明天早上8点提醒我", "教我一点新知识"],
     greeting: { morning: "早上好", afternoon: "下午好", evening: "晚上好", sir: "先生", madam: "女士", howIsItGoing: "今天过得怎么样？" },
     signInTitle: "登录",
     continueGoogle: "使用 Google 继续",
-    emailMeCode: "通过邮件发送验证码",
     emailLabel: "邮箱地址",
     codeLabel: "6 位验证码",
     verify: "验证",
     codeSent: "登录验证码已发送到您的邮箱。",
-    orTapLink: "也可以直接点击邮件中的链接。",
     signOut: "退出登录",
-    signedOutNotice: "登录已过期，请重新登录。",
-    wrongCode: "验证码错误或已过期，请重试。",
     lessonLevel: { beginner: "入门", intermediate: "中级", advanced: "高级" },
     lessonLine: "{level}，第 {step} 步，{score}%",
     connectGmail: "连接 Gmail",
@@ -419,8 +431,6 @@ export const UI: Record<
     botCopied: "已复制",
     botCancel: "取消",
     skipToConversation: "跳到对话",
-    live: "实时状况",
-    locationOff: "定位已关闭",
     location: "位置",
     display: "显示",
     textSize: "字体大小",
@@ -445,6 +455,7 @@ export const UI: Record<
     suggestionsLabel: "建议",
     language: "语言",
     notable: { rain: "外面正在下雨。", snow: "外面正在下雪。", storm: "外面有雷雨。", air: "今天的空气不利于健康。", traffic: "现在交通很拥堵。", bus: "{route}路公交车{n}分钟后到。" },
+    hud: { weather: "天气", air: "空气", traffic: "路况", bus: "下一班公交", taxi: "附近出租车", map: "地图", gps: "GPS", set: "已设定", approx: "大致", min: "分钟", aqi: {"good": "良好", "moderate": "中等", "sensitive": "对敏感人群不健康", "unhealthy": "不健康", "very_unhealthy": "非常不健康", "hazardous": "危险"}, level: {"light": "畅通", "moderate": "缓行", "heavy": "拥堵"}, kinds: {"clear": "晴", "partly": "少云", "cloudy": "多云", "fog": "雾", "drizzle": "毛毛雨", "rain": "雨", "storm": "雷雨", "snow": "雪", "sleet": "雨夹雪", "hail": "冰雹"}, feels: "体感 {t}", today: "今天", whereTitle: "您在哪里？", whereWhy: "贾维斯会用手机的精确位置，显示您真正所在之处的天气、照片、空气、路况和公交。位置只用于每次请求，从不保存。", allow: "使用我的精确位置", setCity: "设置我的城市", notNow: "以后再说", myCity: "我的城市", cityPlaceholder: "例如 额尔登特", cityHelp: "在 GPS 关闭或不可用时使用。", openMap: "打开实时地图", fullscreen: "全屏", voiceVia: "语音：{name}", noLocation: "位置未知", photo: "照片", aqiShort: "AQI", denied: "未获准使用位置。请设置您的城市。" },
   },
   en: {
     idle: "Press and speak",
@@ -469,7 +480,6 @@ export const UI: Record<
     nothingSaved: "Nothing saved yet.",
     remove: "Delete",
     call: "Call",
-    reminderNow: "Reminder",
     close: "Close",
     settings: "Settings",
     voice: "Voice",
@@ -505,24 +515,18 @@ export const UI: Record<
     save: "Save",
     invalidLink: "That link doesn't look right",
     alwaysOn: "SMS, calls and email drafts always work — they open your phone's own apps.",
-    comingSoon: "Coming next",
     mic: "Microphone",
     stop: "Stop",
     newChat: "New chat",
     menu: "Menu",
-    suggestions: ["Will it rain today?", "Is the air good for a walk?", "How do I get to the city centre by bus?", "Read my morning briefing", "Remind me tomorrow at 8", "Teach me something new"],
     greeting: { morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", sir: "sir", madam: "ma'am", howIsItGoing: "How is it going?" },
     signInTitle: "Sign in",
     continueGoogle: "Continue with Google",
-    emailMeCode: "Email me a code",
     emailLabel: "Email address",
     codeLabel: "6-digit code",
     verify: "Verify",
     codeSent: "We sent a sign-in code to your email.",
-    orTapLink: "Or just tap the link in the email.",
     signOut: "Sign out",
-    signedOutNotice: "Your session ended. Please sign in again.",
-    wrongCode: "That code is wrong or expired. Please try again.",
     lessonLevel: { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" },
     lessonLine: "{level}, step {step}, {score}%",
     connectGmail: "Connect Gmail",
@@ -556,8 +560,6 @@ export const UI: Record<
     botCopied: "Copied",
     botCancel: "Cancel",
     skipToConversation: "Skip to conversation",
-    live: "Live conditions",
-    locationOff: "Location off",
     location: "Location",
     display: "Display",
     textSize: "Text size",
@@ -582,6 +584,7 @@ export const UI: Record<
     suggestionsLabel: "Suggestions",
     language: "Language",
     notable: { rain: "It is raining outside.", snow: "It is snowing outside.", storm: "There is a thunderstorm outside.", air: "The air is unhealthy today.", traffic: "The traffic is heavy.", bus: "Bus {route} leaves in {n} minutes." },
+    hud: { weather: "Weather", air: "Air", traffic: "Traffic", bus: "Next bus", taxi: "Nearest taxi", map: "Map", gps: "GPS", set: "Set", approx: "approx.", min: "min", aqi: {"good": "Good", "moderate": "Moderate", "sensitive": "Unhealthy for some", "unhealthy": "Unhealthy", "very_unhealthy": "Very unhealthy", "hazardous": "Hazardous"}, level: {"light": "Light", "moderate": "Moderate", "heavy": "Heavy"}, kinds: {"clear": "Clear", "partly": "Partly cloudy", "cloudy": "Cloudy", "fog": "Fog", "drizzle": "Drizzle", "rain": "Rain", "storm": "Thunderstorm", "snow": "Snow", "sleet": "Sleet", "hail": "Hail"}, feels: "Feels like {t}", today: "Today", whereTitle: "Where are you?", whereWhy: "Jarvis uses your phone's precise location for the weather, photo, air, traffic and buses where you really are. It is used only for each request and never stored.", allow: "Use my precise location", setCity: "Set my city", notNow: "Not now", myCity: "My city", cityPlaceholder: "e.g. Erdenet", cityHelp: "Used when GPS is off or not available.", openMap: "Open the live map", fullscreen: "Full screen", voiceVia: "Voice: {name}", noLocation: "Location unknown", photo: "Photo", aqiShort: "AQI", denied: "Location access was refused. Set your city instead." },
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -606,7 +609,6 @@ export const UI: Record<
     nothingSaved: "Пока ничего не сохранено.",
     remove: "Удалить",
     call: "Позвонить",
-    reminderNow: "Напоминание",
     close: "Закрыть",
     settings: "Настройки",
     voice: "Голос",
@@ -642,24 +644,18 @@ export const UI: Record<
     save: "Сохранить",
     invalidLink: "Неверная ссылка",
     alwaysOn: "SMS, звонки и черновики писем работают всегда — открываются приложения телефона.",
-    comingSoon: "Скоро",
     mic: "Микрофон",
     stop: "Стоп",
     newChat: "Новый разговор",
     menu: "Меню",
-    suggestions: ["Сегодня будет дождь?", "Воздух подходит для прогулки?", "Как доехать до центра на автобусе?", "Прочитай мою утреннюю сводку", "Напомни мне завтра в 8", "Научи меня чему-нибудь новому"],
     greeting: { morning: "Доброе утро", afternoon: "Добрый день", evening: "Добрый вечер", sir: "сэр", madam: "мадам", howIsItGoing: "Как ваши дела?" },
     signInTitle: "Вход",
     continueGoogle: "Продолжить с Google",
-    emailMeCode: "Получить код на почту",
     emailLabel: "Адрес эл. почты",
     codeLabel: "6-значный код",
     verify: "Подтвердить",
     codeSent: "Мы отправили код для входа на вашу почту.",
-    orTapLink: "Или просто нажмите на ссылку в письме.",
     signOut: "Выйти",
-    signedOutNotice: "Сеанс завершён. Пожалуйста, войдите снова.",
-    wrongCode: "Код неверный или устарел. Попробуйте ещё раз.",
     lessonLevel: { beginner: "Начальный", intermediate: "Средний", advanced: "Продвинутый" },
     lessonLine: "{level}, шаг {step}, {score}%",
     connectGmail: "Подключить Gmail",
@@ -693,8 +689,6 @@ export const UI: Record<
     botCopied: "Скопировано",
     botCancel: "Отмена",
     skipToConversation: "Перейти к разговору",
-    live: "Обстановка сейчас",
-    locationOff: "Местоположение выключено",
     location: "Местоположение",
     display: "Экран",
     textSize: "Размер текста",
@@ -719,6 +713,7 @@ export const UI: Record<
     suggestionsLabel: "Подсказки",
     language: "Язык",
     notable: { rain: "На улице идёт дождь.", snow: "На улице идёт снег.", storm: "На улице гроза.", air: "Сегодня воздух вреден для здоровья.", traffic: "На дорогах сильные пробки.", bus: "Автобус {route} отходит через {n} мин." },
+    hud: { weather: "Погода", air: "Воздух", traffic: "Дороги", bus: "Ближайший автобус", taxi: "Ближайшее такси", map: "Карта", gps: "GPS", set: "Задан", approx: "примерно", min: "мин", aqi: {"good": "Хороший", "moderate": "Умеренный", "sensitive": "Вреден для чувствительных", "unhealthy": "Вредный", "very_unhealthy": "Очень вредный", "hazardous": "Опасный"}, level: {"light": "Свободно", "moderate": "Умеренно", "heavy": "Пробки"}, kinds: {"clear": "Ясно", "partly": "Переменная облачность", "cloudy": "Облачно", "fog": "Туман", "drizzle": "Морось", "rain": "Дождь", "storm": "Гроза", "snow": "Снег", "sleet": "Мокрый снег", "hail": "Град"}, feels: "Ощущается как {t}", today: "Сегодня", whereTitle: "Где вы?", whereWhy: "Джарвис использует точное местоположение телефона, чтобы показывать погоду, фото, воздух, пробки и автобусы там, где вы на самом деле. Оно нужно только для каждого запроса и никогда не сохраняется.", allow: "Использовать точное местоположение", setCity: "Указать мой город", notNow: "Не сейчас", myCity: "Мой город", cityPlaceholder: "например, Эрдэнэт", cityHelp: "Используется, когда GPS выключен или недоступен.", openMap: "Открыть живую карту", fullscreen: "Во весь экран", voiceVia: "Голос: {name}", noLocation: "Местоположение неизвестно", photo: "Фото", aqiShort: "ИКВ", denied: "Доступ к местоположению запрещён. Укажите ваш город." },
   },
   de: {
     idle: "Drücken und sprechen",
@@ -743,7 +738,6 @@ export const UI: Record<
     nothingSaved: "Noch nichts gespeichert.",
     remove: "Löschen",
     call: "Anrufen",
-    reminderNow: "Erinnerung",
     close: "Schließen",
     settings: "Einstellungen",
     voice: "Stimme",
@@ -779,24 +773,18 @@ export const UI: Record<
     save: "Speichern",
     invalidLink: "Dieser Link ist ungültig",
     alwaysOn: "SMS, Anrufe und E-Mail-Entwürfe gehen immer – sie öffnen die Apps Ihres Telefons.",
-    comingSoon: "Kommt bald",
     mic: "Mikrofon",
     stop: "Stopp",
     newChat: "Neuer Chat",
     menu: "Menü",
-    suggestions: ["Regnet es heute?", "Ist die Luft gut für einen Spaziergang?", "Wie komme ich mit dem Bus ins Zentrum?", "Lies mir mein Morgen-Briefing vor", "Erinnere mich morgen um 8", "Bring mir etwas Neues bei"],
     greeting: { morning: "Guten Morgen", afternoon: "Guten Tag", evening: "Guten Abend", sir: "Sir", madam: "gnädige Frau", howIsItGoing: "Wie geht es Ihnen?" },
     signInTitle: "Anmelden",
     continueGoogle: "Weiter mit Google",
-    emailMeCode: "Code per E-Mail senden",
     emailLabel: "E-Mail-Adresse",
     codeLabel: "6-stelliger Code",
     verify: "Bestätigen",
     codeSent: "Wir haben Ihnen einen Anmeldecode per E-Mail geschickt.",
-    orTapLink: "Oder tippen Sie einfach auf den Link in der E-Mail.",
     signOut: "Abmelden",
-    signedOutNotice: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
-    wrongCode: "Der Code ist falsch oder abgelaufen. Bitte noch einmal versuchen.",
     lessonLevel: { beginner: "Anfänger", intermediate: "Mittelstufe", advanced: "Fortgeschritten" },
     lessonLine: "{level}, Schritt {step}, {score} %",
     connectGmail: "Gmail verbinden",
@@ -830,8 +818,6 @@ export const UI: Record<
     botCopied: "Kopiert",
     botCancel: "Abbrechen",
     skipToConversation: "Zum Gespräch springen",
-    live: "Aktuelle Lage",
-    locationOff: "Standort aus",
     location: "Standort",
     display: "Anzeige",
     textSize: "Textgröße",
@@ -856,6 +842,7 @@ export const UI: Record<
     suggestionsLabel: "Vorschläge",
     language: "Sprache",
     notable: { rain: "Draußen regnet es.", snow: "Draußen schneit es.", storm: "Draußen ist ein Gewitter.", air: "Die Luft ist heute ungesund.", traffic: "Es ist viel Verkehr.", bus: "Bus {route} fährt in {n} Minuten." },
+    hud: { weather: "Wetter", air: "Luft", traffic: "Verkehr", bus: "Nächster Bus", taxi: "Nächstes Taxi", map: "Karte", gps: "GPS", set: "Gewählt", approx: "ungefähr", min: "Min.", aqi: {"good": "Gut", "moderate": "Mäßig", "sensitive": "Ungesund für Empfindliche", "unhealthy": "Ungesund", "very_unhealthy": "Sehr ungesund", "hazardous": "Gefährlich"}, level: {"light": "Frei", "moderate": "Mäßig", "heavy": "Stau"}, kinds: {"clear": "Klar", "partly": "Teils bewölkt", "cloudy": "Bewölkt", "fog": "Nebel", "drizzle": "Nieselregen", "rain": "Regen", "storm": "Gewitter", "snow": "Schnee", "sleet": "Schneeregen", "hail": "Hagel"}, feels: "Gefühlt {t}", today: "Heute", whereTitle: "Wo sind Sie?", whereWhy: "Jarvis nutzt den genauen Standort Ihres Telefons für Wetter, Foto, Luft, Verkehr und Busse dort, wo Sie wirklich sind. Er dient nur der jeweiligen Anfrage und wird nie gespeichert.", allow: "Genauen Standort verwenden", setCity: "Meine Stadt festlegen", notNow: "Nicht jetzt", myCity: "Meine Stadt", cityPlaceholder: "z. B. Erdenet", cityHelp: "Wird genutzt, wenn GPS aus oder nicht verfügbar ist.", openMap: "Live-Karte öffnen", fullscreen: "Vollbild", voiceVia: "Stimme: {name}", noLocation: "Standort unbekannt", photo: "Foto", aqiShort: "LQI", denied: "Standortzugriff abgelehnt. Bitte Stadt festlegen." },
   },
 };
 

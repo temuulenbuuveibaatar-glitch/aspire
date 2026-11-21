@@ -22,7 +22,7 @@ const declarations = TOOL_SPECS.map((t) => ({ name: t.name, description: t.descr
 
 let searchSupported = process.env.GEMINI_SEARCH !== "0";
 
-async function call(contents: Content[]): Promise<Content> {
+async function call(contents: Content[], note: string): Promise<Content> {
   const tools: unknown[] = [{ functionDeclarations: declarations }];
   if (searchSupported) tools.push({ googleSearch: {} });
 
@@ -30,7 +30,7 @@ async function call(contents: Content[]): Promise<Content> {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
+      systemInstruction: { parts: [{ text: SYSTEM }, { text: note }] },
       contents,
       tools,
       generationConfig: { maxOutputTokens: 2048 },
@@ -43,7 +43,7 @@ async function call(contents: Content[]): Promise<Content> {
     // Some models can't combine Google Search with function calling: retry without it.
     if (res.status === 400 && searchSupported && /search|tool/i.test(detail)) {
       searchSupported = false;
-      return call(contents);
+      return call(contents, note);
     }
     throw new Error(`Gemini error ${res.status}: ${detail}`);
   }
@@ -61,20 +61,22 @@ export const gemini: Brain = {
   async ask(text, lang: Lang, history, run) {
     const contents: Content[] = [
       ...history.map((t): Content => ({ role: t.role === "user" ? "user" : "model", parts: [{ text: t.text }] })),
-      { role: "user", parts: [{ text: `${text}\n\n(${contextNote(lang, run)})` }] },
+      { role: "user", parts: [{ text }] },
     ];
 
+    const note = contextNote(lang, run);
     for (let step = 0; step < MAX_STEPS; step++) {
-      const content = await call(contents);
+      const content = await call(contents, note);
       const calls = content.parts.filter((p) => p.functionCall);
       if (calls.length === 0) {
-        const reply = content.parts
-          .filter((p) => p.text && !p.thought)
-          .map((p) => p.text)
-          .join("")
-          .trim();
+        const reply = forSpeech(
+          content.parts
+            .filter((p) => p.text && !p.thought)
+            .map((p) => p.text)
+            .join(""),
+        );
         if (!reply) throw new Error("Gemini returned no text");
-        return forSpeech(reply);
+        return reply;
       }
       // Send the model turn back unchanged (keeps thought signatures), then the results.
       contents.push({ role: "model", parts: content.parts });

@@ -4,12 +4,13 @@
 // network city. There is no default city: Aspire serves every country.
 import { airQualityAt, currentWeather, geocode, mapsConfigured } from "@/lib/maps";
 import type { SkyKind } from "@/lib/ambient-types";
+import { UA } from "@/lib/site";
 import { str, type Tool, type ToolContext, type WeatherCardDay } from "./types";
 
-const UA = { "User-Agent": "Aspire/1.0 (voice assistant; https://github.com/temuulenbuuveibaatar-glitch/aspire)" };
+const UA_HEADERS = { "User-Agent": UA };
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(10_000) });
+  const res = await fetch(url, { headers: UA_HEADERS, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`${new URL(url).host} returned ${res.status}`);
   return (await res.json()) as T;
 }
@@ -37,7 +38,7 @@ function hereOf(ctx: ToolContext): Loc | null {
 const knowsWhere = (place: string, ctx: ToolContext) => Boolean(place || hereOf(ctx) || ctx.city);
 
 /** Open-Meteo geocoding (free, no key). */
-async function openMeteoGeocode(place: string): Promise<Loc> {
+export async function openMeteoGeocode(place: string): Promise<Loc> {
   const data = await getJson<{ results?: Array<{ name: string; country?: string; latitude: number; longitude: number }> }>(
     `https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(place)}`,
   );

@@ -6,17 +6,17 @@
 // audio; this component just renders them and reports intent through callbacks.
 
 import { ArrowUp, LoaderCircle, Mic, Square } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type Ref,
 } from "react";
+import { useStill } from "@/lib/display-prefs";
 import { LANG_NAMES, type Lang } from "@/lib/lang";
 import { cn } from "@/lib/utils";
 
@@ -120,23 +120,6 @@ export function composerMode(phase: ComposerPhase, draft: string): ComposerMode 
 const SPRING = { type: "spring", bounce: 0, duration: 0.35 } as const;
 const EXIT = { duration: 0.23 } as const; // 65% of the enter duration
 const CALM = { duration: 0.15 } as const;
-
-// ---- motion policy (reduced motion + in-app Calm mode on <html data-calm="true">) -----------
-
-function subscribeCalm(cb: () => void) {
-  const mo = new MutationObserver(cb);
-  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-calm"] });
-  return () => mo.disconnect();
-}
-function useStill(): boolean {
-  const reduced = useReducedMotion() ?? false;
-  const calm = useSyncExternalStore(
-    subscribeCalm,
-    () => document.documentElement.dataset.calm === "true",
-    () => false,
-  );
-  return reduced || calm;
-}
 
 function setRef<T>(ref: Ref<T> | undefined, value: T | null) {
   if (!ref) return;

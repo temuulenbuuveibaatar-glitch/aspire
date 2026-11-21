@@ -25,6 +25,7 @@ export default function Privacy() {
             хадгалагдана.
           </li>
           <li>Gmail-ийг зөвхөн уншина, захидлын мэдээллийг хадгалдаггүй.</li>
+          <li>Google Calendar: таныг асуухад өнөөдрийн болон энэ долоо хоногийн үйл явдлыг уншина; үйл явдлыг зөвхөн таныг &quot;Нэмэх&quot; дарсны дараа нэмнэ.</li>
           <li>Мессеж, нийтлэл, SMS, дуудлага, имэйлийг зөвхөн таныг баталгаажуулах товч дарсны дараа илгээнэ.</li>
           <li>Бид зар сурталчилгааны хянах хэрэгсэл ашигладаггүй. Таны мэдээллийг худалдахгүй.</li>
         </ul>
@@ -48,12 +49,17 @@ export default function Privacy() {
 
         <h2>Байршил ба орчны мэдээлэл</h2>
         <p>
-          Таны байгаа газрын цаг агаар (бороо, цас), агаарын чанар, замын түгжрэл, ойролцоох автобусны буудлыг харуулахын тулд{" "}
-          <b>хотын түвшний сүлжээний байршил</b> (IP хаягаас Vercel тодорхойлсон хот, ойролцоох солбицол) болон, хэрэв та зөвшөөрвөл,{" "}
-          <b>төхөөрөмжийн байршлыг</b> ашиглана. Байршлыг ойролцоогоор 1 км хүртэл бөөрөнхийлж, зөвхөн энэ мэдээллийг авахын тулд Google
-          Maps Platform болон Open-Meteo руу илгээнэ. Бид байршлыг хадгалдаггүй, таны бүртгэлтэй холбодоггүй: үр дүн серверийн санах
-          ойд 10 минут хүртэл (замын хөдөлгөөн 20 минут, агаарын чанар 30 минут, 3 өдрийн урьдчилсан мэдээ 3 цаг, ойролцоох буудал ба хотын төв нэг өдөр хүртэл) түр байгаад устана.
-          Төхөөрөмжийн байршлыг хөтчийн тохиргооноос хэзээ ч унтрааж болно.
+          Таны байгаа газрын цаг агаар (бороо, цас), агаарын чанар, замын түгжрэл, ойролцоох буудал, дараагийн автобус, такси болон
+          тухайн газрын зургийг харуулахын тулд байршлыг ийм дарааллаар ашиглана: та зөвшөөрвөл <b>төхөөрөмжийн байршил</b>{" "}
+          (ойролцоогоор 11 м); эс бөгөөс <b>таны сонгосон хот</b>; эс бөгөөс <b>сүлжээний ойролцоо байршил</b> (IP хаягаас Vercel
+          тодорхойлсон хот). Нарийвчилсан байршлыг зөвхөн тухайн хүсэлтэд хариулахад ашиглана: хадгалахгүй, бүртгэлтэй тань холбохгүй.
+          Орчны мэдээлэлд Google Maps Platform болон Open-Meteo руу ойролцоогоор 1 км хүртэл бөөрөнхийлсөн байршил (мөн таны бичсэн
+          хотын нэр) л илгээгдэнэ; байршил хуваалцах үед чиглэл эсвэл ойролцоох газар асуувал Google ойролцоогоор 100 м нарийвчлалтай
+          байршил авна. Байршил хүсэлтийн биед явах тул сайтын бүртгэлд үлддэггүй; буудал хүртэлх зайг манай сервер нарийвчилсан байршлаас тооцоод мартана. Үр дүн серверийн санах ойд түр байгаад
+          устана: цаг агаар 10 минут, дараагийн автобус 10 минут, замын хөдөлгөөн 20 минут, агаарын чанар 30 минут, урьдчилсан мэдээ 3
+          цаг, буудал, такси, хотын төв ба зураг нэг өдөр хүртэл. Арын зургийг Google Maps-ээс авах ба зурагчны нэрийг дэлгэц дээр
+          үргэлж харуулна. Эрдэнэт хотын автобусны шууд байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил
+          огт илгээгдэхгүй. Төхөөрөмжийн байршлыг Тохиргоо эсвэл хөтчийн тохиргооноос хэзээ ч унтрааж болно.
         </p>
 
         <h2>Мэдээллийн сан (Supabase)</h2>
@@ -82,10 +88,17 @@ export default function Privacy() {
           <a href={GOOGLE_POLICY}>Google API Services User Data Policy</a>-ийн, түүний дотор Limited Use шаардлагыг мөрдөнө.
         </p>
 
+        <h2>Google Calendar</h2>
+        <p>
+          Calendar-аа холбовол Aspire <code>calendar.events</code> эрх авна. Таныг асуухад өнөөдрийн эсвэл энэ долоо хоногийн үйл
+          явдлыг уншина; шинэ үйл явдлыг зөвхөн та картан дээрх &quot;Нэмэх&quot; товчийг дарсны дараа нэмнэ. Юу ч хадгалдаггүй.
+        </p>
+
         <h2>Дуу хоолой ба текст</h2>
         <p>
           <b>Дуу хоолой:</b> товчийг дарсны дараа л микрофон асна. Бичлэг Microsoft Azure Speech рүү очиж текст болно; бид бичлэгийг
-          хадгалдаггүй. Дуугаар өгөх хариултыг мөн Azure Speech үүсгэнэ. <b>Текст:</b> таны асуулт, сүүлийн хэдэн яриа хариулт гаргахад
+          хадгалдаггүй. Дуугаар өгөх хариултыг ElevenLabs (боломжтой үед) эсвэл Microsoft Azure Speech үүсгэнэ; хариултын текстийг
+          зөвхөн дуу болгохын тулд тэдэнд илгээх ба бид хадгалдаггүй. Үүсгэсэн дууг серверийн санах ойд 10 минут хүртэл л байлгана. <b>Текст:</b> таны асуулт, сүүлийн хэдэн яриа хариулт гаргахад
           хэрэглэгдэнэ; яриа манай мэдээллийн санд хадгалагдахгүй. <b>Техникийн мэдээлэл:</b> аюулгүй байдал, хэт ачааллаас хамгаалахын
           тулд IP хаягийг түр хугацаанд (нэг минут) санах ойд хадгална. Алдааны бүртгэлд таны асуултын агуулгыг бичдэггүй.
         </p>
@@ -104,10 +117,17 @@ export default function Privacy() {
           <li>Vercel: сайтыг байршуулах.</li>
           <li>Anthropic Claude, DeepSeek, Google Gemini: хиймэл оюуны хариулт. Вэб хайлтыг Claude хийнэ.</li>
           <li>Microsoft Azure Speech: яриа таних, дуугаар хариулах.</li>
-          <li>Google: Gmail API, нэвтрэлт. Apple: нэвтрэлт.</li>
+          <li>ElevenLabs: дуугаар хариулах (хариултын текст).</li>
+          <li>Google: Gmail API, Google Calendar API, нэвтрэлт. Apple: нэвтрэлт.</li>
+          <li>YouTube (Google): таны хайх үг; тоглуулагч youtube-nocookie.com-оос ачаалагдана.</li>
+          <li>Spotify: таны хайх үг; тоглуулагч open.spotify.com-оос ачаалагдах ба өөрийн cookie тавьж болно.</li>
           <li>Telegram, Discord, Slack: ботууд.</li>
           <li>Open-Meteo (цаг агаар, агаарын бохирдол), Wikipedia (мэдлэг), open.er-api.com (валютын ханш).</li>
-          <li>Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар ба автобусны буудал, замын түгжрэл, цаг агаар, агаарын бохирдол.</li>
+          <li>
+            Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар, автобусны буудал ба такси, замын түгжрэл, цаг агаар, агаарын
+            бохирдол, газрын зураг (зурагчны нэрийг харуулна).
+          </li>
+          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): Эрдэнэт хотын автобусны шууд байршил.</li>
         </ul>
         <p>
           Эдгээр компани өөрсдийн нөхцөлийн дагуу мэдээллийг аюулгүй байдлын зорилгоор богино хугацаанд хадгалж болно.{" "}
@@ -146,6 +166,7 @@ export default function Privacy() {
             Only if you link a Telegram, Discord or Slack bot is a copy of them kept in our database (Supabase, Seoul, South Korea).
           </li>
           <li>Gmail is read-only, and nothing from your mail is stored.</li>
+          <li>Google Calendar: today&apos;s or this week&apos;s events are read when you ask; an event is added only after you press Add.</li>
           <li>Messages, posts, SMS, calls and emails are only sent after you tap a confirm button.</li>
           <li>No advertising trackers, and we never sell your data.</li>
         </ul>
@@ -169,12 +190,19 @@ export default function Privacy() {
 
         <h2>Your location and live conditions</h2>
         <p>
-          To show the weather where you are (rain or snow), air quality, traffic and nearby bus stops, Aspire uses your{" "}
-          <b>city-level network location</b> (the city and approximate coordinates Vercel derives from your IP address) and, only if you
-          allow it, your <b>device location</b>. The position is rounded to about 1 km and sent to Google Maps Platform and Open-Meteo
-          only to fetch these conditions. We do not store your location or link it to your account: the results stay in server memory
-          for up to 10 minutes (traffic up to 20 minutes, air quality up to 30 minutes, the 3-day forecast up to 3 hours, nearby stops and the city centre up to a day) and are then discarded. You
-          can turn device location off at any time in your browser settings.
+          To show the weather where you are (rain or snow), air quality, traffic, nearby stops, the next bus, taxis and a photo of your
+          area, Aspire uses, in this order: your <b>device location</b>, only if you allow it (about 11 m); otherwise <b>the city you
+          set</b>; otherwise your <b>approximate network location</b> (the city Vercel derives from your IP address). The precise
+          position is used only to answer that request: it is never stored or linked to your account. It travels in the request body,
+          so it is not kept in our request logs. For live conditions, Google Maps Platform and Open-Meteo receive only a position
+          rounded to about 1 km (and the city name you typed, if any); when you ask for directions or nearby places with location
+          sharing on, Google receives your position to about 100 m; distances to stops are worked
+          out from the precise position on our server and then forgotten. Results stay in server memory for a short time and are then
+          discarded: weather and the next bus 10 minutes, traffic 20 minutes, air quality 30 minutes, the forecast 3 hours, and stops,
+          taxis, the city centre and the photo up to a day. The background photo comes from Google Maps, and its author is always
+          credited on screen. Live bus positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic
+          camera service; your location is never sent to it. You can turn device location off at any time in Settings or in your
+          browser settings.
         </p>
 
         <h2>Our database (Supabase)</h2>
@@ -203,10 +231,18 @@ export default function Privacy() {
           <a href={GOOGLE_POLICY}>Google API Services User Data Policy</a>, including the Limited Use requirements.
         </p>
 
+        <h2>Google Calendar</h2>
+        <p>
+          If you connect your calendar, Aspire gets the <code>calendar.events</code> scope. It reads today&apos;s or this week&apos;s
+          events when you ask, and adds an event only after you press Add on the card. Nothing is stored.
+        </p>
+
         <h2>Voice and text</h2>
         <p>
           <b>Voice:</b> the microphone turns on only after you press the button. The recording goes to Microsoft Azure Speech and is
-          turned into text; we don&apos;t keep it. Spoken replies are also made by Azure Speech. <b>Text:</b> your question and the last
+          turned into text; we don&apos;t keep it. Spoken replies are made by ElevenLabs (when available) or Microsoft Azure Speech;
+          the reply text is sent to them only to make the audio, and we do not keep it. The audio is held in server memory for up to
+          10 minutes. <b>Text:</b> your question and the last
           few turns of the conversation are used to answer; conversations are not stored in our database. <b>Technical data:</b> your IP
           address is kept in memory for about one minute to protect the service from abuse. Error logs do not contain what you said.
         </p>
@@ -225,10 +261,17 @@ export default function Privacy() {
           <li>Vercel: hosting.</li>
           <li>Anthropic Claude, DeepSeek, Google Gemini: AI answers. Web search is done through Claude.</li>
           <li>Microsoft Azure Speech: voice recognition and spoken replies.</li>
-          <li>Google: Gmail API and sign-in. Apple: sign-in.</li>
+          <li>ElevenLabs: spoken replies (the reply text).</li>
+          <li>Google: Gmail API, Google Calendar API and sign-in. Apple: sign-in.</li>
+          <li>YouTube (Google): your search words; the player loads from youtube-nocookie.com.</li>
+          <li>Spotify: your search words; the player loads from open.spotify.com, which may set its own cookies.</li>
           <li>Telegram, Discord, Slack: bots.</li>
           <li>Open-Meteo (weather and air quality), Wikipedia (encyclopedia), open.er-api.com (exchange rates).</li>
-          <li>Google Maps Platform: directions, public transport, nearby places and bus stops, traffic, weather and air quality.</li>
+          <li>
+            Google Maps Platform: directions, public transport, nearby places, bus stops and taxis, traffic, weather, air quality and place
+            photos (credited to their authors).
+          </li>
+          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): live bus positions in Erdenet.</li>
         </ul>
         <p>
           These providers may keep data briefly for safety and abuse monitoring under their own terms.{" "}
@@ -259,7 +302,15 @@ export default function Privacy() {
           <li>默认情况下，您的记忆、提醒、流程、课程、设置以及 Discord/Slack 频道链接只保存在您的设备上。</li>
           <li>只有在您关联 Telegram、Discord 或 Slack 机器人时，才会在我们的数据库（Supabase，韩国首尔）中保存一份副本。</li>
           <li>Gmail 为只读，不保存任何邮件内容。</li>
-          <li>天气、空气质量、路况和附近车站使用约 1 公里精度的位置，不会保存，也不会与您的账户关联。</li>
+          <li>Google 日历：在您询问时读取今天或本周的日程；只有在您点击“添加”后才会添加日程，不保存任何内容。</li>
+          <li>
+            天气、空气质量、路况、车站、下一班车、出租车和背景照片：仅在您允许时使用设备的精确位置（约 11 米），否则使用您设置的城市，再否则使用网络大致位置。精确位置只用于当次请求，不会保存，也不会与您的账户关联。实时状况发送给
+            Google 的位置约为 1 公里精度；开启位置共享并询问路线或附近地点时，Google 会收到约 100 米精度的位置。背景照片来自 Google 地图并注明作者；额尔登特的实时公交数据来自 Орхон ТКХДТ。
+          </li>
+          <li>
+            语音回复由 ElevenLabs（可用时）或 Microsoft Azure Speech 生成；回复文本仅用于生成音频，我们不保存，音频在服务器内存中最多保留 10 分钟。
+            YouTube（Google）和 Spotify 会收到您的搜索词；播放器分别从 youtube-nocookie.com 和 open.spotify.com 加载，后者可能设置自己的 Cookie。
+          </li>
           <li>消息、短信、电话和邮件只有在您点击确认按钮后才会发送。没有广告追踪，我们绝不出售您的数据。</li>
         </ul>
         <p>
@@ -279,7 +330,20 @@ export default function Privacy() {
           </li>
           <li>Только если вы подключите бота Telegram, Discord или Slack, их копия хранится в нашей базе (Supabase, Сеул, Южная Корея).</li>
           <li>Доступ к Gmail только для чтения, содержимое писем не сохраняется.</li>
-          <li>Для погоды, качества воздуха, пробок и остановок используется местоположение с точностью около 1 км; оно не хранится.</li>
+          <li>Google Календарь: события на сегодня или неделю читаются по вашему запросу; событие добавляется только после нажатия «Добавить». Ничего не сохраняется.</li>
+          <li>
+            Погода, качество воздуха, пробки, остановки, ближайший автобус, такси и фоновое фото: точное местоположение устройства (около
+            11 м) используется только с вашего разрешения, иначе выбранный вами город, иначе приблизительное сетевое местоположение.
+            Точная позиция нужна только для этого запроса, не хранится и не связывается с аккаунтом. Для текущих условий в Google
+            передаётся позиция с точностью около 1 км; если при включённой передаче местоположения вы спрашиваете маршрут или места
+            рядом, Google получает позицию с точностью около 100 м. Фоновое фото берётся из Google Карт с указанием автора; данные об автобусах Эрдэнэта предоставляет
+            Орхон ТКХДТ.
+          </li>
+          <li>
+            Голосовые ответы создаёт ElevenLabs (если доступен) или Microsoft Azure Speech; текст ответа отправляется им только для
+            озвучивания, мы его не храним, аудио остаётся в памяти сервера не дольше 10 минут. YouTube (Google) и Spotify получают ваш
+            поисковый запрос; плееры загружаются с youtube-nocookie.com и open.spotify.com (последний может ставить свои cookie).
+          </li>
           <li>Сообщения, SMS, звонки и письма отправляются только после подтверждения. Никаких рекламных трекеров, данные не продаются.</li>
         </ul>
         <p>
@@ -299,7 +363,21 @@ export default function Privacy() {
           </li>
           <li>Nur wenn Sie einen Telegram-, Discord- oder Slack-Bot verknüpfen, liegt eine Kopie in unserer Datenbank (Supabase, Seoul, Südkorea).</li>
           <li>Gmail ist nur lesbar; aus Ihren E-Mails wird nichts gespeichert.</li>
-          <li>Für Wetter, Luftqualität, Verkehr und Haltestellen wird ein auf etwa 1 km gerundeter Standort genutzt und nicht gespeichert.</li>
+          <li>Google Kalender: Termine von heute oder dieser Woche werden gelesen, wenn Sie fragen; ein Termin wird erst nach Tippen auf „Hinzufügen“ eingetragen. Nichts wird gespeichert.</li>
+          <li>
+            Wetter, Luftqualität, Verkehr, Haltestellen, nächster Bus, Taxis und Hintergrundfoto: Der genaue Gerätestandort (etwa 11 m)
+            wird nur mit Ihrer Erlaubnis genutzt, sonst die von Ihnen gewählte Stadt, sonst ein ungefährer Netzwerkstandort. Der genaue
+            Standort dient nur der jeweiligen Anfrage, wird nicht gespeichert und nicht mit Ihrem Konto verknüpft. Für die Live-Lage geht
+            an Google ein auf etwa 1 km gerundeter Standort; fragen Sie bei eingeschalteter Standortfreigabe nach Routen oder Orten in der
+            Nähe, erhält Google Ihren Standort auf etwa 100 m genau. Das Hintergrundfoto stammt aus Google Maps, mit Nennung des Urhebers; die Live-Busdaten für
+            Erdenet liefert Орхон ТКХДТ.
+          </li>
+          <li>
+            Gesprochene Antworten erzeugt ElevenLabs (wenn verfügbar) oder Microsoft Azure Speech; der Antworttext geht nur zur
+            Vertonung dorthin, wir speichern ihn nicht, das Audio bleibt höchstens 10 Minuten im Serverspeicher. YouTube (Google) und
+            Spotify erhalten Ihre Suchwörter; die Player laden von youtube-nocookie.com bzw. open.spotify.com (letzterer kann eigene
+            Cookies setzen).
+          </li>
           <li>Nachrichten, SMS, Anrufe und E-Mails gehen erst nach Ihrer Bestätigung raus. Keine Werbe-Tracker, kein Verkauf Ihrer Daten.</li>
         </ul>
         <p>

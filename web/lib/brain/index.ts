@@ -53,12 +53,17 @@ export async function ask(
   const brains = activeBrains();
   if (brains.length === 0) throw new NoBrainConfigured();
 
+  // Every provider wants the conversation to start with the person, not with an earlier reply,
+  // and Claude rejects empty turns (a failed answer saved as "").
+  const recent = history.filter((t) => t.text.trim()).slice(-8);
+  while (recent[0]?.role === "assistant") recent.shift();
+
   let lastError: unknown;
   for (const brain of brains) {
     // Fresh run per provider so a failed attempt leaves no half-done actions behind.
     const run: AgentRun = { ctx: { now, device, actions: [], lang, ...extra }, steps: [], sources: [] };
     try {
-      const reply = await brain.ask(text, lang, history.slice(-8), run);
+      const reply = await brain.ask(text, lang, recent, run);
       return { reply, brain: brain.name, actions: run.ctx.actions, steps: run.steps, sources: run.sources };
     } catch (e) {
       lastError = e;

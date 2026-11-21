@@ -266,6 +266,11 @@ function stamp(raw: Record<string, unknown>): Stamp | null {
   return raw.deleted === true ? { updatedAt: raw.updatedAt, deleted: true } : { updatedAt: raw.updatedAt };
 }
 
+/** A typed city name: no control characters or markup, at most 80 characters. */
+export function cleanCity(v: string): string {
+  return v.replace(/[\u0000-\u001f\u007f<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
 function parseSettings(raw: unknown): StampedSettings {
   if (!isObj(raw) || !isTime(raw.updatedAt)) return { updatedAt: EPOCH };
   const s: StampedSettings = { updatedAt: raw.updatedAt };
@@ -274,6 +279,8 @@ function parseSettings(raw: unknown): StampedSettings {
   if (typeof raw.gmailRefreshToken === "string") s.gmailRefreshToken = raw.gmailRefreshToken.slice(0, 2000);
   if (typeof raw.gmailConnected === "boolean") s.gmailConnected = raw.gmailConnected;
   if (typeof raw.shareLocation === "boolean") s.shareLocation = raw.shareLocation;
+  const city = typeof raw.city === "string" ? cleanCity(raw.city) : "";
+  if (city) s.city = city;
   if (typeof raw.lastBriefingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.lastBriefingDate)) s.lastBriefingDate = raw.lastBriefingDate;
   if (isObj(raw.webhooks)) {
     const w: { discord?: string; slack?: string } = {};

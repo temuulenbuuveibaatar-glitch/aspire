@@ -9,29 +9,19 @@
 //   - a 48-segment voice ring that follows spectrum bands (or the level when no bands exist),
 //   - per-contour spectrum gain (low bins move the lower lines, high bins the upper lines),
 //   - small additive weather offsets (rain wave, snow flecks, fog, wind turn, storm jitter, AQI tint),
-//   - a confirm tone, an error settle and an interrupted squash,
+//   - an error settle,
 //   - still, distinct frames for reduced motion and Calm mode, with a 150ms crossfade.
 // Colour always comes from `currentColor`, so the caller's text colour tints the whole orb.
 
 import * as React from "react";
+import { useCalm, useMedia } from "@/lib/display-prefs";
 import type { Lang } from "@/lib/lang";
 import { cn } from "@/lib/utils";
 
-export type VoiceOrbState =
-  | "idle"
-  | "connecting"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "interrupted"
-  | "muted"
-  | "error";
-
-/** `confirm` holds the orb still with a steady amber ring (a send-for-me card awaits Confirm). */
-export type VoiceOrbTone = "default" | "confirm";
+export type VoiceOrbState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
 /** Same union as `SkyFamily` in `lib/sky-scene.ts` (spec section 5.1), declared here so the orb has no dependency on it. */
-export type VoiceOrbSkyFamily = "clear" | "cloudy" | "fog" | "rain" | "storm" | "snow";
+export type VoiceOrbSkyFamily = "clear" | "cloud" | "fog" | "rain" | "storm" | "snow";
 
 export interface VoiceOrbWeather {
   family: VoiceOrbSkyFamily;
@@ -41,12 +31,9 @@ export interface VoiceOrbWeather {
   storm: boolean;
 }
 
-/**
- * Halo data. The orb itself only needs to know a halo exists (the canvas grows to
- * `size * 1.42` and draws the voice ring on the halo radius); the SVG clock ring and inner arc
- * are drawn by `OrbHalo`. Any `{ clock, inner }` object is accepted, or `true`.
- */
-export interface VoiceOrbHalo {
+/** Halo data: the orb only needs to know a halo exists (the canvas grows to `size * 1.42` and
+ * draws the voice ring on the halo radius). Any `{ clock, inner }` object is accepted, or `true`. */
+interface VoiceOrbHalo {
   clock?: unknown;
   inner?: unknown;
 }
@@ -55,11 +42,10 @@ export interface VoiceOrbHalo {
 type Level = number | (() => number);
 
 /** Spectrum bins 0..1 (16..24 of them), read every frame. Values above 1 are treated as 0..255 bytes. */
-export type VoiceOrbBands = () => Float32Array | Uint8Array | ArrayLike<number> | null;
+type VoiceOrbBands = () => Float32Array | Uint8Array | ArrayLike<number> | null;
 
-export interface VoiceOrbProps extends Omit<React.ComponentProps<"div">, "children"> {
+interface VoiceOrbProps extends Omit<React.ComponentProps<"div">, "children"> {
   state?: VoiceOrbState;
-  tone?: VoiceOrbTone;
   /** Audio level 0..1: the user's input while listening, the voice output while speaking. */
   level?: Level;
   /** Spectrum bands, e.g. from `createBands(analyser)`. Optional: the level drives the ring without it. */
@@ -72,147 +58,77 @@ export interface VoiceOrbProps extends Omit<React.ComponentProps<"div">, "childr
   ring?: boolean;
   /** Sphere diameter in px. With a halo the element is `size * 1.42`. */
   size?: number;
-  /** Force reduced motion on or off. Defaults to the user's setting (and Calm mode). */
-  reducedMotion?: boolean;
-  /** Force reduced transparency on or off. Defaults to the user's setting (and Calm mode). */
-  reducedTransparency?: boolean;
   /** Accessible name. Defaults to the localised state word. */
   label?: string;
   /** Language of the default accessible name. */
   lang?: Lang;
 }
 
-export const VOICE_ORB_HALO_RATIO = 1.42;
+const VOICE_ORB_HALO_RATIO = 1.42;
 
-/** Window event that triggers the storm `split` jitter (fire it with the lightning flash). */
+/** Window event that triggers the storm `split` jitter (Sky fires it with the lightning flash). */
 export const ORB_LIGHTNING_EVENT = "aspire:lightning";
-
-/** Dispatch the lightning jitter for every orb on the page (no effect unless its weather is a storm). */
-export function pulseVoiceOrbLightning() {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(ORB_LIGHTNING_EVENT));
-}
 
 /* ---------------------------------------------------------------------------------------------
  * Words (status word under the orb and the default accessible name), in all five languages.
  * Uppercase is a styling choice of the caller (never for Chinese).
  * -------------------------------------------------------------------------------------------*/
 
-type WordKey = Exclude<VoiceOrbState, "idle"> | "ready" | "confirm";
+type WordKey = Exclude<VoiceOrbState, "idle"> | "ready";
 
-export const VOICE_ORB_WORDS: Record<Lang, Record<WordKey, string>> = {
+const VOICE_ORB_WORDS: Record<Lang, Record<WordKey, string>> = {
   en: {
     ready: "Ready",
-    connecting: "Connecting",
     listening: "Listening",
     thinking: "Thinking",
     speaking: "Speaking",
-    confirm: "Waiting for your confirmation",
-    interrupted: "Interrupted",
-    muted: "Microphone off",
     error: "Something went wrong",
   },
   mn: {
     ready: "Бэлэн",
-    connecting: "Холбогдож байна",
     listening: "Сонсож байна",
     thinking: "Бодож байна",
     speaking: "Ярьж байна",
-    confirm: "Таны баталгаажуулалтыг хүлээж байна",
-    interrupted: "Тасалдсан",
-    muted: "Микрофон унтраалттай",
     error: "Алдаа гарлаа",
   },
   zh: {
     ready: "就绪",
-    connecting: "正在连接",
     listening: "正在聆听",
     thinking: "正在思考",
     speaking: "正在说话",
-    confirm: "等待您的确认",
-    interrupted: "已中断",
-    muted: "麦克风已关闭",
     error: "出了点问题",
   },
   ru: {
     ready: "Готов",
-    connecting: "Подключение",
     listening: "Слушаю",
     thinking: "Думаю",
     speaking: "Говорю",
-    confirm: "Жду вашего подтверждения",
-    interrupted: "Прервано",
-    muted: "Микрофон выключен",
     error: "Что-то пошло не так",
   },
   de: {
     ready: "Bereit",
-    connecting: "Verbinde",
     listening: "Höre zu",
     thinking: "Denke nach",
     speaking: "Spreche",
-    confirm: "Warte auf Ihre Bestätigung",
-    interrupted: "Unterbrochen",
-    muted: "Mikrofon aus",
     error: "Etwas ist schiefgelaufen",
   },
 };
 
-const HOLDS_CONFIRM = (state: VoiceOrbState) => state === "idle" || state === "thinking" || state === "connecting" || state === "interrupted";
-
-/** The localised word for a state ("Ready" for idle). The confirm tone wins while the orb is at rest. */
-export function voiceOrbWord(state: VoiceOrbState, lang: Lang = "en", tone: VoiceOrbTone = "default"): string {
+/** The localised word for a state ("Ready" for idle). */
+export function voiceOrbWord(state: VoiceOrbState, lang: Lang = "en"): string {
   const words = VOICE_ORB_WORDS[lang] ?? VOICE_ORB_WORDS.en;
-  if (tone === "confirm" && HOLDS_CONFIRM(state)) return words.confirm;
   return state === "idle" ? words.ready : words[state];
 }
 
 /** The colour class for a state (spec section 6.1). The orb draws in `currentColor`. */
-export function voiceOrbColorClass(state: VoiceOrbState, tone: VoiceOrbTone = "default"): string {
+function voiceOrbColorClass(state: VoiceOrbState): string {
   if (state === "error") return "text-danger";
-  if (state === "muted" || (tone === "confirm" && HOLDS_CONFIRM(state))) return "text-signal";
-  if (state === "thinking") return "text-ink";
-  if (state === "interrupted") return "text-ink-muted";
-  return "text-accent";
-}
-
-/** States whose colour is part of their meaning: the orb sets it itself (callers can still override with `style.color`). */
-function mandatedColor(state: VoiceOrbState, tone: VoiceOrbTone): string | undefined {
-  if (state === "error") return "var(--color-danger, #FF8A8A)";
-  if (state === "muted" || (tone === "confirm" && HOLDS_CONFIRM(state))) return "var(--color-signal, #F5C26B)";
-  return undefined;
+  return state === "thinking" ? "text-ink" : "text-accent";
 }
 
 /* ---------------------------------------------------------------------------------------------
  * User preferences: reduced motion, reduced transparency, and Calm mode (html[data-calm="true"]).
  * -------------------------------------------------------------------------------------------*/
-
-const noop = () => {};
-
-function useMedia(query: string): boolean {
-  return React.useSyncExternalStore(
-    (notify) => {
-      const list = typeof window !== "undefined" ? window.matchMedia?.(query) : undefined;
-      if (!list) return noop;
-      list.addEventListener("change", notify);
-      return () => list.removeEventListener("change", notify);
-    },
-    () => (typeof window !== "undefined" ? (window.matchMedia?.(query).matches ?? false) : false),
-    () => false,
-  );
-}
-
-function useCalm(): boolean {
-  return React.useSyncExternalStore(
-    (notify) => {
-      if (typeof MutationObserver === "undefined") return noop;
-      const watcher = new MutationObserver(notify);
-      watcher.observe(document.documentElement, { attributes: true, attributeFilter: ["data-calm"] });
-      return () => watcher.disconnect();
-    },
-    () => document.documentElement.dataset.calm === "true",
-    () => false,
-  );
-}
 
 const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
@@ -226,7 +142,7 @@ function readLevel(l: Level | undefined): number {
   }
 }
 
-const SKY_FAMILIES: readonly VoiceOrbSkyFamily[] = ["clear", "cloudy", "fog", "rain", "storm", "snow"];
+const SKY_FAMILIES: readonly VoiceOrbSkyFamily[] = ["clear", "cloud", "fog", "rain", "storm", "snow"];
 
 /** Weather comes from the network (via /api/ambient): keep only well-formed, finite values. */
 function cleanWeather(w: VoiceOrbWeather | null | undefined): VoiceOrbWeather | null {
@@ -293,18 +209,13 @@ function f(partial: Partial<OrbForm>): OrbForm {
 const FORMS: Record<VoiceOrbState, OrbForm> = {
   // Breathes 1.00 -> 1.03 over 5s.
   idle: f({ flow: 0.022, stir: 0.32, turn: 0.1, breathe: 0.015 }),
-  connecting: f({ scale: 0.86, flow: 0.012, stir: 0.4, turn: 0.5, trace: 0.3, back: 0.08 }),
   listening: f({ flow: 0.03, stir: 0.6, wave: 0.014, travel: -0.9, turn: 0.16, breathe: 0.01 }),
   // The outline stays calm; the inner light band does the work.
   thinking: f({ scale: 0.86, flow: 0.034, stir: 0.55, turn: 0.3, shimmer: 1 }),
   speaking: f({ flow: 0.026, stir: 0.7, wave: 0.02, travel: 1.3, turn: 0.22 }),
-  interrupted: f({ scale: 0.88, flow: 0.016, squash: 0.16, back: 0.1 }),
-  muted: f({ scale: 0.86, ink: 0.62, back: 0.05, dots: 1 }),
   error: f({ scale: 0.86, ink: 0.55, back: 0.06, split: 1 }),
 };
 
-const CONFIRM_FORM = f({ scale: 0.88, flow: 0.012, stir: 0.12, back: 0.09 });
-const AFTER_INTERRUPT = f({ ...FORMS.idle, ink: 0.82 });
 
 function withLevel(form: OrbForm, state: VoiceOrbState, level: number): OrbForm {
   if (state === "listening") {
@@ -348,26 +259,16 @@ function withWeather(form: OrbForm, weather: VoiceOrbWeather | null | undefined)
 }
 
 /** The form the orb should be in right now (before easing). */
-function targetForm(
-  state: VoiceOrbState,
-  tone: VoiceOrbTone,
-  level: number,
-  weather: VoiceOrbWeather | null | undefined,
-  sinceS: number,
-  reducedTransparency: boolean,
-): OrbForm {
-  let base = FORMS[state];
-  if (state === "interrupted" && sinceS > 0.3) base = AFTER_INTERRUPT;
-  if (tone === "confirm" && HOLDS_CONFIRM(state)) base = CONFIRM_FORM;
-  let form = withWeather(withLevel(base, state, level), weather);
+function targetForm(state: VoiceOrbState, level: number, weather: VoiceOrbWeather | null | undefined, reducedTransparency: boolean): OrbForm {
+  let form = withWeather(withLevel(FORMS[state], state, level), weather);
   if (reducedTransparency) form = { ...form, back: 0, ink: 1 };
   return form;
 }
 
 const STILL_LEVEL = 0.4;
 
-function stillForm(state: VoiceOrbState, tone: VoiceOrbTone, weather: VoiceOrbWeather | null | undefined, reducedTransparency: boolean): OrbForm {
-  const form = targetForm(state, tone, STILL_LEVEL, weather, 0, reducedTransparency);
+function stillForm(state: VoiceOrbState, weather: VoiceOrbWeather | null | undefined, reducedTransparency: boolean): OrbForm {
+  const form = targetForm(state, STILL_LEVEL, weather, reducedTransparency);
   return { ...form, breathe: 0, trace: form.trace < 1 ? 0.55 : 1 };
 }
 
@@ -618,7 +519,6 @@ function segmentAngle(k: number) {
 /** Target length (0..1 of the free range) and alpha for every segment. */
 function ringTargets(
   state: VoiceOrbState,
-  tone: VoiceOrbTone,
   sinceS: number,
   bins: Float32Array,
   nb: number,
@@ -626,17 +526,12 @@ function ringTargets(
   outLen: Float32Array,
   outAlpha: Float32Array,
 ) {
-  const confirm = tone === "confirm" && HOLDS_CONFIRM(state);
   const head = -Math.PI / 2 + TAU * ((sinceS / 1.8) % 1);
-  const fill = reduced ? 1 : Math.min(1, sinceS / 2);
   for (let k = 0; k < SEGS; k++) {
     const m = k < HALF ? k : SEGS - 1 - k; // 0 at the top, 23 at the bottom, on both sides
     let len = 0;
     let alpha = 0;
-    if (confirm) {
-      len = 0.5;
-      alpha = 0.9;
-    } else if (state === "listening" || state === "speaking") {
+    if (state === "listening" || state === "speaking") {
       const bin = bins[Math.min(nb - 1, Math.floor(((HALF - 1 - m) / HALF) * nb))] ?? 0;
       len = reduced ? 0.3 : bin;
       alpha = reduced ? 0.8 : 0.45 + 0.55 * bin;
@@ -644,9 +539,6 @@ function ringTargets(
       if (reduced && state === "listening" && m >= HALF - 5) alpha = 0;
     } else if (state === "idle") {
       alpha = reduced ? 0.5 : 0.36;
-    } else if (state === "connecting") {
-      len = 0.12;
-      alpha = (k + 0.5) / SEGS <= fill ? 0.75 : 0.14;
     } else if (state === "thinking") {
       if (reduced) {
         len = 0.1;
@@ -662,7 +554,7 @@ function ringTargets(
         }
       }
     }
-    // interrupted collapses, muted and error hide the ring: zero length and alpha.
+    // error hides the ring: zero length and alpha.
     outLen[k] = len;
     outAlpha[k] = alpha;
   }
@@ -707,7 +599,6 @@ interface Frame {
   form: OrbForm;
   phase: OrbPhase;
   state: VoiceOrbState;
-  tone: VoiceOrbTone;
   level: number;
   gains: Float32Array | null;
   segLen: Float32Array;
@@ -753,7 +644,7 @@ function render(ctx: CanvasRenderingContext2D, fr: Frame) {
 
   const paintSphere = () => {
     // Reduced motion, idle: a solid sphere.
-    if (fr.reducedMotion && fr.state === "idle" && fr.tone !== "confirm") {
+    if (fr.reducedMotion && fr.state === "idle") {
       ctx.globalAlpha = mul * 0.16;
       ctx.fillStyle = pal.solid;
       ctx.beginPath();
@@ -828,8 +719,7 @@ function render(ctx: CanvasRenderingContext2D, fr: Frame) {
 
   // Reduced motion with no voice ring (small orbs, e.g. the docked one): the still shape is
   // drawn in place of the contour sphere, so every state stays distinct at 36-40px too.
-  const confirmHeld = fr.tone === "confirm" && HOLDS_CONFIRM(fr.state);
-  if (fr.reducedMotion && !fr.ring && !confirmHeld && (fr.state === "listening" || fr.state === "thinking" || fr.state === "speaking")) {
+  if (fr.reducedMotion && !fr.ring && (fr.state === "listening" || fr.state === "thinking" || fr.state === "speaking")) {
     const w = Math.max(1.5, weight * 1.4);
     const outer = Math.min(rim * 1.04, geo.box / 2 - w);
     ctx.strokeStyle = pal.solid;
@@ -901,7 +791,7 @@ function render(ctx: CanvasRenderingContext2D, fr: Frame) {
     }
 
     // Reduced motion: thinking is a double ring, speaking three concentric rings.
-    if (fr.reducedMotion && (fr.state === "thinking" || fr.state === "speaking") && !confirmHeld) {
+    if (fr.reducedMotion && (fr.state === "thinking" || fr.state === "speaking")) {
       const radii = fr.state === "thinking" ? [ringR + segMax * 0.75] : [ringR + segMax * 0.55, ringR + segMax * 1.05];
       ctx.lineWidth = segW;
       ctx.globalAlpha = 0.7 * mul;
@@ -925,7 +815,6 @@ function render(ctx: CanvasRenderingContext2D, fr: Frame) {
 
 interface CanvasProps {
   state: VoiceOrbState;
-  tone: VoiceOrbTone;
   levelFor: () => number;
   bandsFor: () => ReturnType<VoiceOrbBands> | undefined;
   weatherFor: () => VoiceOrbWeather | null | undefined;
@@ -968,9 +857,8 @@ function OrbCanvas(props: CanvasProps) {
     tAlpha: new Float32Array(SEGS),
     clock: 0,
     shownState: props.state,
-    shownTone: props.tone,
     since: 0,
-    fadeFrom: null as { state: VoiceOrbState; tone: VoiceOrbTone } | null,
+    fadeFrom: null as VoiceOrbState | null,
     fadeAt: 0,
     jitterUntil: 0,
     aqiSev: 0,
@@ -992,8 +880,8 @@ function OrbCanvas(props: CanvasProps) {
       return;
     }
     const p = latest.current;
-    // Frame cap: 60 fps while the voice moves or it is thinking, 30 fps at rest (idle, muted,
-    // error...). 90-120 Hz phones otherwise paint the orb two to four times more than needed.
+    // Frame cap: 60 fps while the voice moves or it is thinking, 30 fps at rest (idle,
+    // error). 90-120 Hz phones otherwise paint the orb two to four times more than needed.
     if (!p.reducedMotion && st.lastPaint && st.visible) {
       const busy = p.state === "listening" || p.state === "speaking" || p.state === "thinking";
       const gap = busy ? 1000 / 60 - 2 : 1000 / 30 - 2;
@@ -1021,7 +909,7 @@ function OrbCanvas(props: CanvasProps) {
       canvas.width = bw;
       canvas.height = bh;
     }
-    // The colour only changes with the state, tone or theme; invalidate() resets colorAt then.
+    // The colour only changes with the state or theme; invalidate() resets colorAt then.
     if (!st.colorAt) {
       const raw = getComputedStyle(canvas).color || "";
       if (raw !== st.raw) {
@@ -1033,17 +921,16 @@ function OrbCanvas(props: CanvasProps) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const { state, tone, reducedMotion, reducedTransparency } = p;
+    const { state, reducedMotion, reducedTransparency } = p;
     const weather = p.weatherFor();
 
     // State bookkeeping (time in state, reduced-motion crossfade).
-    if (state !== st.shownState || tone !== st.shownTone) {
+    if (state !== st.shownState) {
       if (reducedMotion) {
-        st.fadeFrom = { state: st.shownState, tone: st.shownTone };
+        st.fadeFrom = st.shownState;
         st.fadeAt = now;
       }
       st.shownState = state;
-      st.shownTone = tone;
       st.since = 0;
     } else {
       st.since += dt;
@@ -1066,15 +953,14 @@ function OrbCanvas(props: CanvasProps) {
     let keep = false;
 
     if (reducedMotion) {
-      const frameFor = (s: VoiceOrbState, t: VoiceOrbTone, mul: number): Frame => {
-        ringTargets(s, t, 99, st.bins.fill(0), st.nb, true, st.tLen, st.tAlpha);
+      const frameFor = (s: VoiceOrbState, mul: number): Frame => {
+        ringTargets(s, 99, st.bins.fill(0), st.nb, true, st.tLen, st.tAlpha);
         return {
           geo,
           ring,
-          form: stillForm(s, t, weather, reducedTransparency),
+          form: stillForm(s, weather, reducedTransparency),
           phase: STILL_PHASE,
           state: s,
-          tone: t,
           level: 0,
           gains: null,
           segLen: st.tLen,
@@ -1090,13 +976,13 @@ function OrbCanvas(props: CanvasProps) {
       };
       const fade = st.fadeFrom ? Math.min(1, (now - st.fadeAt) / 150) : 1;
       if (st.fadeFrom && fade < 1) {
-        render(ctx, frameFor(st.fadeFrom.state, st.fadeFrom.tone, 1 - fade));
+        render(ctx, frameFor(st.fadeFrom, 1 - fade));
         keep = true;
       } else {
         st.fadeFrom = null;
       }
-      render(ctx, frameFor(state, tone, fade));
-      st.form = stillForm(state, tone, weather, reducedTransparency);
+      render(ctx, frameFor(state, fade));
+      st.form = stillForm(state, weather, reducedTransparency);
       st.phase = { ...STILL_PHASE };
       st.level = 0;
       st.segLen.fill(0);
@@ -1130,7 +1016,7 @@ function OrbCanvas(props: CanvasProps) {
       st.nb = nb;
 
       // Ease the form toward its target.
-      let target = targetForm(state, tone, st.level, weather, st.since, reducedTransparency);
+      let target = targetForm(state, st.level, weather, reducedTransparency);
       if (now < st.jitterUntil) target = { ...target, split: Math.max(target.split, 0.15) };
       for (const key of KEYS) {
         const rate = key === "split" || key === "squash" ? 11 : key === "trace" ? 4 : 6;
@@ -1156,7 +1042,7 @@ function OrbCanvas(props: CanvasProps) {
       }
 
       // Ring segments: rise in 60ms, fall in 250ms.
-      ringTargets(state, tone, st.since, st.bins, nb, false, st.tLen, st.tAlpha);
+      ringTargets(state, st.since, st.bins, nb, false, st.tLen, st.tAlpha);
       for (let k = 0; k < SEGS; k++) {
         const tl = st.tLen[k] ?? 0;
         const cl = st.segLen[k] ?? 0;
@@ -1177,7 +1063,6 @@ function OrbCanvas(props: CanvasProps) {
         form,
         phase: st.phase,
         state,
-        tone,
         level: st.level,
         gains,
         segLen: st.segLen,
@@ -1272,10 +1157,10 @@ function OrbCanvas(props: CanvasProps) {
   );
 
   // Anything that changes a still frame: draw again.
-  const { state, tone, reducedMotion, reducedTransparency, weatherKey, halo, ring } = props;
+  const { state, reducedMotion, reducedTransparency, weatherKey, halo, ring } = props;
   React.useEffect(() => {
     invalidate();
-  }, [state, tone, reducedMotion, reducedTransparency, weatherKey, halo, ring, invalidate]);
+  }, [state, reducedMotion, reducedTransparency, weatherKey, halo, ring, invalidate]);
 
   return <canvas ref={ref} aria-hidden data-slot="voice-orb-canvas" className="absolute inset-0 size-full" />;
 }
@@ -1283,15 +1168,12 @@ function OrbCanvas(props: CanvasProps) {
 /** The voice presence: a lit sphere of contour lines with a voice ring, tinted with `currentColor`. */
 export function VoiceOrb({
   state = "idle",
-  tone = "default",
   level,
   bands,
   weather,
   halo,
   ring,
   size = 144,
-  reducedMotion: reducedMotionProp,
-  reducedTransparency: reducedTransparencyProp,
   label,
   lang = "en",
   className,
@@ -1301,8 +1183,8 @@ export function VoiceOrb({
   const prefersReducedMotion = useMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedTransparency = useMedia("(prefers-reduced-transparency: reduce)");
   const calm = useCalm();
-  const reducedMotion = reducedMotionProp ?? (prefersReducedMotion || calm);
-  const reducedTransparency = reducedTransparencyProp ?? (prefersReducedTransparency || calm);
+  const reducedMotion = prefersReducedMotion || calm;
+  const reducedTransparency = prefersReducedTransparency || calm;
 
   const safeWeather = cleanWeather(weather);
   const sources = React.useRef({ level, bands, weather: safeWeather });
@@ -1326,23 +1208,22 @@ export function VoiceOrb({
   const haloOn = Boolean(halo);
   const ringOn = haloOn || (ring ?? px >= 96);
   const box = haloOn ? Math.round(px * VOICE_ORB_HALO_RATIO) : px;
-  const color = mandatedColor(state, tone);
+  // Error is part of its meaning: the orb sets that colour itself (a caller's style.color still wins).
+  const color = state === "error" ? "var(--color-danger, #FF8A8A)" : undefined;
 
   return (
     <div
       role="img"
-      aria-label={label ?? voiceOrbWord(state, lang, tone)}
+      aria-label={label ?? voiceOrbWord(state, lang)}
       data-slot="voice-orb"
       data-voice-state={state}
-      data-voice-tone={tone}
       style={{ width: box, height: box, ...(color ? { color } : null), ...style }}
       // The state sets the colour class (spec 6.1); a caller's text colour class still wins.
-      className={cn("relative shrink-0 select-none", voiceOrbColorClass(state, tone), className)}
+      className={cn("relative shrink-0 select-none", voiceOrbColorClass(state), className)}
       {...props}
     >
       <OrbCanvas
         state={state}
-        tone={tone}
         levelFor={levelFor}
         bandsFor={bandsFor}
         weatherFor={weatherFor}
@@ -1355,5 +1236,3 @@ export function VoiceOrb({
     </div>
   );
 }
-
-export default VoiceOrb;

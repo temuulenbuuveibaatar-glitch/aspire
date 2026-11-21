@@ -1,3 +1,4 @@
+import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 
 // Clerk's provider id for Google. The older "oauth_google" form is deprecated in @clerk/backend.

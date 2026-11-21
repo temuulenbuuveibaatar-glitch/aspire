@@ -36,10 +36,12 @@ export const claude: Brain = {
   configured: () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
 
   async ask(text, lang: Lang, history, run) {
-    const messages: Anthropic.Beta.BetaMessageParam[] = [
-      ...history.map((t) => ({ role: t.role, content: t.text })),
-      { role: "user", content: text },
-      { role: "system", content: contextNote(lang, run) },
+    const messages: Anthropic.Beta.BetaMessageParam[] = [...history.map((t) => ({ role: t.role, content: t.text })), { role: "user", content: text }];
+    // The per-message note goes after the cached instructions, not after the question: as the last
+    // message it was sometimes answered instead of the question ("No." to "Nothing saved in memory").
+    const system: Anthropic.Beta.BetaTextBlockParam[] = [
+      { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+      { type: "text", text: contextNote(lang, run) },
     ];
 
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -50,7 +52,7 @@ export const claude: Brain = {
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         output_config: { effort: "low" },
-        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+        system,
         tools,
         messages,
       });
@@ -62,11 +64,12 @@ export const claude: Brain = {
         }
       }
 
-      const reply = response.content
-        .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("")
-        .trim();
+      const reply = forSpeech(
+        response.content
+          .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join(""),
+      );
 
       if (response.stop_reason === "refusal") return fallbackLine(lang);
       if (response.stop_reason === "pause_turn") {
@@ -74,8 +77,8 @@ export const claude: Brain = {
         continue;
       }
       if (response.stop_reason !== "tool_use") {
-        if (!reply) throw new Error("Claude returned no text");
-        return forSpeech(reply);
+        if (!reply) throw new Error("Claude returned no text"); // e.g. only a stray symbol: the next brain answers
+        return reply;
       }
 
       messages.push({ role: "assistant", content: response.content });

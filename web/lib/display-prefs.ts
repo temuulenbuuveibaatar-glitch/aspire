@@ -104,3 +104,38 @@ export function useDisplayPrefs(): [DisplayPrefs, (patch: Partial<DisplayPrefs>)
 
   return [prefs, set];
 }
+
+/* ---- shared environment hooks (stable during hydration: false on the server) ---- */
+
+const none = () => {};
+
+/** A media query's live value. */
+export function useMedia(query: string): boolean {
+  const sub = useCallback(
+    (cb: () => void) => {
+      const m = typeof window.matchMedia === "function" ? window.matchMedia(query) : null;
+      m?.addEventListener("change", cb);
+      return () => m?.removeEventListener("change", cb);
+    },
+    [query],
+  );
+  return useSyncExternalStore(sub, () => typeof window.matchMedia === "function" && window.matchMedia(query).matches, () => false);
+}
+
+function subscribeCalm(cb: () => void): () => void {
+  if (typeof MutationObserver === "undefined") return none;
+  const mo = new MutationObserver(cb);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-calm"] });
+  return () => mo.disconnect();
+}
+
+/** In-app Calm mode (`<html data-calm="true">`). */
+export function useCalm(): boolean {
+  return useSyncExternalStore(subscribeCalm, () => document.documentElement.dataset.calm === "true", () => false);
+}
+
+/** Still: prefers-reduced-motion or Calm mode. */
+export function useStill(): boolean {
+  const reduced = useMedia("(prefers-reduced-motion: reduce)");
+  return useCalm() || reduced;
+}

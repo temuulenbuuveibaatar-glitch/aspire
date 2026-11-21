@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /*
- * Aspire v3 "Skylight Halo" design tokens and global styles.
- * Source of truth: docs/design/aspire-v3-design.md (sections 2, 3, 4, 11, 13).
+ * Aspire v4 "Jarvis HUD" design tokens and global styles.
+ * Source of truth: docs/design/aspire-v4-hud.md (v3 tokens kept for untouched files).
  *
- * Layering: component classes (.panel, .glass, .press, .ticks ...) live in
+ * Layering: component classes (.hud, .panel, .press, .backdrop ...) live in
  * @layer components so any Tailwind utility on the same element wins.
  */
 
@@ -35,33 +35,18 @@
   --color-line: rgb(242 246 252 / 0.14);
   --color-line-strong: rgb(242 246 252 / 0.28);
 
-  /* AQI ramp, US EPA order lifted for a dark ground (fills and markers only) */
-  --color-aqi-1: #5be3a4;
-  --color-aqi-2: #f5d76b;
-  --color-aqi-3: #f5a66b;
-  --color-aqi-4: #ff8a8a;
-  --color-aqi-5: #c99bff;
-  --color-aqi-6: #e0457b;
-
-  /* Traffic strip cells (non-text only) */
-  --color-traffic-free: #5be3a4;
-  --color-traffic-slow: #f5c26b;
-  --color-traffic-jam: #ff8a8a;
-  --color-traffic-heavy: #e0457b;
+  /* HUD (v4): lines, brackets, reticle, bus chevrons. --color-hud is never body text. */
+  --color-hud: #7fe3ff;
+  --color-hud-glass: rgb(4 8 16 / 0.82); /* the one panel material, unblurred: .82 keeps 4.5:1 over any photo */
+  --color-hud-line: rgb(127 227 255 / 0.35);
 
   /* No pure white or black anywhere (halation): remap the defaults. */
   --color-white: #f2f6fc;
   --color-black: #060b16;
 
   /* Legacy aliases (v2 names still used by untouched files; remove in v3.1) */
-  --color-ink-soft: #b6c2d6; /* = ink-muted */
   --color-cyan: #5ee7ff; /* = accent */
-  --color-amber: #f5c26b; /* = signal */
-  --color-ok: #5be3a4; /* = success */
-  --color-bad: #ff8a8a; /* = danger */
-  --color-violet: #8fb2ff; /* retired, maps to accent-2 */
   --color-glass: rgb(11 18 32 / 0.88);
-  --color-glass-strong: rgb(18 28 46 / 0.94);
 
   /* Radii */
   --radius-sm: 10px;
@@ -79,6 +64,8 @@
     var(--font-body), var(--font-cjk), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
     system-ui, sans-serif;
   --font-display: var(--font-brand), var(--font-sans);
+  /* Values and numerals (v4): system mono, no download. */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
 
   /* Weights (Inter is variable; never below 400) */
   --font-weight-book: 450;
@@ -107,15 +94,9 @@
   --text-value-sm: 1.25rem;
   --text-value-sm--line-height: 1.1;
   --text-value-sm--font-weight: 500;
-  --text-eta: 2rem;
-  --text-eta--line-height: 1;
-  --text-eta--font-weight: 500;
   --text-value: 2.5rem;
   --text-value--line-height: 1;
   --text-value--font-weight: 500;
-  --text-hero: clamp(4.5rem, 3rem + 7vw, 7rem);
-  --text-hero--line-height: 0.95;
-  --text-hero--font-weight: 400;
   --text-wordmark: 1rem;
   --text-wordmark--line-height: 1;
   --text-wordmark--font-weight: 700;
@@ -123,25 +104,12 @@
 
   /* Easing */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* Sky drift loops (transform only; frozen under reduced motion and Calm mode) */
-  --animate-drift-60: aspire-drift 60s ease-in-out infinite alternate;
-  --animate-drift-75: aspire-drift 75s ease-in-out infinite alternate-reverse;
-  --animate-drift-90: aspire-drift 90s ease-in-out infinite alternate;
+  /* Sky fog drift (transform only; frozen under reduced motion and Calm mode) */
   --animate-fog-80: aspire-fog 80s ease-in-out infinite alternate;
   --animate-fog-110: aspire-fog 110s ease-in-out infinite alternate-reverse;
-  --animate-twinkle: aspire-twinkle 3.5s ease-in-out infinite alternate;
 }
 
-@keyframes aspire-drift {
-  from {
-    transform: translate3d(-9%, 0, 0);
-  }
-  to {
-    transform: translate3d(9%, 0, 0);
-  }
-}
 @keyframes aspire-fog {
   from {
     transform: translate3d(-6%, 0, 0);
@@ -150,12 +118,10 @@
     transform: translate3d(6%, 0, 0);
   }
 }
-@keyframes aspire-twinkle {
+/* Sky gradient crossfade and the backdrop photo arriving (opacity only). */
+@keyframes aspire-fade-in {
   from {
-    opacity: 0.35;
-  }
-  to {
-    opacity: 1;
+    opacity: 0;
   }
 }
 
@@ -188,12 +154,6 @@
 /* ------------------------------------------------------------------ */
 @layer base {
   :root {
-    /* Live sky pair. SkyLayer overwrites these inline on <html>; the defaults are a clear night. */
-    --sky-top: #050a18;
-    --sky-horizon: #1b2a4a;
-    /* EdgeGlow hue: 70% sky horizon, 30% accent. */
-    --edge: color-mix(in oklab, var(--sky-horizon) 70%, var(--color-accent));
-    --edge-soft: color-mix(in oklab, var(--edge) 45%, transparent);
     /* Text size control (A / A+ / A++). Set data-text-size or --text-scale on <html>. */
     --text-scale: 1;
   }
@@ -206,9 +166,8 @@
 
   html {
     color-scheme: dark;
-    /* WCAG 2.4.11: keyboard focus never lands under the sticky header or the fixed composer.
-       Assistant measures the header into --aspire-header-h. */
-    scroll-padding-top: var(--aspire-header-h, 9rem);
+    /* WCAG 2.4.11: keyboard focus never lands under the fixed composer. */
+    scroll-padding-top: 1rem;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 8rem);
     font-size: calc(100% * var(--text-scale));
     -webkit-text-size-adjust: 100%;
@@ -337,56 +296,10 @@
     scale: none;
   }
 
-  /* Desktop rail corner ticks: four 10px L marks inset 8px, no extra DOM. */
-  .ticks {
-    position: relative;
-  }
-  @media (min-width: 1024px) {
-    .ticks::before,
-    .ticks::after {
-      --tick: var(--color-line-strong);
-      content: "";
-      position: absolute;
-      inset: 8px;
-      pointer-events: none;
-      background-repeat: no-repeat;
-    }
-    .ticks::before {
-      background-image:
-        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick)),
-        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick));
-      background-size:
-        10px 1.5px,
-        1.5px 10px,
-        10px 1.5px,
-        1.5px 10px;
-      background-position:
-        left top,
-        left top,
-        right top,
-        right top;
-    }
-    .ticks::after {
-      background-image:
-        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick)),
-        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick));
-      background-size:
-        10px 1.5px,
-        1.5px 10px,
-        10px 1.5px,
-        1.5px 10px;
-      background-position:
-        left bottom,
-        left bottom,
-        right bottom,
-        right bottom;
-    }
-  }
-
-  /* Sky-tinted 1px hairline (sheet top edge). */
+  /* HUD-tinted 1px hairline (sheet top edge). */
   .hairline-sky {
     height: 1px;
-    background-image: linear-gradient(90deg, transparent, var(--sky-horizon), transparent);
+    background-image: linear-gradient(90deg, transparent, var(--color-hud-line), transparent);
     opacity: 0.6;
   }
 
@@ -414,6 +327,89 @@
     opacity: 1;
     outline-color: var(--color-ink);
   }
+
+  /* ---- v4 HUD ---- */
+
+  /* The one panel material: glass, a hairline, corner brackets (TL, TR, BL) and a cut BR corner.
+     No backdrop blur: a dozen blurred boxes over the moving sky canvas recomposite every frame.
+     Never nest a .hud inside a .hud. */
+  .hud {
+    --hb: linear-gradient(var(--color-hud), var(--color-hud));
+    background-color: var(--color-hud-glass);
+    border: 1px solid var(--color-hud-line);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+    background-image:
+      var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb),
+      linear-gradient(to bottom right, transparent calc(50% - 0.75px), var(--color-hud-line) 0 calc(50% + 0.75px), transparent 0);
+    background-repeat: no-repeat;
+    background-size: 16px 1.5px, 1.5px 16px, 16px 1.5px, 1.5px 16px, 16px 1.5px, 1.5px 16px, 14px 14px;
+    background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  /* Viewport corner brackets for HudFrame. */
+  .hud-frame::before {
+    --hb: linear-gradient(var(--color-hud), var(--color-hud));
+    content: "";
+    position: fixed;
+    z-index: 30;
+    pointer-events: none;
+    inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+    background-image: var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb);
+    background-repeat: no-repeat;
+    background-size: 28px 2px, 2px 28px, 28px 2px, 2px 28px, 28px 2px, 2px 28px, 28px 2px, 2px 28px;
+    background-position:
+      left top, left top, right top, right top,
+      left bottom, left bottom, right bottom, right bottom;
+    opacity: 0.8;
+  }
+
+  /* Backdrop grade (Backdrop.tsx): filters compose time x weather; tint and scrims sit above the photo. */
+  .backdrop {
+    --g-time: brightness(1);
+    --g-sky: saturate(1);
+    --scrim-bottom: 0.75;
+  }
+  .backdrop[data-time="night"] {
+    --g-time: brightness(0.55) saturate(0.7) hue-rotate(-10deg);
+  }
+  .backdrop:is([data-sky="cloud"], [data-sky="fog"]) {
+    --g-sky: saturate(0.6) contrast(0.9);
+  }
+  .backdrop[data-sky="snow"] {
+    --g-sky: brightness(1.05) saturate(0.7) hue-rotate(8deg);
+    --scrim-bottom: 0.85;
+  }
+  .backdrop[data-sky="rain"] {
+    --g-sky: brightness(0.8) saturate(0.8);
+  }
+  .backdrop[data-sky="storm"] {
+    --g-sky: brightness(0.62) saturate(0.75);
+  }
+  .backdrop-photo {
+    filter: var(--g-time) var(--g-sky);
+    animation: aspire-fade-in 600ms ease-out both;
+  }
+  .backdrop-tint {
+    opacity: 0;
+  }
+  .backdrop[data-time="night"] .backdrop-tint {
+    background: #0a1630;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+  }
+  .backdrop[data-time="dusk"] .backdrop-tint {
+    background: #ff9a5a;
+    opacity: 0.25;
+    mix-blend-mode: soft-light;
+  }
+  .backdrop-scrim {
+    background:
+      linear-gradient(to bottom, rgb(0 0 0 / 0.7), transparent 28vh),
+      linear-gradient(to top, rgb(0 0 0 / var(--scrim-bottom)), transparent 40vh),
+      radial-gradient(transparent 40%, rgb(0 0 0 / 0.55));
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -432,8 +428,13 @@
       0 0 0 7px rgb(6 11 22 / 0.9);
   }
   /* On accent and success fills the accent ring vanishes; use ink instead. */
-  :where(.bg-accent, .bg-cyan, .bg-success, .on-accent, [data-on-accent], .skip-link):focus-visible {
+  :where(.bg-accent, .bg-success, .on-accent, [data-on-accent], .skip-link):focus-visible {
     outline-color: var(--color-ink);
+  }
+  /* A .hud's clip-path would cut an outside ring: draw it inside. */
+  :where(.hud):focus-visible {
+    outline-offset: -5px;
+    box-shadow: none;
   }
 }
 /* Tabular numerals for any changing number. */
@@ -495,11 +496,18 @@
       background-color: var(--color-line-strong);
       opacity: 1;
     }
+    /* The HUD's opaque variant. */
+    .hud {
+      background-color: var(--color-panel);
+    }
   }
   :root[data-calm="true"] :is(.panel, .glass) {
     background-color: var(--color-panel);
     border-color: var(--color-line-strong);
     box-shadow: none;
+  }
+  :root[data-calm="true"] .hud {
+    background-color: var(--color-panel);
   }
   :root[data-calm="true"] .hairline-sky {
     background-image: none;
@@ -528,8 +536,12 @@
 
   @media (prefers-contrast: more) {
     .panel,
-    .glass {
+    .glass,
+    .hud {
       background-color: var(--color-panel);
+    }
+    .hud {
+      border-color: var(--color-line-strong);
     }
   }
 
@@ -538,7 +550,8 @@
     .panel,
     .panel-2,
     .panel-3,
-    .glass {
+    .glass,
+    .hud {
       border-color: CanvasText;
     }
   }

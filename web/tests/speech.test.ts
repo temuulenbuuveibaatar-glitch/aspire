@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+beforeEach(() => vi.stubEnv("ELEVENLABS_API_KEY", "")); // each test opts in
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -88,6 +89,7 @@ describe("Gemini voice", () => {
 
 describe("Azure Speech", () => {
   const azureEnv = () => {
+    vi.stubEnv("ELEVENLABS_API_KEY", "");
     vi.stubEnv("SPEECH_URL", "");
     vi.stubEnv("SPEECH_PROVIDER", "");
     vi.stubEnv("AZURE_SPEECH_KEY", "az-test");
@@ -221,5 +223,126 @@ describe("Azure Speech", () => {
       { lang: "de" as const, text: "Hallo", confidence: 0.324 },
     ];
     expect(pickShortClip(hallo, null)?.lang).toBe("de");
+  });
+});
+
+describe("ElevenLabs voice", () => {
+  const elevenEnv = () => {
+    vi.stubEnv("ELEVENLABS_API_KEY", "el-test");
+    vi.stubEnv("ELEVENLABS_MODEL", "");
+    vi.stubEnv("ELEVENLABS_VOICE_ID", "");
+    vi.stubEnv("ELEVENLABS_VOICE_ID_FRIDAY", "");
+    vi.stubEnv("SPEECH_URL", "");
+    vi.stubEnv("SPEECH_PROVIDER", "");
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("AZURE_SPEECH_KEY", "az-test");
+    vi.stubEnv("AZURE_SPEECH_REGION", "eastasia");
+  };
+  const mp3 = () => new Response(new Uint8Array([0xff, 0xf3, 9, 9]), { headers: { "Content-Type": "audio/mpeg" } });
+
+  it("speaks first with the British butler voice, sends the key in a header, and caches", async () => {
+    elevenEnv();
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return mp3();
+      }),
+    );
+    const { synthesize, speechEngines } = await import("@/lib/speech");
+    expect(speechEngines()).toEqual(["elevenlabs", "azure"]);
+    const audio = await synthesize("Good evening, sir.", "en");
+    expect(audio).toMatchObject({ contentType: "audio/mpeg", engine: "elevenlabs" });
+    expect(calls[0].url).toBe("https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb?output_format=mp3_44100_128");
+    expect((calls[0].init.headers as Record<string, string>)["xi-api-key"]).toBe("el-test");
+    expect(calls[0].url).not.toContain("el-test");
+    expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ text: "Good evening, sir.", model_id: "eleven_flash_v2_5", language_code: "en" });
+    await synthesize("Good evening, sir.", "en");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("uses the Friday voice and the env overrides", async () => {
+    elevenEnv();
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        return mp3();
+      }),
+    );
+    const { synthesize } = await import("@/lib/speech");
+    await synthesize("Guten Tag.", "de", "friday");
+    vi.stubEnv("ELEVENLABS_VOICE_ID", "myJarvis");
+    vi.stubEnv("ELEVENLABS_VOICE_ID_FRIDAY", "myFriday");
+    await synthesize("Hallo.", "de");
+    await synthesize("Hallo.", "de", "friday");
+    expect(urls.map((u) => u.split("/").pop()!.split("?")[0])).toEqual(["Xb7hH8MSUJpSbSDYk0k2", "myJarvis", "myFriday"]);
+  });
+
+  it("falls back to Azure on any ElevenLabs error (used-up quota)", async () => {
+    elevenEnv();
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        if (String(url).includes("elevenlabs")) return json({ detail: { status: "quota_exceeded" } }, 401);
+        return mp3();
+      }),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { synthesize } = await import("@/lib/speech");
+    const audio = await synthesize("Привет.", "ru");
+    expect(audio.engine).toBe("azure");
+    expect(urls).toEqual([
+      "https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb?output_format=mp3_44100_128",
+      "https://eastasia.tts.speech.microsoft.com/cognitiveservices/v1",
+    ]);
+    // Used-up quota pauses ElevenLabs: the next sentence goes straight to Azure.
+    expect((await synthesize("Пока.", "ru")).engine).toBe("azure");
+    expect(urls.filter((u) => u.includes("elevenlabs"))).toHaveLength(1);
+  });
+
+  it("keeps trying ElevenLabs after a passing error (429 busy)", async () => {
+    elevenEnv();
+    let n = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (String(url).includes("elevenlabs") && n++ === 0 ? json({ detail: "busy" }, 429) : mp3())),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { synthesize } = await import("@/lib/speech");
+    expect((await synthesize("One.", "en")).engine).toBe("azure");
+    expect((await synthesize("Two.", "en")).engine).toBe("elevenlabs");
+  });
+
+  it("Mongolian stays on Azure with a v2 model; Telegram OGG always uses Azure", async () => {
+    elevenEnv();
+    vi.stubEnv("ELEVENLABS_MODEL", "eleven_flash_v2_5");
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        urls.push(String(url));
+        if (String(url).includes("elevenlabs")) expect(JSON.parse(String(init.body)).model_id).toBe("eleven_flash_v2_5");
+        return mp3();
+      }),
+    );
+    const { synthesize } = await import("@/lib/speech");
+    expect((await synthesize("Сайн байна уу.", "mn")).engine).toBe("azure");
+    expect((await synthesize("你好。", "zh")).engine).toBe("elevenlabs");
+    expect((await synthesize("Hello.", "en", "jarvis", "ogg")).engine).toBe("azure");
+    expect(urls.filter((u) => u.includes("elevenlabs"))).toHaveLength(1);
+  });
+
+  it("speaks Mongolian with the opt-in eleven_v3 model", async () => {
+    elevenEnv();
+    vi.stubEnv("ELEVENLABS_MODEL", "eleven_v3");
+    vi.stubGlobal("fetch", vi.fn(async () => mp3()));
+    const { synthesize } = await import("@/lib/speech");
+    expect((await synthesize("Сайн байна уу.", "mn")).engine).toBe("elevenlabs");
   });
 });

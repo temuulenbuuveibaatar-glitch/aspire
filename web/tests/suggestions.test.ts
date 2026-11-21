@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Ambient } from "@/lib/ambient-types";
 import { LANGS } from "@/lib/lang";
-import { buildSuggestions, currencyPair, deviceRegion, followUps } from "@/lib/suggestions";
+import { buildSuggestions, currencyPair, deviceRegion } from "@/lib/suggestions";
 
 const PICTOGRAPH = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}\u{2190}-\u{21FF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 
@@ -10,14 +10,12 @@ const ambient = (patch: Partial<Ambient> = {}): Ambient => ({
   coords: null,
   locatedBy: "network",
   sky: { kind: "rain", intensity: 0.6, isDay: true, windKph: 10, cloudCover: 90 },
-  weather: { tempC: 8, feelsC: 5, text: "Rain", humidity: 80, days: [{ date: "2026-11-21", minC: 4, maxC: 9, text: "", kind: "rain", precipChance: 80 }] },
-  air: { aqi: 160, category: "unhealthy", pm25: 60, pm10: 80, dominant: null },
+  weather: { tempC: 8, feelsC: 5, text: "Rain", days: [{ date: "2026-11-21", minC: 4, maxC: 9, text: "", kind: "rain", precipChance: 80 }] },
+  air: { aqi: 160, category: "unhealthy" },
   traffic: null,
-  stops: [{ name: "Alexanderplatz", distanceM: 200, walkMin: 3, mapsUrl: "https://www.google.com/maps/search/?api=1&query=x" }],
+  stops: [{ name: "Alexanderplatz", distanceM: 200 }],
   timeZone: "Europe/Berlin",
   localHour: 8,
-  source: { weather: "google", air: "google" },
-  updatedAt: "2026-11-21T07:00:00Z",
   ...patch,
 });
 
@@ -48,13 +46,5 @@ describe("currency pair", () => {
     expect(currencyPair(deviceRegion(["mn-MN"]))).toEqual(["MNT", "USD"]);
     expect(currencyPair(deviceRegion(["en-US"]))).toEqual(["USD", "EUR"]);
     expect(currencyPair(null)).toEqual(["USD", "EUR"]);
-  });
-});
-
-describe("follow-ups", () => {
-  it("offers 2-3 follow-ups for known tools and none otherwise", () => {
-    expect(followUps("get_weather", "de").length).toBeGreaterThanOrEqual(2);
-    expect(followUps("encyclopedia", "en")).toEqual([]);
-    expect(followUps(null, "mn")).toEqual([]);
   });
 });

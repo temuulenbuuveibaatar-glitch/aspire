@@ -18,7 +18,8 @@ const body = Inter({
   display: "swap",
 });
 
-// Tektur: wordmark, numerals and short labels only. The wdth axis gives condensed numerals.
+// Tektur: wordmark and the HUD clock only. The wdth axis gives condensed numerals. Other values
+// use --font-mono (system monospace, globals.css), so no third font downloads.
 // Digits, the degree sign and U+2212 minus are all in its latin file; Cyrillic loads on demand.
 const brand = Tektur({
   variable: "--font-brand",
@@ -45,12 +46,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#060B16",
+  themeColor: "#040810", // = --color-hud-glass without alpha: the status bar blends into the HUD
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   // Lets env(safe-area-inset-*) report real values so the composer clears the home indicator.
   viewportFit: "cover",
+  // Android Chrome shrinks the layout viewport for the keyboard, so the fixed composer stays above it
+  // (iOS ignores this; Assistant lifts the composer by --kb from visualViewport there).
+  interactiveWidget: "resizes-content",
 };
 
 // Mirrors lib/display-prefs.ts (key "aspire-display-v1"). Inline and blocking by design: tiny,

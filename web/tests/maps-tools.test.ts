@@ -3,6 +3,8 @@ import { isCard } from "@/components/aspire/ActionCard";
 import { resetMapsUsage } from "@/lib/maps";
 import { runTool, type ToolStep } from "@/lib/tools";
 import type { DeviceContext, ToolContext } from "@/lib/tools/types";
+import staticRaw from "./fixtures/erdenet-static.json";
+import vehiclesRaw from "./fixtures/erdenet-vehicles.json";
 
 // 2026-11-20 10:00 in Mongolia
 const NOW = new Date("2026-11-20T10:00:00+08:00");
@@ -198,49 +200,45 @@ describe("weather and air quality via Google, with Open-Meteo fallback", () => {
   });
 });
 
-describe("buses: Google transit first, sample timetable fallback", () => {
-  it("get_next_bus returns Google departures when Google has transit", async () => {
+describe("buses: Erdenet's live feed in Erdenet, Google transit elsewhere", () => {
+  // Serves the trimmed real Erdenet feed for dedtuv.erdenet.mn, and `g` for Google.
+  const withFeed = (g: Handler): Handler => (u, body) =>
+    u.includes("dedtuv.erdenet.mn") ? Response.json(u.endsWith("/static") ? staticRaw : vehiclesRaw) : g(u, body);
+  const inErdenet = () => ctx({ location: { lat: 49.0072, lng: 104.0381 } });
+
+  it("with only a Mongolian clock, Google departures come first", async () => {
     let sent: Record<string, unknown> | null = null;
-    route((_u, body) => {
-      sent = body;
-      return Response.json(transitRoutes);
-    });
-    const { out } = await run("get_next_bus", { stop: "Railway Station", route: "", to: "Нэгдсэн эмнэлэг" });
+    const urls = route(
+      withFeed((_u, body) => {
+        sent = body;
+        return Response.json(transitRoutes);
+      }),
+    );
+    const { out } = await run("get_next_bus", { stop: "Railway Station", route: "", to: "Hospital" });
     expect(out).toMatchObject({ source: "google", stop: "Railway Station", now: "10:00", arrivals: [{ route: "5", minutes: 7, time: "10:07", towards: "Hospital" }] });
-    expect(sent!).toMatchObject({ origin: { address: "Railway Station, Erdenet, Mongolia" }, destination: { address: "General Hospital, Erdenet, Mongolia" }, travelMode: "TRANSIT" });
+    expect(sent!).toMatchObject({ origin: { address: "Railway Station" }, destination: { address: "Hospital" }, travelMode: "TRANSIT" });
+    expect(urls.some((u) => u.includes("erdenet"))).toBe(false);
   });
 
-  it("get_next_bus falls back to the timetable when Google has no transit", async () => {
-    route(() => Response.json({}));
-    const { out } = await run("get_next_bus", { stop: "center", route: "", to: "market" });
-    expect(out.source).toBe("sample-timetable");
-    expect(out.arrivals.length).toBeGreaterThan(0);
+  it("with only a Mongolian clock and no Google transit, Erdenet's live feed answers", async () => {
+    route(withFeed(() => Response.json({})));
+    const { out } = await run("get_next_bus", { stop: "Хунт", route: "", to: "market" });
+    expect(out).toMatchObject({ source: "erdenet-live", stop: "Хунт", estimate: true, credit: "Орхон ТКХДТ" });
   });
 
-  it("get_next_bus without a destination uses the timetable without calling Google", async () => {
-    const urls = route(() => Response.json(transitRoutes));
-    expect((await run("get_next_bus", { stop: "center", route: "", to: "" })).out.source).toBe("sample-timetable");
-    expect(urls).toHaveLength(0);
+  it("a device location in Erdenet uses the live feed first, without calling Google", async () => {
+    const urls = route(withFeed(() => Response.json(transitRoutes)));
+    const r = await run("get_next_bus", { stop: "", route: "", to: "" }, inErdenet());
+    expect(r.out).toMatchObject({ source: "erdenet-live", note: "Nearest stop to the person" });
+    expect(urls.some(google)).toBe(false);
   });
 
-  it("plan_trip: Google options + map card, then timetable fallback on errors", async () => {
-    route(() => Response.json(transitRoutes));
-    const g = await run("plan_trip", { from: "Railway Station", to: "Нэгдсэн эмнэлэг" });
-    expect(g.out).toMatchObject({ source: "google", options: [{ route: "5", departs: "10:07", arrives: "10:29", waitMinutes: 7, rideMinutes: 22 }] });
-    expect(g.c.actions[0]).toMatchObject({ type: "map", title: "Нэгдсэн эмнэлэг" });
-
-    route(() => Response.json({ error: { status: "INTERNAL" } }, { status: 500 }));
-    const f = await run("plan_trip", { from: "Railway Station", to: "Нэгдсэн эмнэлэг" });
-    expect(f.out.source).toBe("sample-timetable");
-    expect(f.out.options[0]).toMatchObject({ route: "5", rideMinutes: 22 });
-  });
-
-  it("outside Erdenet the sample timetable never answers; Google transit still does", async () => {
-    const urls = route(() => Response.json({}));
+  it("outside Erdenet the city feed is never called; Google transit answers or the error points to get_directions", async () => {
+    const urls = route(withFeed(() => Response.json({})));
     const none = await run("get_next_bus", { stop: "Central Square", route: "", to: "" }, lagos());
-    expect(none.out.error).toMatch(/only for Erdenet/);
-    expect(urls).toHaveLength(0);
+    expect(none.out.error).toMatch(/get_directions/);
     expect((await run("plan_trip", { from: "Central Square", to: "Market" }, lagos())).out.error).toMatch(/get_directions/);
+    expect(urls.some((u) => u.includes("erdenet"))).toBe(false);
 
     let sent: Record<string, unknown> | null = null;
     route((_u, body) => {
@@ -249,44 +247,42 @@ describe("buses: Google transit first, sample timetable fallback", () => {
     });
     const live = await run("get_next_bus", { stop: "Central Square", route: "", to: "Market" }, lagos());
     expect(live.out).toMatchObject({ source: "google", now: "03:00" }); // 10:00 in Mongolia = 03:00 in Lagos
-    // Lagos stop names are not mapped to Erdenet's; the person's city is added instead
     expect(sent!).toMatchObject({ origin: { address: "Central Square, Lagos" }, destination: { address: "Market, Lagos" } });
   });
 
-  it("with nothing known about the place, Erdenet's timetable answers only on a Mongolian clock", async () => {
-    route(() => Response.json({}));
-    const unknownBerlin = ctx({}, { timeZone: "Europe/Berlin" });
-    const berlin = await run("get_next_bus", { stop: "center", route: "", to: "" }, unknownBerlin);
-    expect(berlin.out.source).toBeUndefined();
-    expect(berlin.out.error).toMatch(/Location unknown/);
-    const nothing = await run("get_next_bus", { stop: "center", route: "", to: "" }, ctx({}, { timeZone: undefined }));
-    expect(nothing.out.error).toMatch(/Location unknown/);
-    // Naming Erdenet still works from anywhere.
-    expect((await run("get_next_bus", { stop: "center", route: "", to: "Erdenet market" }, unknownBerlin)).out.source).toBe("sample-timetable");
-    // Unknown place on Mongolian time keeps the demo working.
-    expect((await run("get_next_bus", { stop: "center", route: "", to: "" })).out.source).toBe("sample-timetable");
+  it("plan_trip outside Erdenet: Google options plus a map card", async () => {
+    route(() => Response.json(transitRoutes));
+    const g = await run("plan_trip", { from: "Central Square", to: "Market" }, lagos());
+    expect(g.out).toMatchObject({ source: "google", options: [{ route: "5", departs: "10:07", arrives: "10:29", waitMinutes: 7, rideMinutes: 22 }] });
+    expect(g.c.actions[0]).toMatchObject({ type: "map", title: "Market" });
   });
 
-  it("air quality with no index from Open-Meteo is an error, never 'good'", async () => {
+  it("with nothing known about the place, it asks for the city; naming Erdenet works from anywhere", async () => {
+    route(withFeed(() => Response.json({})));
+    const unknownBerlin = ctx({}, { timeZone: "Europe/Berlin" });
+    const berlin = await run("get_next_bus", { stop: "Хунт", route: "", to: "" }, unknownBerlin);
+    expect(berlin.out.source).toBeUndefined();
+    expect(berlin.out.error).toMatch(/Location unknown/);
+    expect((await run("get_next_bus", { stop: "Хунт", route: "", to: "" }, ctx({}, { timeZone: undefined }))).out.error).toMatch(/Location unknown/);
+    expect((await run("get_next_bus", { stop: "Хунт", route: "", to: "Erdenet market" }, unknownBerlin)).out.source).toBe("erdenet-live");
+  });
+
+  it("Google calls count against MAPS_DAILY_LIMIT, then the Erdenet feed answers on a Mongolian clock", async () => {
+    vi.stubEnv("MAPS_DAILY_LIMIT", "1");
+    const urls = route(withFeed(() => Response.json(transitRoutes)));
+    expect((await run("get_next_bus", { stop: "Хунт", route: "", to: "Hospital" })).out.source).toBe("google");
+    expect((await run("get_next_bus", { stop: "Хунт", route: "", to: "Hospital" })).out.source).toBe("erdenet-live");
+    expect(urls.filter(google)).toHaveLength(1);
+  });
+});
+
+describe("air quality without an index", () => {
+  it("is an error from Open-Meteo, never 'good'", async () => {
     route((u) => (google(u) ? new Response("down", { status: 503 }) : Response.json({ current: { pm2_5: null, pm10: null, us_aqi: null } })));
     const r = await run("get_air_quality", { place: "" }, lagos());
     expect(r.out.error).toMatch(/No air quality data/);
     expect(r.out.level).toBeUndefined();
     route((u) => (google(u) ? new Response("down", { status: 503 }) : Response.json({ current: { pm2_5: 400, pm10: 500, us_aqi: 420 } })));
     expect((await run("get_air_quality", { place: "" }, lagos())).out.level).toBe("hazardous");
-  });
-
-  it("a device location in Erdenet keeps the sample timetable", async () => {
-    route(() => Response.json({}));
-    const r = await run("get_next_bus", { stop: "center", route: "", to: "" }, lagos({ location: { lat: 49.03, lng: 104.08 } }));
-    expect(r.out).toMatchObject({ source: "sample-timetable", city: "Erdenet" });
-  });
-
-  it("Google calls count against MAPS_DAILY_LIMIT, then the timetable answers", async () => {
-    vi.stubEnv("MAPS_DAILY_LIMIT", "1");
-    const urls = route(() => Response.json(transitRoutes));
-    expect((await run("plan_trip", { from: "Railway Station", to: "hospital" })).out.source).toBe("google");
-    expect((await run("plan_trip", { from: "Railway Station", to: "hospital" })).out.source).toBe("sample-timetable");
-    expect(urls).toHaveLength(1);
   });
 });

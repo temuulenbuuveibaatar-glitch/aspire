@@ -1,13 +1,16 @@
 // Speech: listening (speech-to-text + language) and talking (text-to-speech).
 //
-// Three engines, tried in order (the next one is used if one fails):
-//  - "omnivoice" our own engine (speech/ folder: Whisper + OmniVoice) on a GPU box.
-//  - "azure"     Azure Speech (free F0 tier: 500k voice characters + 5 h listening
-//                a month). Neural voices for all 5 languages incl. Mongolian.
-//  - "gemini"    Google Gemini API.
-// SPEECH_PROVIDER=azure|gemini|omnivoice puts one engine first.
+// Engines, tried in order (the next one is used if one fails):
+//  - "elevenlabs" ElevenLabs voice only (the British butler "Jarvis"). Languages its
+//                 model cannot speak (Mongolian on the v2.x models) go to the next engine.
+//  - "omnivoice"  our own engine (speech/ folder: Whisper + OmniVoice) on a GPU box.
+//  - "azure"      Azure Speech (free F0 tier: 500k voice characters + 5 h listening
+//                 a month). Neural voices for all 5 languages incl. Mongolian.
+//  - "gemini"     Google Gemini API.
+// SPEECH_PROVIDER=elevenlabs|azure|gemini|omnivoice puts one engine first.
 // There is deliberately no browser speech fallback.
 
+import { createHash } from "node:crypto";
 import { detectTextLanguage, greetingLanguage, isLang, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
 import type { VoiceStyle } from "@/lib/tools/types";
 
@@ -25,13 +28,16 @@ export interface SttResult {
 export interface Audio {
   body: BodyInit;
   contentType: string;
+  /** Which engine spoke, so the app can say "Voice: Jarvis (ElevenLabs)". */
+  engine: Engine;
 }
 
-type Engine = "omnivoice" | "azure" | "gemini";
+type Engine = "elevenlabs" | "omnivoice" | "azure" | "gemini";
 /** Audio container for synthesized speech: "mp3" for the web app, "ogg" (Opus) for Telegram voice notes. */
 export type AudioFormat = "mp3" | "ogg";
 
 const configured: Record<Engine, () => boolean> = {
+  elevenlabs: () => !!process.env.ELEVENLABS_API_KEY,
   omnivoice: () => !!process.env.SPEECH_URL,
   azure: () => !!process.env.AZURE_SPEECH_KEY && !!(process.env.AZURE_SPEECH_REGION || process.env.AZURE_SPEECH_ENDPOINT),
   gemini: () => !!process.env.GEMINI_API_KEY,
@@ -40,7 +46,7 @@ const configured: Record<Engine, () => boolean> = {
 /** Configured engines, best first. */
 export function speechEngines(): Engine[] {
   const forced = process.env.SPEECH_PROVIDER?.toLowerCase() as Engine | undefined;
-  const order: Engine[] = ["omnivoice", "azure", "gemini"];
+  const order: Engine[] = ["elevenlabs", "omnivoice", "azure", "gemini"];
   if (forced && order.includes(forced)) order.sort((a, b) => Number(b === forced) - Number(a === forced));
   return order.filter((e) => configured[e]());
 }
@@ -77,12 +83,69 @@ export async function synthesize(
   voice: VoiceStyle = "jarvis",
   format: AudioFormat = "mp3",
 ): Promise<Audio> {
-  // Only Azure can produce OGG/Opus; the others return MP3/WAV, which Telegram cannot play as a voice note.
+  // Telegram voice notes stay on Azure (OGG/Opus); the others return MP3/WAV, which Telegram cannot play as a voice note.
   if (format === "ogg") return firstWorking("speak", { azure: () => azureSpeak(text, lang, voice, "ogg") });
   return firstWorking("speak", {
+    elevenlabs: elevenSpeaks(lang) && Date.now() >= elevenPausedUntil ? () => elevenSpeak(text, lang, voice) : undefined,
     omnivoice: () => omnivoiceSpeak(text, lang),
     azure: () => azureSpeak(text, lang, voice, "mp3"),
     gemini: () => geminiSpeak(text, lang, voice),
+  });
+}
+
+// Same engine + voice + sentence -> same audio: reuse it instead of spending quota again. Replies can
+// be personal (calendar, email, reminders): the key is a SHA-256 of the text, never the text itself,
+// and audio is kept in memory for 10 minutes at most.
+const CACHE_MS = 10 * 60_000;
+const audioCache = new Map<string, { at: number; audio: Audio }>();
+async function cachedAudio(key: string, make: () => Promise<Audio>): Promise<Audio> {
+  const k = createHash("sha256").update(key).digest("hex");
+  const hit = audioCache.get(k);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.audio;
+  audioCache.delete(k);
+  const audio = await make();
+  if (audioCache.size > 300) audioCache.delete(audioCache.keys().next().value!);
+  audioCache.set(k, { at: Date.now(), audio });
+  return audio;
+}
+
+// ---------------------------------------------------------------------------
+// ElevenLabs text-to-speech (POST /v1/text-to-speech/{voice_id})
+
+// Default library voices: George (calm British male, "jarvis") and Alice (British female,
+// "friday"). ElevenLabs retires its default voices at the end of 2026: set
+// ELEVENLABS_VOICE_ID / ELEVENLABS_VOICE_ID_FRIDAY to a voice saved in your own library.
+export const ELEVEN_VOICES: Record<VoiceStyle, string> = { jarvis: "JBFqnCBsd6RMkjVDRZzb", friday: "Xb7hH8MSUJpSbSDYk0k2" };
+const elevenVoice = (voice: VoiceStyle) =>
+  (voice === "friday" ? process.env.ELEVENLABS_VOICE_ID_FRIDAY : process.env.ELEVENLABS_VOICE_ID) || ELEVEN_VOICES[voice];
+// Flash v2.5 is built for real-time replies (zh, en, ru, de); Mongolian then goes to Azure (Bataa).
+// ELEVENLABS_MODEL=eleven_v3 also speaks Mongolian, with noticeably more latency per reply.
+const elevenModel = () => process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5";
+/** The v2.x models (Flash, Turbo, Multilingual) have no Mongolian: it stays on Azure (Bataa). */
+export const elevenSpeaks = (lang: Lang) => lang !== "mn" || !/_v2/.test(elevenModel());
+// A bad key or used-up quota (401/402) will not fix itself within one answer: let Azure speak
+// for 10 minutes instead of paying a failed round trip (and an error log) per sentence.
+let elevenPausedUntil = 0;
+
+function elevenSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<Audio> {
+  const id = elevenVoice(voice);
+  const model = elevenModel();
+  return cachedAudio(`eleven:${id}:${model}:${lang}:${text}`, async () => {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(id)}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY ?? "", "Content-Type": "application/json", Accept: "audio/mpeg" },
+      // language_code is refused by the multilingual_v2 model; the others use it to read short text right.
+      body: JSON.stringify({ text, model_id: model, ...(model.startsWith("eleven_multilingual") ? {} : { language_code: lang }) }),
+      signal: AbortSignal.timeout(15_000),
+    }).catch((e) => {
+      throw new SpeechOffline(String(e));
+    });
+    // Any error (401 quota_exceeded, 429 busy, 422 bad voice) falls back to the next engine.
+    if (res.status === 401 || res.status === 402) elevenPausedUntil = Date.now() + 10 * 60_000;
+    if (!res.ok) throw new SpeechOffline(`ElevenLabs voice error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (!bytes.length) throw new SpeechOffline("ElevenLabs returned no audio");
+    return { body: bytes, contentType: "audio/mpeg", engine: "elevenlabs" };
   });
 }
 
@@ -112,7 +175,6 @@ export const AZURE_VOICES: Record<VoiceStyle, Record<Lang, string>> = {
 const azureVoice = (lang: Lang, voice: VoiceStyle) =>
   process.env[`AZURE_VOICE_${voice.toUpperCase()}_${lang.toUpperCase()}`] || AZURE_VOICES[voice][lang];
 const AZURE_RATE = () => process.env.AZURE_SPEECH_RATE ?? "0%";
-const azureAudioCache = new Map<string, Uint8Array<ArrayBuffer>>();
 
 function azureSttUrl() {
   const base = process.env.AZURE_SPEECH_ENDPOINT?.replace(/\/$/, "") || `https://${process.env.AZURE_SPEECH_REGION}.api.cognitive.microsoft.com`;
@@ -237,34 +299,31 @@ const AZURE_FORMATS: Record<AudioFormat, { header: string; contentType: string }
   ogg: { header: "ogg-24khz-16bit-mono-opus", contentType: "audio/ogg" },
 };
 
-async function azureSpeak(text: string, lang: Lang, voice: VoiceStyle, format: AudioFormat = "mp3"): Promise<Audio> {
+function azureSpeak(text: string, lang: Lang, voice: VoiceStyle, format: AudioFormat = "mp3"): Promise<Audio> {
   const { header, contentType } = AZURE_FORMATS[format];
-  const key = `${format}:${voice}:${lang}:${text}`;
-  const cached = azureAudioCache.get(key);
-  if (cached) return { body: cached, contentType };
-  const region = process.env.AZURE_SPEECH_REGION;
-  const url = region
-    ? `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`
-    : `${process.env.AZURE_SPEECH_ENDPOINT!.replace(/\/$/, "")}/tts/cognitiveservices/v1`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
-      "Content-Type": "application/ssml+xml",
-      "X-Microsoft-OutputFormat": header,
-      "User-Agent": "aspire-assistant",
-    },
-    body: azureSsml(text, lang, voice),
-    signal: AbortSignal.timeout(20_000),
-  }).catch((e) => {
-    throw new SpeechOffline(String(e));
+  return cachedAudio(`azure:${format}:${azureVoice(lang, voice)}:${text}`, async () => {
+    const region = process.env.AZURE_SPEECH_REGION;
+    const url = region
+      ? `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`
+      : `${process.env.AZURE_SPEECH_ENDPOINT!.replace(/\/$/, "")}/tts/cognitiveservices/v1`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": header,
+        "User-Agent": "aspire-assistant",
+      },
+      body: azureSsml(text, lang, voice),
+      signal: AbortSignal.timeout(20_000),
+    }).catch((e) => {
+      throw new SpeechOffline(String(e));
+    });
+    if (!res.ok) throw new SpeechOffline(`Azure voice error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (!bytes.length) throw new SpeechOffline("Azure returned no audio");
+    return { body: bytes, contentType, engine: "azure" };
   });
-  if (!res.ok) throw new SpeechOffline(`Azure voice error ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (!bytes.length) throw new SpeechOffline("Azure returned no audio");
-  if (azureAudioCache.size > 300) azureAudioCache.delete(azureAudioCache.keys().next().value!);
-  azureAudioCache.set(key, bytes);
-  return { body: bytes, contentType };
 }
 
 // ---------------------------------------------------------------------------
@@ -286,8 +345,6 @@ const TTS_MODELS = () =>
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
-// Same sentence -> same audio: reuse it instead of spending quota again.
-const ttsCache = new Map<string, Uint8Array<ArrayBuffer>>();
 const TTS_VOICES: Record<VoiceStyle, () => string> = {
   jarvis: () => process.env.GEMINI_TTS_VOICE_JARVIS ?? "Charon", // "Informative"
   friday: () => process.env.GEMINI_TTS_VOICE_FRIDAY ?? "Sulafat", // "Warm"
@@ -368,11 +425,11 @@ async function geminiTranscribe(audio: Blob): Promise<SttResult> {
   return { text, language, probs: isLang(language) ? { [language]: 0.9 } : {} };
 }
 
-async function geminiSpeak(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): Promise<Audio> {
-  const key = `${voice}:${lang}:${text}`;
-  const cached = ttsCache.get(key);
-  if (cached) return { body: cached, contentType: "audio/wav" };
+function geminiSpeak(text: string, lang: Lang, voice: VoiceStyle = "jarvis"): Promise<Audio> {
+  return cachedAudio(`gemini:${voice}:${lang}:${text}`, () => geminiSpeakOnce(text, lang, voice));
+}
 
+async function geminiSpeakOnce(text: string, lang: Lang, voice: VoiceStyle): Promise<Audio> {
   let lastError: unknown;
   for (const model of TTS_MODELS()) {
     try {
@@ -400,10 +457,7 @@ async function geminiSpeak(text: string, lang: Lang, voice: VoiceStyle = "jarvis
       if (!part?.data) throw new SpeechOffline(`${model} returned no audio`);
       const bytes = Buffer.from(part.data, "base64");
       const isWav = bytes.subarray(0, 4).toString("ascii") === "RIFF";
-      const wav = new Uint8Array(isWav ? bytes : pcmToWav(bytes, 24_000));
-      if (ttsCache.size > 300) ttsCache.delete(ttsCache.keys().next().value!);
-      ttsCache.set(key, wav);
-      return { body: wav, contentType: "audio/wav" };
+      return { body: new Uint8Array(isWav ? bytes : pcmToWav(bytes, 24_000)), contentType: "audio/wav", engine: "gemini" };
     } catch (e) {
       lastError = e;
       console.error(`speak: ${model} failed, trying next:`, e instanceof Error ? e.message.slice(0, 160) : e);
@@ -466,5 +520,5 @@ async function omnivoiceSpeak(text: string, lang: Lang): Promise<Audio> {
     throw new SpeechOffline(String(e));
   });
   if (!res.ok || !res.body) throw new SpeechOffline(`TTS failed: ${res.status}`);
-  return { body: res.body, contentType: res.headers.get("Content-Type") ?? "audio/wav" };
+  return { body: res.body, contentType: res.headers.get("Content-Type") ?? "audio/wav", engine: "omnivoice" };
 }

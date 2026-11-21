@@ -22,11 +22,14 @@ import {
   Send,
   TriangleAlert,
 } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
-import { WeatherCardBody } from "@/components/aspire/LivePanel";
+import { useState } from "react";
+import { CALENDAR, hasScope } from "@/components/aspire/GmailConnect";
+import { temp } from "@/components/aspire/readouts";
 import { useStillMotion } from "@/components/aspire/Sheet";
-import { LANGS, type Lang } from "@/lib/lang";
+import { useDisplayPrefs } from "@/lib/display-prefs";
+import { HTML_LANG, LANGS, type Lang } from "@/lib/lang";
 import { gmailComposeUrl, isGoogleMapsUrl, mailtoUrl, smsUrl, telegramShareUrl, telUrl } from "@/lib/links";
 import type { Channel, ClientAction } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
@@ -110,12 +113,11 @@ const EMAIL_NAME: Record<Lang, string> = { mn: "Имэйл", zh: "电子邮件",
 
 /** Cards get `t` = UI[lang]; find the lang back from it (English if it is a copy). */
 const langOf = (t: T): Lang => LANGS.find((l) => UI[l] === t) ?? "en";
-const htmlLang = (l: Lang) => (l === "zh" ? "zh-Hans" : l);
 
 /** Date and time in the card's language; the user's own time zone (any country). */
 function formatWhen(d: Date, lang: Lang): string {
   try {
-    return d.toLocaleString(htmlLang(lang), { dateStyle: "medium", timeStyle: "short" });
+    return d.toLocaleString(HTML_LANG[lang], { dateStyle: "medium", timeStyle: "short" });
   } catch {
     return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   }
@@ -151,14 +153,11 @@ export function ActionCard({
   t,
   webhooks,
   onOpenConnections,
-  onPendingChange,
 }: {
   action: Card;
   t: T;
   webhooks: { discord?: string; slack?: string };
   onOpenConnections: () => void;
-  /** true while a send-for-me draft waits for the person (the orb shows its confirm tone). */
-  onPendingChange?: (pending: boolean) => void;
 }) {
   if (action.type === "call") {
     return (
@@ -174,35 +173,104 @@ export function ActionCard({
       </div>
     );
   }
-  if (action.type === "calendar") {
-    const start = new Date(action.start);
-    const when = Number.isNaN(start.getTime()) ? null : formatWhen(start, langOf(t));
-    return (
-      <div className={shell}>
-        <div className="flex items-start gap-3">
-          <span className={iconTile} aria-hidden>
-            <CalendarPlus className="size-6" />
-          </span>
-          <div className="min-w-0 pt-0.5">
-            <p className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{action.title}</p>
-            {when && (
-              <p className="num text-small text-ink-muted">
-                <time dateTime={start.toISOString()}>{when}</time>
-              </p>
-            )}
-          </div>
+  if (action.type === "calendar") return <CalendarCard action={action} t={t} />;
+  if (action.type === "map") return <MapCard action={action} t={t} />;
+  if (action.type === "weather") return <WeatherCard action={action} t={t} />;
+  return <MessageCard action={action} t={t} webhooks={webhooks} onOpenConnections={onOpenConnections} />;
+}
+
+// ---- Calendar card ------------------------------------------------------------------------------
+
+const CAL_TEXT: Record<Lang, { adding: string; added: string; failed: string; notLinked: string }> = {
+  mn: { adding: "Нэмж байна", added: "Календарьт нэмэгдлээ", failed: "Нэмж чадсангүй. Дахин оролдоно уу.", notLinked: "Google Календарь холбогдоогүй байна. Доорх холбоосоор нэмнэ үү." },
+  zh: { adding: "正在添加", added: "已添加到日历", failed: "添加失败，请再试一次。", notLinked: "Google 日历未连接。请用下面的链接添加。" },
+  en: { adding: "Adding", added: "Added to your calendar", failed: "Could not add it. Please try again.", notLinked: "Google Calendar is not connected. Use the link below instead." },
+  ru: { adding: "Добавляю", added: "Добавлено в календарь", failed: "Не удалось добавить. Попробуйте ещё раз.", notLinked: "Google Календарь не подключён. Добавьте по ссылке ниже." },
+  de: { adding: "Wird eingetragen", added: "Im Kalender eingetragen", failed: "Eintragen fehlgeschlagen. Bitte noch einmal versuchen.", notLinked: "Google Kalender ist nicht verbunden. Nutzen Sie den Link unten." },
+};
+
+/** Saves straight to Google Calendar when it is connected; otherwise (or on 403) the plain link. */
+function CalendarCard({ action, t }: { action: Extract<Card, { type: "calendar" }>; t: T }) {
+  const lang = langOf(t);
+  const c = CAL_TEXT[lang];
+  const { user } = useUser();
+  const still = useStillMotion();
+  const [status, setStatus] = useState<"idle" | "adding" | "added" | "failed" | "unlinked">("idle");
+  const google = user?.externalAccounts.find((a) => a.provider === "google");
+  const linked = Boolean(google && google.verification?.status === "verified" && hasScope(google.approvedScopes, CALENDAR));
+  const direct = linked && status !== "unlinked";
+  const start = new Date(action.start);
+  const when = Number.isNaN(start.getTime()) ? null : formatWhen(start, lang);
+  const locked = status === "adding" || status === "added";
+
+  const add = async () => {
+    setStatus("adding");
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await fetch("/api/calendar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: action.title, start: action.start, end: action.end, details: action.details, tz }),
+    }).catch(() => null);
+    setStatus(res?.ok ? "added" : res?.status === 403 ? "unlinked" : "failed");
+  };
+
+  return (
+    <div className={shell}>
+      <div className="flex items-start gap-3">
+        <span className={iconTile} aria-hidden>
+          <CalendarPlus className="size-6" />
+        </span>
+        <div className="min-w-0 pt-0.5">
+          <p className="text-body font-semibold text-ink [overflow-wrap:anywhere]">{action.title}</p>
+          {when && (
+            <p className="num text-small text-ink-muted">
+              <time dateTime={start.toISOString()}>{when}</time>
+            </p>
+          )}
         </div>
-        {isHttps(action.url) && (
+      </div>
+      <p className="sr-only" role="status">
+        {status === "added" ? c.added : status === "adding" ? c.adding : ""}
+      </p>
+      {(status === "failed" || status === "unlinked") && (
+        <p className={`mt-3 flex items-start gap-2 text-small ${status === "failed" ? "text-danger" : "text-signal"}`} role="alert">
+          <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden /> {status === "failed" ? c.failed : c.notLinked}
+        </p>
+      )}
+      {direct ? (
+        // One persistent button (aria-disabled, not disabled) so focus never drops to <body>.
+        <button
+          type="button"
+          onClick={() => {
+            if (!locked) void add();
+          }}
+          aria-disabled={locked || undefined}
+          className={
+            status === "added"
+              ? "mt-4 inline-flex min-h-14 w-full cursor-default items-center justify-center gap-2 rounded-md border border-success/40 bg-success/10 px-5 text-body font-semibold text-success"
+              : `${primary} mt-4 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-60`
+          }
+        >
+          {status === "added" ? (
+            <Check className="size-6" aria-hidden />
+          ) : status === "adding" ? (
+            <LoaderCircle className={still ? "size-5" : "size-5 animate-spin"} aria-hidden />
+          ) : status === "failed" ? (
+            <RotateCw className="size-5" aria-hidden />
+          ) : (
+            <CalendarPlus className="size-5" aria-hidden />
+          )}
+          {status === "added" ? c.added : status === "adding" ? c.adding : status === "failed" ? t.retry : t.addCalendar}
+        </button>
+      ) : (
+        isHttps(action.url) && (
           <a href={action.url} target="_blank" rel="noopener noreferrer" className={`${secondary} mt-4 w-full`}>
             <CalendarPlus className="size-5" aria-hidden /> {t.addCalendar}
           </a>
-        )}
-      </div>
-    );
-  }
-  if (action.type === "map") return <MapCard action={action} t={t} />;
-  if (action.type === "weather") return <WeatherCardBody {...action} lang={langOf(t)} />;
-  return <MessageCard action={action} t={t} webhooks={webhooks} onOpenConnections={onOpenConnections} onPendingChange={onPendingChange} />;
+        )
+      )}
+    </div>
+  );
 }
 
 // ---- Map card -----------------------------------------------------------------------------------
@@ -315,7 +383,7 @@ function MapCard({ action, t }: { action: Extract<Card, { type: "map" }>; t: T }
       href={action.url}
       target="_blank"
       rel="noopener noreferrer"
-      lang={htmlLang(lang)}
+      lang={HTML_LANG[lang]}
       className="press group panel block overflow-hidden rounded-lg p-0 hover:border-line-strong"
     >
       <div className="relative">
@@ -363,29 +431,17 @@ function MessageCard({
   t,
   webhooks,
   onOpenConnections,
-  onPendingChange,
 }: {
   action: Extract<Card, { type: "message" }>;
   t: T;
   webhooks: { discord?: string; slack?: string };
   onOpenConnections: () => void;
-  onPendingChange?: (pending: boolean) => void;
 }) {
   const [text, setText] = useState(action.text);
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
-  // Telegram, SMS and email hand off to another app: the draft counts as handled once opened.
-  const [handedOff, setHandedOff] = useState(false);
   const { icon: Icon } = CHANNEL[action.channel];
   const name = action.channel === "email" ? EMAIL_NAME[langOf(t)] : CHANNEL[action.channel].name;
   const still = useStillMotion();
-
-  // Spec 6.1: the orb holds its amber confirm tone while this draft waits for the person.
-  const pending = status !== "sent" && !handedOff;
-  useEffect(() => {
-    if (!pending || !onPendingChange) return;
-    onPendingChange(true);
-    return () => onPendingChange(false);
-  }, [pending, onPendingChange]);
 
   const webhook = action.channel === "discord" ? webhooks.discord : action.channel === "slack" ? webhooks.slack : undefined;
   const send = async () => {
@@ -477,12 +533,12 @@ function MessageCard({
             </button>
           ))}
         {action.channel === "telegram" && (
-          <a href={telegramShareUrl(text)} target="_blank" rel="noopener noreferrer" onClick={() => setHandedOff(true)} className={primary}>
+          <a href={telegramShareUrl(text)} target="_blank" rel="noopener noreferrer" className={primary}>
             <Send className="size-5" aria-hidden /> {t.shareTelegram}
           </a>
         )}
         {action.channel === "sms" && (
-          <a href={smsUrl(action.to, text)} onClick={() => setHandedOff(true)} className={primary}>
+          <a href={smsUrl(action.to, text)} className={primary}>
             <MessageSquareText className="size-5" aria-hidden /> {t.openSms}
           </a>
         )}
@@ -492,12 +548,11 @@ function MessageCard({
               href={gmailComposeUrl(action.to, action.subject, text)}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => setHandedOff(true)}
               className={primary}
             >
               <Mail className="size-5" aria-hidden /> {t.openGmail}
             </a>
-            <a href={mailtoUrl(action.to, action.subject, text)} onClick={() => setHandedOff(true)} className={secondary}>
+            <a href={mailtoUrl(action.to, action.subject, text)} className={secondary}>
               <ExternalLink className="size-5" aria-hidden /> {t.otherMail}
             </a>
           </>
@@ -507,6 +562,43 @@ function MessageCard({
         <p className="mt-3 flex items-start gap-2 text-small text-danger" role="alert">
           <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden /> {t.sendFailed}
         </p>
+      )}
+    </div>
+  );
+}
+
+// ---- Weather card: the numbers behind a spoken weather answer ---------------------------------
+
+function WeatherCard({ action, t }: { action: Extract<Card, { type: "weather" }>; t: T }) {
+  const [prefs] = useDisplayPrefs();
+  const deg = (c: number) => temp(c, prefs.units === "imperial", false);
+  if (typeof action.tempC !== "number" || !Number.isFinite(action.tempC)) return null;
+  const lang = langOf(t);
+  const name = (k: string) => t.hud.kinds[k as keyof T["hud"]["kinds"]] ?? "";
+  const days = (Array.isArray(action.days) ? action.days : []).filter((d) => Number.isFinite(d?.minC) && Number.isFinite(d?.maxC)).slice(0, 3);
+  const day = (iso: string, i: number) =>
+    i === 0 ? t.hud.today : new Date(`${iso}T12:00:00Z`).toLocaleDateString(HTML_LANG[lang], { weekday: "short", timeZone: "UTC" });
+  return (
+    <div className={shell}>
+      <p className="text-label tracking-[0.12em] text-ink-muted uppercase [overflow-wrap:anywhere]">{action.place}</p>
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-4">
+        <span className="font-mono text-value tabular-nums text-ink">{deg(action.tempC)}</span>
+        <span className="text-lead text-ink">{name(action.kind)}</span>
+      </p>
+      {typeof action.feelsC === "number" && <p className="text-body text-ink-muted">{t.hud.feels.replace("{t}", deg(action.feelsC))}</p>}
+      {days.length > 0 && (
+        <ul className="mt-3 divide-y divide-line">
+          {days.map((d, i) => (
+            <li key={d.date} className="flex min-h-12 items-center justify-between gap-3 text-body">
+              <span className="text-ink">
+                {day(d.date, i)} <span className="text-ink-muted">{name(d.kind)}</span>
+              </span>
+              <span className="font-mono tabular-nums text-ink">
+                {deg(d.minC)} / {deg(d.maxC)}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

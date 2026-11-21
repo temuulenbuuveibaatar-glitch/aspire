@@ -23,11 +23,6 @@ interface Words {
   reminder: string;
   teach: string;
   currency: (from: string, to: string) => string;
-  tomorrow: string;
-  walkThere: string;
-  nearby: string;
-  quiz: string;
-  remindLater: string;
 }
 
 const W: Record<Lang, Words> = {
@@ -42,11 +37,6 @@ const W: Record<Lang, Words> = {
     reminder: "Маргааш 8 цагт сануулаарай",
     teach: "Надад шинэ зүйл зааж өгөөч",
     currency: (a, b) => `100 ${a} хэдэн ${b} вэ?`,
-    tomorrow: "Маргааш цаг агаар ямар байх вэ?",
-    walkThere: "Тийшээ явганаар хэр удах вэ?",
-    nearby: "Ойролцоо кафе байна уу?",
-    quiz: "Намайг шалгаад үзээч",
-    remindLater: "Нэг цагийн дараа сануулаарай",
   },
   zh: {
     rain: "今天会下雨吗？",
@@ -59,11 +49,6 @@ const W: Record<Lang, Words> = {
     reminder: "明天早上8点提醒我",
     teach: "教我一点新知识",
     currency: (a, b) => `100 ${a} 等于多少 ${b}？`,
-    tomorrow: "明天天气怎么样？",
-    walkThere: "走路过去要多久？",
-    nearby: "附近有咖啡馆吗？",
-    quiz: "考考我",
-    remindLater: "一小时后提醒我",
   },
   en: {
     rain: "Will it rain today?",
@@ -76,11 +61,6 @@ const W: Record<Lang, Words> = {
     reminder: "Remind me tomorrow at 8",
     teach: "Teach me something new",
     currency: (a, b) => `How much is 100 ${a} in ${b}?`,
-    tomorrow: "What about tomorrow?",
-    walkThere: "How long is it on foot?",
-    nearby: "Is there a cafe nearby?",
-    quiz: "Quiz me on it",
-    remindLater: "Remind me in an hour",
   },
   ru: {
     rain: "Сегодня будет дождь?",
@@ -93,11 +73,6 @@ const W: Record<Lang, Words> = {
     reminder: "Напомни завтра в 8",
     teach: "Научи меня чему-нибудь новому",
     currency: (a, b) => `Сколько будет 100 ${a} в ${b}?`,
-    tomorrow: "А что завтра?",
-    walkThere: "Сколько идти пешком?",
-    nearby: "Есть рядом кафе?",
-    quiz: "Проверь меня",
-    remindLater: "Напомни через час",
   },
   de: {
     rain: "Regnet es heute?",
@@ -110,11 +85,6 @@ const W: Record<Lang, Words> = {
     reminder: "Erinnere mich morgen um 8",
     teach: "Bring mir etwas Neues bei",
     currency: (a, b) => `Wie viel sind 100 ${a} in ${b}?`,
-    tomorrow: "Und morgen?",
-    walkThere: "Wie lange zu Fuß?",
-    nearby: "Gibt es ein Café in der Nähe?",
-    quiz: "Frag mich ab",
-    remindLater: "Erinnere mich in einer Stunde",
   },
 };
 
@@ -222,43 +192,4 @@ export function buildSuggestions({ ambient, hour, lang, tags = [], max = 4 }: Su
   add(w.reminder, "reminder");
   add(w.teach, "teach");
   return out;
-}
-
-/** 2-3 follow-up chips for the last reply, keyed on the first tool it used. */
-export function followUps(tool: string | null | undefined, lang: Lang): Suggestion[] {
-  const w = W[lang] ?? W.en;
-  switch (tool) {
-    case "get_weather":
-      return [
-        { label: w.tomorrow, kind: "weather" },
-        { label: w.air, kind: "air" },
-      ];
-    case "get_air_quality":
-      return [
-        { label: w.rain, kind: "rain" },
-        { label: w.airBad, kind: "air" },
-      ];
-    case "get_next_bus":
-    case "plan_trip":
-    case "get_directions":
-      return [
-        { label: w.walkThere, kind: "route" },
-        { label: w.rain, kind: "rain" },
-      ];
-    case "find_places":
-      return [
-        { label: w.walkThere, kind: "route" },
-        { label: w.nearby, kind: "places" },
-      ];
-    case "start_lesson":
-    case "save_progress":
-      return [
-        { label: w.quiz, kind: "teach" },
-        { label: w.remindLater, kind: "reminder" },
-      ];
-    case "set_reminder":
-      return [{ label: w.briefing, kind: "briefing" }];
-    default:
-      return [];
-  }
 }

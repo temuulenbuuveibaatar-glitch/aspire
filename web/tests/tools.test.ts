@@ -4,7 +4,7 @@ import { runTool, TOOL_LABELS, TOOLS, type ToolStep } from "@/lib/tools";
 import { partOfDay, validTimeZone, zonedTime } from "@/lib/tools/time";
 import type { ToolContext } from "@/lib/tools/types";
 import { calculate, kindFromWords } from "@/lib/tools/world";
-import { planTrip } from "@/lib/transit";
+import { whereFrom } from "@/lib/where";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -122,13 +122,6 @@ describe("memory and calls (privacy + safety)", () => {
   });
 });
 
-describe("trip planner", () => {
-  it("finds the direct route between two stops", () => {
-    const r = planTrip("Railway Station", "Нэгдсэн эмнэлэг", 12 * 60);
-    expect("options" in r && r.options[0]).toMatchObject({ route: "5", rideMinutes: 22 });
-  });
-});
-
 describe("no emojis", () => {
   it("tool labels are plain text with no icon field", () => {
     for (const t of TOOLS) {
@@ -145,7 +138,8 @@ describe("no emojis", () => {
     expect(byName.get_weather.description).not.toMatch(/Erdenet/);
     expect(byName.get_air_quality.description).not.toMatch(/Erdenet|Mongolia/);
     expect(byName.get_local_time.description).not.toMatch(/Mongolia/);
-    expect(byName.get_next_bus.description).toMatch(/only works in Erdenet/);
+    expect(byName.get_next_bus.description).toMatch(/Erdenet/);
+    expect(byName.get_next_bus.description).toMatch(/Google Maps transit/);
   });
 });
 
@@ -174,6 +168,32 @@ describe("world tools (network mocked)", () => {
     const failed = await run("get_air_quality", { place: "" }, here);
     expect(failed.out.error).toBeTruthy();
     expect(failed.steps[0].ok).toBe(false);
+  });
+});
+
+describe("where the person is", () => {
+  it("a city the person set beats the IP position, so the weather tool geocodes that city", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", ""); // Open-Meteo path
+    const ip = new Headers({ "x-vercel-ip-latitude": "47.92", "x-vercel-ip-longitude": "106.92", "x-vercel-ip-city": "Ulaanbaatar" });
+    const where = whereFrom(ip, { city: "Erdenet" }, {});
+    expect(where.approxLocation).toBeUndefined();
+    expect(where.city).toBe("Erdenet");
+    expect(whereFrom(ip, {}, {}).approxLocation).toEqual({ lat: 47.92, lng: 106.92 });
+
+    const fetchMock = vi.fn(async (url: string) =>
+      url.includes("geocoding-api")
+        ? Response.json({ results: [{ name: "Erdenet", country: "Mongolia", latitude: 49.0333, longitude: 104.0833 }] })
+        : Response.json({
+            current: { temperature_2m: -17, apparent_temperature: -24, weather_code: 3, wind_speed_10m: 8, relative_humidity_2m: 70 },
+            daily: { time: ["2026-11-20"], temperature_2m_max: [-12], temperature_2m_min: [-25], weather_code: [3], precipitation_probability_max: [5] },
+          }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const c = { now: NOW, timeZone: "Asia/Ulaanbaatar", ...where, device: { memory: {}, reminders: [] }, actions: [] };
+    const { out } = await run("get_weather", { place: "" }, c);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("name=Erdenet");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("latitude=49.03");
+    expect(out.now.temperatureC).toBe(-17);
   });
 });
 

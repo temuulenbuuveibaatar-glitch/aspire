@@ -33,8 +33,10 @@ import {
   LoaderCircle,
   Mail,
   MapPin,
+  Music,
   Navigation,
   Phone,
+  Play,
   RotateCw,
   Search,
   Send,
@@ -50,8 +52,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import { ActionCard, isCard } from "@/components/aspire/ActionCard";
 import { BriefingCard } from "@/components/aspire/BriefingCard";
-import { detectTextLanguage, type Lang } from "@/lib/lang";
-import type { ClientAction, Reminder, Title } from "@/lib/tools/types";
+import { MediaCard } from "@/components/aspire/MediaCard";
+import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
+import type { ClientAction, MediaAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 import { cn } from "@/lib/utils";
 
@@ -127,11 +130,6 @@ export interface MessageListProps {
   announceReplies?: boolean;
   /** Reduced motion or Calm mode. Default: the OS setting. */
   reducedMotion?: boolean;
-  /** A send-for-me draft is waiting for the person's confirmation (drives the orb's confirm tone). */
-  onPendingChange?: (pending: boolean) => void;
-  /** Follow-up chips under the newest reply (2-3). Tapping one asks it. */
-  followUps?: { label: string; icon: LucideIcon }[];
-  onFollowUp?: (label: string) => void;
   /** id of the thread wrapper, the skip-link target. Default "aspire-thread". */
   id?: string;
   className?: string;
@@ -143,6 +141,9 @@ export interface MessageListProps {
 
 /** Every tool in lib/tools/*.ts plus the provider's web_search and web_fetch. */
 export const TOOL_ICONS: Record<string, LucideIcon> = {
+  get_calendar: CalendarDays,
+  play_video: Play,
+  play_music: Music,
   // connect.ts
   send_message: Send,
   call_phone: Phone,
@@ -212,6 +213,9 @@ const TOOL_TEXT: Record<string, L5> = {
   calculate: { mn: "Тооцоолуур", zh: "计算器", en: "Calculator", ru: "Калькулятор", de: "Rechner" },
   web_search: { mn: "Вэб хайлт", zh: "网页搜索", en: "Web search", ru: "Поиск в интернете", de: "Websuche" },
   web_fetch: { mn: "Хуудас унших", zh: "阅读网页", en: "Reading page", ru: "Чтение страницы", de: "Seite lesen" },
+  get_calendar: { mn: "Хуанли унших", zh: "查看日历", en: "Calendar", ru: "Календарь", de: "Kalender" },
+  play_video: { mn: "Видео", zh: "视频", en: "Video", ru: "Видео", de: "Video" },
+  play_music: { mn: "Хөгжим", zh: "音乐", en: "Music", ru: "Музыка", de: "Musik" },
 };
 
 /* ---------------------------------------------------------------------------------------- */
@@ -300,7 +304,7 @@ const TEXT: Record<
 /* ---------------------------------------------------------------------------------------- */
 
 /** BCP 47 tag for the `lang` attribute (spec 4.1: Chinese is zh-Hans). */
-const htmlLang = (l: Lang) => (l === "zh" ? "zh-Hans" : l in TEXT ? l : "en");
+const htmlLang = (l: Lang) => HTML_LANG[l] ?? "en";
 
 // A message's `lang` comes from the server; never crash on an unexpected value.
 const uiFor = (l: Lang) => UI[l] ?? UI.en;
@@ -360,9 +364,6 @@ export function MessageList({
   autoScroll = true,
   announceReplies = true,
   reducedMotion,
-  onPendingChange,
-  followUps,
-  onFollowUp,
   id = "aspire-thread",
   className,
 }: MessageListProps) {
@@ -514,9 +515,6 @@ export function MessageList({
                   onRetry={onRetry}
                   onCopy={onCopy}
                   onOpenConnections={onOpenConnections}
-                  onPendingChange={index === messages.length - 1 ? onPendingChange : undefined}
-                  followUps={m === lastReply && index === messages.length - 1 && !busy ? followUps : undefined}
-                  onFollowUp={onFollowUp}
                 />
               )}
             </motion.li>
@@ -662,9 +660,6 @@ function AssistantMessage({
   onRetry,
   onCopy,
   onOpenConnections,
-  onPendingChange,
-  followUps,
-  onFollowUp,
 }: {
   m: ChatMessage;
   t: T;
@@ -677,12 +672,10 @@ function AssistantMessage({
   onRetry?: (q: ChatMessage, r: ChatMessage) => void;
   onCopy?: (m: ChatMessage) => void | Promise<void>;
   onOpenConnections: () => void;
-  onPendingChange?: (pending: boolean) => void;
-  followUps?: { label: string; icon: LucideIcon }[];
-  onFollowUp?: (label: string) => void;
 }) {
   const text = clean(m.text);
   const cards = (m.cards ?? []).filter(isCard);
+  const media = (m.cards ?? []).filter((c): c is MediaAction => c.type === "video" || c.type === "spotify");
   const canRetry = !!onRetry && !!question;
 
   return (
@@ -762,6 +755,10 @@ function AssistantMessage({
         {!!m.sources?.length && <Sources sources={m.sources} t={t} s={s} />}
       </div>
 
+      {media.map((c, i) => (
+        <MediaCard key={`m${i}`} action={c} lang={m.lang} />
+      ))}
+
       {!!cards.length && (
         <div className="flex flex-col gap-2">
           {cards.map((c, i) => (
@@ -771,29 +768,11 @@ function AssistantMessage({
               t={t}
               webhooks={webhooks}
               onOpenConnections={onOpenConnections}
-              onPendingChange={onPendingChange}
             />
           ))}
         </div>
       )}
 
-      {/* ---- follow-up chips (spec 10.4): 2-3 next questions under the newest reply ---- */}
-      {!!followUps?.length && onFollowUp && (
-        <ul aria-label={t.suggestionsLabel} className="flex flex-wrap gap-2">
-          {followUps.slice(0, 3).map(({ label, icon: Icon }) => (
-            <li key={label}>
-              <button
-                type="button"
-                onClick={() => onFollowUp(label)}
-                className="press panel-2 flex min-h-14 items-center gap-2 rounded-full border border-line px-5 text-left text-body text-ink hover:bg-panel-3"
-              >
-                <Icon className="size-5 shrink-0 text-accent" aria-hidden />
-                <span>{label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

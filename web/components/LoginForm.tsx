@@ -5,9 +5,10 @@ import { Clock } from "lucide-react";
 import { MotionConfig, motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useSyncExternalStore } from "react";
+import { useCalm } from "@/lib/display-prefs";
 import { Sky } from "@/components/aspire/Sky";
 import { VoiceOrb } from "@/components/ui/voice-orb";
-import type { Lang } from "@/lib/lang";
+import { HTML_LANG, type Lang } from "@/lib/lang";
 import { UI } from "@/lib/ui-text";
 
 // Sign-in (spec section 16). A calm, location-free sky behind everything (clear, no particles,
@@ -63,7 +64,6 @@ const TEXT: Record<Lang, LoginText> = {
   },
 };
 
-const HTML_LANG: Record<Lang, string> = { mn: "mn", zh: "zh-Hans", en: "en", ru: "ru", de: "de" };
 
 // Clerk's <SignIn> card in the visitor's language, built from the UI strings we already ship
 // (no @clerk/localizations dependency). Only the visible keys of the email-code and Google flow.
@@ -171,17 +171,6 @@ function useDeviceMinutes(): number | null {
   return useSyncExternalStore(subscribeMinute, nowMinutes, serverMinutes);
 }
 
-// ---- in-app Calm mode (<html data-calm="true">, spec 13.4) ----
-
-function subscribeCalm(onChange: () => void) {
-  if (typeof MutationObserver === "undefined") return () => {};
-  const mo = new MutationObserver(onChange);
-  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-calm"] });
-  return () => mo.disconnect();
-}
-const readCalm = () => document.documentElement.dataset.calm === "true";
-const serverCalm = () => false;
-
 // ---- halo clock ring (spec 6.3, login variant: no sunrise/sunset, so ticks and the now marker only) ----
 
 const ORB = 160;
@@ -255,7 +244,7 @@ export default function LoginForm({
 }) {
   const t = TEXT[lang] ?? TEXT.en;
   const minutes = useDeviceMinutes();
-  const calm = useSyncExternalStore(subscribeCalm, readCalm, serverCalm);
+  const calm = useCalm();
   const hour = minutes == null ? null : Math.floor(minutes / 60);
   const clerk = useClerk();
 

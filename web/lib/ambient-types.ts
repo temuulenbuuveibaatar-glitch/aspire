@@ -1,11 +1,14 @@
-// Shape of GET /api/ambient: the live "world around you" snapshot that drives the sky
-// (rain, snow, storm...), the ambient bar and the live panel. Shared by server and client.
+// Shape of /api/ambient: the live "world around you" snapshot behind the HUD (photo,
+// weather over it, readouts, map). Shared by server and client.
 
 export type SkyKind = "clear" | "partly" | "cloudy" | "fog" | "drizzle" | "rain" | "storm" | "snow" | "sleet" | "hail";
 
 export const SKY_KINDS: readonly SkyKind[] = ["clear", "partly", "cloudy", "fog", "drizzle", "rain", "storm", "snow", "sleet", "hail"];
 
 export type AqiCategory = "good" | "moderate" | "sensitive" | "unhealthy" | "very_unhealthy" | "hazardous";
+
+/** Best to worst. */
+export const AQI_ORDER: readonly AqiCategory[] = ["good", "moderate", "sensitive", "unhealthy", "very_unhealthy", "hazardous"];
 
 export type TrafficLevel = "light" | "moderate" | "heavy";
 
@@ -34,7 +37,6 @@ export interface AmbientWeather {
   tempC: number;
   feelsC: number;
   text: string;
-  humidity: number | null;
   days: AmbientDay[];
 }
 
@@ -42,51 +44,62 @@ export interface AmbientAir {
   /** US EPA AQI */
   aqi: number;
   category: AqiCategory;
-  pm25: number | null;
-  pm10: number | null;
-  dominant: string | null;
 }
 
 export interface AmbientTraffic {
   level: TrafficLevel;
   /** Extra minutes versus free-flowing traffic on the probe route. */
   delayMin: number;
-  /** duration / static duration */
-  ratio: number;
-  /** What the probe route measured, e.g. "to the city centre". */
-  towards: string;
-  /** Probe destination (for the Directions link); only sent for a device-shared position. */
-  dest?: { lat: number; lng: number };
 }
 
 export interface AmbientStop {
   name: string;
   distanceM: number;
-  walkMin: number;
-  mapsUrl: string;
-  /** Next arrivals when known (e.g. the Erdenet timetable). */
+  /** Next arrivals when known (e.g. the Erdenet live feed). */
   lines?: { route: string; minutes: number }[];
+  /** Exact stop position, for the map marker. */
+  lat?: number;
+  lng?: number;
+}
+
+/** A scenic photo of the place (Google Places). The UI must show the author credit. */
+export interface AmbientPhoto {
+  url: string;
+  attribution: { name: string; uri: string };
+}
+
+export interface AmbientTaxi {
+  name: string;
+  phone: string | null;
+  distanceM: number;
+  lat: number;
+  lng: number;
+}
+
+export interface AmbientNextBus {
+  line: string;
+  departsInMin: number;
+  /** "erdenet-live": the city's live feed (credit Орхон ТКХДТ); "google": Google transit. */
+  source: "erdenet-live" | "google";
 }
 
 export interface Ambient {
   place: string | null;
-  /** Rounded to 2 decimals (about 1 km). */
+  /** The device position (4 decimals) or the chosen city; never an IP-derived one. */
   coords: { lat: number; lng: number } | null;
-  /** Where the position came from: the device (opt-in) or the network (city-level). */
-  locatedBy: "device" | "network" | null;
+  /** Where the position came from: the device (opt-in), the city the person set, or the network (approximate). */
+  locatedBy: "device" | "city" | "network" | null;
   sky: AmbientSky;
   weather: AmbientWeather | null;
   air: AmbientAir | null;
   traffic: AmbientTraffic | null;
   stops: AmbientStop[];
+  photo?: AmbientPhoto | null;
+  taxis?: AmbientTaxi[];
+  nextBus?: AmbientNextBus | null;
   timeZone: string | null;
   /** 0..23 in the place's time zone. */
   localHour: number | null;
-  source: {
-    weather: "google" | "open-meteo" | null;
-    air: "google" | "open-meteo" | null;
-  };
-  updatedAt: string; // ISO
 }
 
 export function aqiCategory(aqi: number): AqiCategory {

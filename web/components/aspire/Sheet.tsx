@@ -7,12 +7,12 @@ import {
   motion,
   useDragControls,
   useMotionValue,
-  useReducedMotion,
   useTransform,
   type AnimationPlaybackControls,
   type PanInfo,
 } from "motion/react";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMedia, useStill } from "@/lib/display-prefs";
 import { LANGS, type Lang } from "@/lib/lang";
 import { UI } from "@/lib/ui-text";
 
@@ -63,38 +63,8 @@ function langFor(closeLabel: string): Lang {
   return (LANGS as readonly string[]).includes(doc) ? (doc as Lang) : "en";
 }
 
-const WIDE = "(min-width: 1024px)";
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const q = window.matchMedia(WIDE);
-      q.addEventListener("change", cb);
-      return () => q.removeEventListener("change", cb);
-    },
-    () => window.matchMedia(WIDE).matches,
-    () => false,
-  );
-}
-
-function subscribeCalm(cb: () => void) {
-  const mo = new MutationObserver(cb);
-  mo.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["data-calm"],
-  });
-  return () => mo.disconnect();
-}
-
-/** True under prefers-reduced-motion or the in-app Calm mode (`data-calm="true"` on <html>). */
-export function useStillMotion(): boolean {
-  const reduced = useReducedMotion();
-  const calm = useSyncExternalStore(
-    subscribeCalm,
-    () => document.documentElement.dataset.calm === "true",
-    () => false,
-  );
-  return Boolean(reduced) || calm;
-}
+/** True under prefers-reduced-motion or the in-app Calm mode (lib/display-prefs). */
+export const useStillMotion = useStill;
 
 const FOCUSABLE = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -116,7 +86,7 @@ export interface SheetProps {
 }
 
 export function Sheet({ open, title, closeLabel, onClose, snapPoints, initialSnap, onAnnounce, children }: SheetProps) {
-  const wide = useWide();
+  const wide = useMedia("(min-width: 1024px)");
   const still = useStillMotion();
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);

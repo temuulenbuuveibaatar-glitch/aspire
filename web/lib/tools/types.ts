@@ -43,7 +43,18 @@ export type ClientAction =
   /** "Open in Google Maps" card (url is a Google Maps link). */
   | { type: "map"; title: string; url: string }
   /** Weather result card (spec 10.2): the numbers behind a spoken weather answer. */
-  | { type: "weather"; place: string; tempC: number; feelsC: number | null; kind: SkyKind; days: WeatherCardDay[] };
+  | { type: "weather"; place: string; tempC: number; feelsC: number | null; kind: SkyKind; days: WeatherCardDay[] }
+  /** In-app YouTube player (youtube-nocookie embed). videoId is 11 chars of [A-Za-z0-9_-]. */
+  | { type: "video"; videoId: string; title: string; channel: string }
+  /** In-app Spotify embed. id is the 22-char Spotify id. */
+  | { type: "spotify"; kind: "track" | "playlist"; id: string; title: string; artist: string };
+
+/** The ClientAction variants MediaCard plays. */
+export type MediaAction = Extract<ClientAction, { type: "video" | "spotify" }>;
+/** YouTube video ids are exactly 11 characters of [A-Za-z0-9_-]. */
+export const isVideoId = (s: unknown): s is string => typeof s === "string" && /^[\w-]{11}$/.test(s);
+/** Spotify ids are 22 base-62 characters. */
+export const isSpotifyId = (s: unknown): s is string => typeof s === "string" && /^[A-Za-z0-9]{22}$/.test(s);
 
 export interface WeatherCardDay {
   date: string; // YYYY-MM-DD
@@ -76,6 +87,8 @@ export interface Settings {
   lastBriefingDate?: string;
   /** Opt-in: send a rounded location with questions (directions, nearby places). Default off. */
   shareLocation?: boolean;
+  /** "My city": where the HUD's weather, photo, air, traffic and buses are for when GPS is off. */
+  city?: string;
 }
 
 /** What the device tells us about the person (stored only on their device). */
