@@ -1,5 +1,8 @@
+/** The canonical public origin. Canonicals, hreflang, the sitemap and robots.txt all use it. */
+export const SITE_URL = "https://aspire-mn.vercel.app";
+
 /** The User-Agent for every outbound call to public feeds (Erdenet transit, Open-Meteo, Wikimedia). */
-export const UA = "Aspire/1.0 (+https://aspire-mn.vercel.app)";
+export const UA = `Aspire/1.0 (+${SITE_URL})`;
 
 // Public project info shown in the privacy policy and terms.
 export const SITE = {

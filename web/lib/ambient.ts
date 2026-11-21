@@ -2,14 +2,15 @@
 // traffic, stops, taxis (map only), the next bus and a photo of the place, for any city. Every source
 // is optional and fetched in parallel; Google first (key only in a header, via lib/maps.ts),
 // Open-Meteo as the free fallback, in Erdenet the city's live bus feed (Орхон ТКХДТ), and where
-// Google has no stops or bus, Transitous (open data, worldwide; lib/transitous.ts, 30 s).
+// Google has no stops or bus, Transitous (open data, worldwide; lib/transitous.ts, 30 s), and where
+// nothing has departures, the bare stops from OpenStreetMap (lib/osm-stops.ts; no times, a day).
 // The precise position (4 decimals, from the device) is used for this answer only and never
 // stored: caches are keyed by a coarse cell (2 decimals, about 1 km), only that cell goes to
 // Google and Open-Meteo, and distances are measured from the precise point. Numbers are fetched
 // once per cell and only the words are localised per request. Current conditions 10 minutes,
 // forecast 3 hours, air 30 minutes, traffic 20 minutes, next bus 10 minutes; stops, taxis, the
 // city centre, a typed city and the photo for a day.
-import type { Ambient, AmbientAir, AmbientNextBus, AmbientPhoto, AmbientSky, AmbientStop, AmbientTaxi, AmbientTraffic, AmbientWeather, SkyKind, TrafficLevel } from "@/lib/ambient-types";
+import type { Ambient, AmbientAir, AmbientHour, AmbientSource, AmbientNextBus, AmbientPhoto, AmbientSky, AmbientStop, AmbientTaxi, AmbientTraffic, AmbientWeather, SkyKind, TrafficLevel } from "@/lib/ambient-types";
 import { aqiCategory } from "@/lib/ambient-types";
 import { arrivals, isErdenet, nearestStations } from "@/lib/erdenet-transit";
 import type { Lang } from "@/lib/lang";
@@ -20,16 +21,19 @@ import {
   cityCentre,
   drivingTraffic,
   geocode,
+  googleHourly,
   haversineKm,
   type LatLng,
   mapsConfigured,
   nearbyTaxis,
   nearbyTransitStops,
+  openMeteoHourly,
   transitOptions,
   weatherCurrent,
   weatherDays,
 } from "@/lib/maps";
 import { hourIn, validTimeZone } from "@/lib/tools/time";
+import { nearbyStops, resetOsmStops } from "@/lib/osm-stops";
 import { departuresNear } from "@/lib/transitous";
 import { openMeteoGeocode } from "@/lib/tools/world";
 
@@ -40,6 +44,8 @@ export interface Located {
   locatedBy: "device" | "city" | "network" | null;
   /** The town to name and search for: the typed city, or the network (Vercel IP) city. */
   city: string | null;
+  /** A typed city's English name from the geocoder (the city photo is searched by it). */
+  english?: string | null;
   country: string | null;
   timeZone: string | null;
 }
@@ -99,7 +105,9 @@ export async function locate(params: URLSearchParams, headers: Headers): Promise
     // Google first; without a key, over quota or on error, Open-Meteo (free): a typed city is never ignored.
     const find = async () => (mapsConfigured() ? await geocode(typed, "en", BG).catch(() => openMeteoGeocode(typed)) : openMeteoGeocode(typed));
     const g = await memo(`geo:${typed.toLowerCase()}`, DAY_MS, find).catch(() => null);
-    if (g) return { coords: { lat: round(g.lat, 4), lng: round(g.lng, 4) }, locatedBy: "city", city: typed, country: null, timeZone: null };
+    // The typed text stays the label; the geocoder's English name (asked in English) finds the photo.
+    const english = g?.name.split(",")[0].trim() || null;
+    if (g) return { coords: { lat: round(g.lat, 4), lng: round(g.lng, 4) }, locatedBy: "city", city: typed, country: null, timeZone: null, ...(english ? { english } : {}) };
   }
   if (network) return { coords: network, locatedBy: "network", city, country, timeZone };
   return { coords: null, locatedBy: null, city: null, country: null, timeZone };
@@ -303,12 +311,19 @@ interface RawDay {
 }
 
 interface WeatherPart {
+  source: "google" | "open-meteo";
+  /** When the provider was asked (ms). */
+  at: number;
   sky: AmbientSky;
   state: SkyState;
   tempC: number;
   feelsC: number;
   textEn: string;
   days: RawDay[];
+  /** Language-neutral; empty when unknown. */
+  hourly: AmbientHour[];
+  /** Who gave the hourly strip (Google's strip falls back to Open-Meteo). */
+  hourlySource: AmbientSource;
   timeZone: string | null;
 }
 
@@ -316,19 +331,34 @@ interface WeatherPart {
 function localiseWeather(w: WeatherPart, lang: Lang): AmbientWeather {
   const words = (state: SkyState, en: string) => (lang === "en" && en.trim() ? en.trim().slice(0, 80) : skyText(state, lang));
   return {
+    source: w.source,
+    at: new Date(w.at).toISOString(),
     tempC: w.tempC,
     feelsC: w.feelsC,
     text: words(w.state, w.textEn),
     days: w.days.map((d) => ({ date: d.date, minC: d.minC, maxC: d.maxC, text: words(d.state, d.textEn), kind: d.state.kind, precipChance: d.precipChance })),
+    ...(w.hourly.length ? { hourly: w.hourly, hourlySource: w.hourlySource } : {}),
   };
 }
+
+/** The hero's hourly strip: Open-Meteo (free); never fails the weather part. */
+const openMeteoHours = (p: LatLng): Promise<AmbientHour[]> =>
+  openMeteoHourly(p.lat, p.lng)
+    .then((hs) => hs.map((h) => ({ time: h.time, tempC: h.tempC, kind: wmoSky(h.code).kind, precipChance: h.precipChance })))
+    .catch(() => []);
 
 async function googleWeather(p: LatLng): Promise<WeatherPart> {
   // Current conditions every snapshot; the 3-day forecast changes slowly, so it is memoised per
   // ~10 km cell for 3 hours. Both are asked in English and localised per request.
-  const [w, rawDays] = await Promise.all([
+  // The hourly strip is memoised per ~10 km cell for an hour (the client drops hours that have ended);
+  // Google with no hours falls back to Open-Meteo for the strip only.
+  const [w, rawDays, strip] = await Promise.all([
     weatherCurrent(p.lat, p.lng, "en", BG),
     memo(`days:${cell10(p)}`, 3 * HOUR_MS, () => weatherDays(p.lat, p.lng, "en", BG)).catch(() => []),
+    memo(`hours:${cell10(p)}`, HOUR_MS, () => googleHourly(p.lat, p.lng, BG))
+      .then((hs) => hs.map((h): AmbientHour => ({ time: h.time, tempC: h.tempC, kind: googleSky(h.type, null).kind, precipChance: h.precipChance })))
+      .catch((): AmbientHour[] => [])
+      .then(async (hs) => (hs.length ? { hours: hs, source: "google" as const } : { hours: await openMeteoHours(p), source: "open-meteo" as const })),
   ]);
   const s = googleSky(w.type, w.cloudCover);
   const timeZone = validTimeZone(w.timeZone);
@@ -338,17 +368,22 @@ async function googleWeather(p: LatLng): Promise<WeatherPart> {
       : [{ date: d.date, minC: d.minC, maxC: d.maxC, state: googleSky(d.type, null), textEn: d.text, precipChance: d.precipChance }],
   );
   return {
+    source: "google",
+    at: Date.now(),
     sky: { kind: s.kind, intensity: s.intensity, isDay: w.isDaytime ?? isDayAt(timeZone, new Date()), windKph: w.windKph, cloudCover: w.cloudCover },
     state: s,
     tempC: w.tempC,
     feelsC: w.feelsC,
     textEn: w.text,
     days,
+    hourly: strip.hours,
+    hourlySource: strip.source,
     timeZone,
   };
 }
 
 async function openMeteoWeather(p: LatLng): Promise<WeatherPart> {
+  const hourly = openMeteoHours(p);
   const d = await getJson<{
     timezone?: string;
     current?: Record<string, number>;
@@ -372,6 +407,8 @@ async function openMeteoWeather(p: LatLng): Promise<WeatherPart> {
     return [{ date, minC, maxC, state: wmoSky(finite(daily.weather_code?.[i])), textEn: "", precipChance: finite(daily.precipitation_probability_max?.[i]) }];
   });
   return {
+    source: "open-meteo",
+    at: Date.now(),
     sky: {
       kind: s.kind,
       intensity: s.intensity,
@@ -384,6 +421,8 @@ async function openMeteoWeather(p: LatLng): Promise<WeatherPart> {
     feelsC: finite(c.apparent_temperature) ?? tempC,
     textEn: "",
     days,
+    hourly: await hourly,
+    hourlySource: "open-meteo",
     timeZone,
   };
 }
@@ -404,18 +443,19 @@ async function airPart(p: LatLng): Promise<AmbientAir> {
     try {
       const a = await airQualityNow(p.lat, p.lng, BG);
       const aqi = Math.round(a.usAqi);
-      return { aqi, category: aqiCategory(aqi) };
+      return { aqi, category: aqiCategory(aqi), pm25: a.pm2_5, source: "google", at: new Date().toISOString() };
     } catch {
       // -> Open-Meteo
     }
   }
-  const d = await getJson<{ current?: { us_aqi?: number } }>(
-    `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat}&longitude=${p.lng}&current=us_aqi`,
+  const d = await getJson<{ current?: { us_aqi?: number; pm2_5?: number } }>(
+    `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat}&longitude=${p.lng}&current=us_aqi,pm2_5`,
   );
   const raw = finite(d.current?.us_aqi);
   if (raw === null || raw < 0) throw new Error("No air quality data here");
   const aqi = Math.round(raw);
-  return { aqi, category: aqiCategory(aqi) };
+  const pm = finite(d.current?.pm2_5);
+  return { aqi, category: aqiCategory(aqi), pm25: pm !== null && pm >= 0 ? pm : null, source: "open-meteo", at: new Date().toISOString() };
 }
 
 // ---- slow-changing parts: small per-instance memo ----------------------------------------------
@@ -527,11 +567,15 @@ async function trafficPart(c: LatLng, centre: Centre | null): Promise<AmbientTra
   const target = awayTo(c, centre);
   const dest = target ? { lat: target.lat, lng: target.lng } : eastOf(c, 4);
   // The probe itself is language-neutral and the costly part: memoised per cell.
-  const t = await memo(`traffic:${cell(c)}`, 20 * 60_000, () => drivingTraffic(c, dest, BG));
+  const t = await memo(`traffic:${cell(c)}`, 20 * 60_000, async () => {
+    const r = await drivingTraffic(c, dest, BG);
+    return r && { ...r, at: new Date().toISOString() };
+  });
   if (!t) return null;
   return {
     level: trafficLevel(round(t.durationS / t.staticS, 2)),
     delayMin: Math.max(0, Math.round((t.durationS - t.staticS) / 60)),
+    at: t.at,
   };
 }
 
@@ -568,16 +612,13 @@ async function googleBus(c: LatLng, centre: Centre | null, lang: Lang, now: Date
   return { line: (o.line || o.lineName).slice(0, 40), departsInMin: o.waitMinutes - gone, source: "google", kind: "scheduled", at: now.toISOString() };
 }
 
-// Integrator: add "transitous" to AmbientNextBus.source in ambient-types.ts; this cast is then a no-op.
-const TRANSITOUS = "transitous" as AmbientNextBus["source"];
-
 /** Transitous: the nearest stops with their next departures, and the soonest of them (live or scheduled). */
 async function transitousPart(p: LatLng, now: Date, timeZone: string | null): Promise<{ stops: AmbientStop[]; nextBus: AmbientNextBus | null }> {
   const deps = await departuresNear(p, now, { timeZone: timeZone ?? undefined });
   const byStop = new Map<string, AmbientStop>();
   for (const d of [...deps].sort((a, b) => a.distanceM - b.distanceM)) {
     const s = byStop.get(d.stop) ?? { name: d.stop, distanceM: d.distanceM, lat: d.lat, lng: d.lng, lines: [] };
-    if (s.lines!.length < 4) s.lines!.push({ route: d.route, minutes: d.minutes });
+    if (s.lines!.length < 4) s.lines!.push({ route: d.route, minutes: d.minutes, live: d.live });
     byStop.set(d.stop, s);
   }
   const stops = [...byStop.values()].slice(0, 5);
@@ -586,8 +627,23 @@ async function transitousPart(p: LatLng, now: Date, timeZone: string | null): Pr
   const soon = deps.find((d) => near.has(d.stop));
   return {
     stops,
-    nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: TRANSITOUS, kind: soon.live ? "live" : "scheduled", at: now.toISOString() } : null,
+    nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "transitous", kind: soon.live ? "live" : "scheduled", at: now.toISOString(), stop: soon.stop } : null,
   };
+}
+
+/**
+ * A stop known only from OpenStreetMap: a position and a name, never departure times. `kind: "stop"`
+ * tells the UI to say "no timetable data"; `source: "osm"` that the credit is OpenStreetMap
+ * contributors (ODbL, lib/osm-stops.ts OSM_CREDIT).
+ */
+export type OsmAmbientStop = AmbientStop & { kind: "stop"; source: "osm" };
+
+/** OpenStreetMap: the nearest named bus stops (only the ~1 km cell is sent; a day per cell). */
+async function osmPart(p: LatLng, lang: Lang): Promise<OsmAmbientStop[]> {
+  // Kept short: the whole snapshot (weather, air, photo) waits for it. A miss is not cached, so a
+  // later refresh asks again (after osm-stops' short back-off).
+  const stops = await nearbyStops(p, { lang, max: 5, budgetMs: 6_000 });
+  return stops.map((s) => ({ name: s.name, distanceM: s.distanceM, lat: s.lat, lng: s.lng, kind: "stop", source: "osm" }));
 }
 
 /** Erdenet: the nearest stations of the city's live feed with their next buses (no Google calls). */
@@ -605,9 +661,9 @@ async function erdenetPart(p: LatLng, now: Date): Promise<{ stops: AmbientStop[]
     }),
   );
   // The soonest bus at any of them (the nearest stop wins a tie).
-  const soon = stations.flatMap((_, i) => next[i].slice(0, 1)).sort((x, y) => x.minutes - y.minutes)[0];
+  const soon = stations.flatMap((s, i) => next[i].slice(0, 1).map((a) => ({ ...a, stop: s.name }))).sort((x, y) => x.minutes - y.minutes)[0];
   // Arrival minutes are inferred from live positions: an estimate.
-  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live", kind: "estimate", at: now.toISOString() } : null };
+  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live", kind: "estimate", at: now.toISOString(), stop: soon.stop } : null };
 }
 
 // ---- snapshot + cache ----------------------------------------------------------------------------
@@ -628,6 +684,7 @@ export function resetAmbientCache(): void {
   cache.clear();
   inflight.clear();
   memos.clear();
+  resetOsmStops();
 }
 
 async function fetchWorld(p: LatLng): Promise<World> {
@@ -667,6 +724,8 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const c = coarse(p);
   const google = mapsConfigured();
   // A network (IP) position can be far off: no "nearest stop" or "next bus from here" for it.
+  // A typed city counts: its coords are the geocoded city centre, so stops and departures are the
+  // centre's ("Berlin" shows Berlin's), while the UI never offers a walk from it.
   const precise = loc.locatedBy !== "network";
   const [centreR, taxisR, erdR] = await Promise.allSettled([
     google ? centreFor(c, loc.city, lang) : null,
@@ -688,17 +747,34 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const gBus = value(busR, null);
   // Where Google has no stops or bus (no key, no transit data, quota), Transitous; never for a network position.
   const open = precise && !erd && (!gStops.length || !gBus) ? await transitousPart(p, now, loc.timeZone).catch(() => null) : null;
+  // Stops chain: Erdenet live feed > Google > Transitous (departures) > OpenStreetMap (stops only).
+  const osm = precise && !erd && !gStops.length && !open?.stops.length ? await osmPart(p, lang).catch(() => []) : [];
+  // OSM stops carry their own `source`; stopsSource stays unset for them (it names a departures source).
+  const stopsSource: Ambient["stopsSource"] = erd?.stops.length ? "erdenet-live" : gStops.length ? "google" : open?.stops.length ? "transitous" : undefined;
+  // Commons searches best by the English name: a typed city's English name from the geocoder (never
+  // the typed text: "Эрдэнэт" matches no Commons title), the network city (English) when it describes
+  // this position, else Google's centre asked in English (memoised a day), else the local name.
+  const english = loc.english ?? (loc.locatedBy === "city" ? null : loc.city) ?? (lang === "en" ? centre?.city : google ? (await centreFor(c, null, "en").catch(() => null))?.city : null) ?? city;
   return {
     traffic: value(trafficR, null),
     city,
-    stops: erd ? erd.stops : gStops.length ? gStops : (open?.stops ?? []),
+    stops: erd ? erd.stops : gStops.length ? gStops : open?.stops.length ? open.stops : osm,
+    ...(stopsSource ? { stopsSource } : {}),
     // Map pins only: no "nearest taxi" readout.
     taxis: value(taxisR, []),
-    // The WHOLE city only (skyline / panorama / cityscape from Commons; English city name searches best).
-    // No landmark or hotel photos (owner); with none, the client shows its default skyline.
-    photo: await memo(`city:${(loc.city ?? city ?? "").toLowerCase()}`, DAY_MS, () => cityPhoto(loc.city ?? city ?? "")).catch(() => null),
+    // The WHOLE city only (skyline / panorama / cityscape from Commons). No landmark or hotel photos (owner).
+    photo: english ? await photoFor(english).catch(() => null) : null,
     nextBus: erd ? erd.nextBus : (gBus ?? open?.nextBus ?? null),
   };
+}
+
+/** The city photo, memoised a day; "no photo" is kept only an hour, so a new upload or a fixed name shows soon. */
+async function photoFor(name: string): Promise<AmbientPhoto | null> {
+  const key = `city:${name.toLowerCase()}`;
+  const got = await memo(key, DAY_MS, () => cityPhoto(name));
+  const hit = memos.get(key);
+  if (!got && hit) hit.ttl = HOUR_MS;
+  return got;
 }
 
 /** "Erdenet" + "MN" -> "Erdenet, Mongolia" (the country in the person's language). */
@@ -758,6 +834,7 @@ export async function getAmbient(loc: Located, lang: Lang, now: Date = new Date(
     air: world.air,
     traffic: local.traffic,
     stops: local.stops,
+    ...(local.stopsSource ? { stopsSource: local.stopsSource } : {}),
     photo: local.photo,
     taxis: local.taxis,
     nextBus: local.nextBus,

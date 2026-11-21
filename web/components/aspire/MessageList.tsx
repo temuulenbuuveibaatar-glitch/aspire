@@ -2,7 +2,7 @@
 
 // The conversation, as a presentational component (design spec v3, section 10.1 and 10.2):
 // the morning briefing above the thread, user and assistant messages, the tool ledger,
-// sources, send-for-me, map, code and form cards, the thinking row, follow-the-stream scrolling with a
+// sources, send-for-me, map, code, form and cameras cards, the thinking row, follow-the-stream scrolling with a
 // "Jump to latest" pill, the reminder banner, and one sr-only live region for the newest reply.
 // All state that matters (messages, phase, audio) lives in the shell; this file only renders.
 
@@ -17,6 +17,7 @@ import {
   Bus,
   Calculator,
   CalendarDays,
+  CarFront,
   Check,
   ChevronDown,
   Clock,
@@ -28,6 +29,7 @@ import {
   Eraser,
   ExternalLink,
   FileText,
+  Fuel,
   GraduationCap,
   ListChecks,
   ListPlus,
@@ -43,7 +45,9 @@ import {
   RotateCw,
   Search,
   Send,
+  SquareParking,
   TriangleAlert,
+  Video,
   Volume2,
   Wind,
   Wrench,
@@ -55,11 +59,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import { ActionCard, isCard } from "@/components/aspire/ActionCard";
 import { BriefingCard } from "@/components/aspire/BriefingCard";
+import { CAMERA_TEXT } from "@/components/aspire/CameraSheet";
 import { MediaCard } from "@/components/aspire/MediaCard";
+import { OpenAppCard } from "@/components/aspire/OpenAppCard";
 import { TaskCard } from "@/components/aspire/TaskCard";
 import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
 import type { Headline } from "@/lib/news";
-import type { ClientAction, MediaAction, Reminder, TaskAction, Title } from "@/lib/tools/types";
+import type { CameraAction, ClientAction, MediaAction, OpenAppAction, Reminder, TaskAction, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +124,8 @@ export interface MessageListProps {
   onReplay: (message: ChatMessage) => void;
   /** Opens Settings > Connections (send-for-me cards and the briefing's "Reconnect Gmail"). */
   onOpenConnections: () => void;
+  /** Opens the camera sheet again for a find_cameras answer. Omit to hide those buttons. */
+  onCameras?: (action: CameraAction) => void;
   /** Ask the same question again. Omit to hide every Retry button. */
   onRetry?: (question: ChatMessage, reply: ChatMessage) => void;
   /** Override copying (default: navigator.clipboard). */
@@ -165,6 +173,12 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   // local.ts
   get_next_bus: Bus,
   plan_trip: Bus, // spec 10.1: transit is Bus (plan_trip is bus between two stops)
+  // city.ts
+  get_traffic: CarFront,
+  get_parking: SquareParking,
+  get_fuel: Fuel,
+  // cameras.ts
+  find_cameras: Video,
   get_local_time: Clock,
   set_reminder: Bell,
   list_reminders: BellRing,
@@ -208,6 +222,10 @@ const TOOL_TEXT: Record<string, L5> = {
   delete_routine: { mn: "Горим устгах", zh: "删除流程", en: "Delete routine", ru: "Удалить сценарий", de: "Ablauf löschen" },
   get_next_bus: { mn: "Дараагийн автобус", zh: "下一班公交", en: "Next bus", ru: "Ближайший автобус", de: "Nächster Bus" },
   plan_trip: { mn: "Аялал төлөвлөх", zh: "行程规划", en: "Trip planner", ru: "План поездки", de: "Routenplanung" },
+  get_traffic: { mn: "Замын хөдөлгөөн", zh: "实时路况", en: "Live traffic", ru: "Пробки сейчас", de: "Verkehr live" },
+  get_parking: { mn: "Зогсоол", zh: "停车", en: "Parking", ru: "Парковки", de: "Parken" },
+  get_fuel: { mn: "Шатахуун", zh: "加油", en: "Fuel", ru: "Топливо", de: "Tanken" },
+  find_cameras: { mn: "Камер хайх", zh: "查找摄像头", en: "Finding cameras", ru: "Поиск камер", de: "Kameras suchen" },
   get_local_time: { mn: "Орон нутгийн цаг", zh: "当地时间", en: "Local time", ru: "Местное время", de: "Ortszeit" },
   set_reminder: { mn: "Сануулга тавих", zh: "设置提醒", en: "Set a reminder", ru: "Создать напоминание", de: "Erinnerung stellen" },
   list_reminders: { mn: "Сануулгууд", zh: "提醒列表", en: "Reminders", ru: "Напоминания", de: "Erinnerungen" },
@@ -367,6 +385,7 @@ export function MessageList({
   webhooks,
   onReplay,
   onOpenConnections,
+  onCameras,
   onRetry,
   onCopy,
   address,
@@ -529,6 +548,7 @@ export function MessageList({
                   onRetry={onRetry}
                   onCopy={onCopy}
                   onOpenConnections={onOpenConnections}
+                  onCameras={onCameras}
                 />
               )}
             </motion.li>
@@ -674,6 +694,7 @@ function AssistantMessage({
   onRetry,
   onCopy,
   onOpenConnections,
+  onCameras,
 }: {
   m: ChatMessage;
   t: T;
@@ -686,11 +707,14 @@ function AssistantMessage({
   onRetry?: (q: ChatMessage, r: ChatMessage) => void;
   onCopy?: (m: ChatMessage) => void | Promise<void>;
   onOpenConnections: () => void;
+  onCameras?: (action: CameraAction) => void;
 }) {
   const text = clean(m.text);
   const cards = (m.cards ?? []).filter(isCard);
   const media = (m.cards ?? []).filter((c): c is MediaAction => c.type === "video" || c.type === "spotify");
   const tasks = (m.cards ?? []).filter((c): c is TaskAction => c.type === "code" || c.type === "form");
+  const apps = (m.cards ?? []).filter((c): c is OpenAppAction => c.type === "open_app");
+  const cams = onCameras ? (m.cards ?? []).filter((c): c is CameraAction => c.type === "cameras" && Number.isFinite(c.lat) && Number.isFinite(c.lng)) : [];
   const canRetry = !!onRetry && !!question;
 
   return (
@@ -776,6 +800,17 @@ function AssistantMessage({
 
       {media.map((c, i) => (
         <MediaCard key={`m${i}`} action={c} lang={m.lang} />
+      ))}
+
+      {apps.map((c, i) => (
+        <OpenAppCard key={`a${i}`} action={c} lang={m.lang} />
+      ))}
+
+      {cams.map((c, i) => (
+        <button key={`c${i}`} type="button" onClick={() => onCameras?.(c)} className="press panel flex min-h-14 items-center gap-3 rounded-lg px-5 text-left text-body text-ink">
+          <Video aria-hidden className="size-5 shrink-0 text-accent" />
+          {(CAMERA_TEXT[m.lang] ?? CAMERA_TEXT.en).title}
+        </button>
       ))}
 
       {!!cards.length && (

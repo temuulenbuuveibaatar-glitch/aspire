@@ -1,16 +1,13 @@
-// The living backdrop: the real sun and its phases, the hour fallback, the demo override, the
-// cached photo's trust boundary, and what the backdrop renders with and without a photo.
+// The real sun and its phases, the hour fallback, the demo override, the cached photo's trust boundary
+// and the sky layer.
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { Backdrop } from "@/components/aspire/Backdrop";
 import { Sky } from "@/components/aspire/Sky";
 import { phaseFromSun, phaseParam, skySun, sunPosition } from "@/lib/sun";
 import { parseCachedPhoto } from "@/lib/use-ambient";
-import type { AmbientSky } from "@/lib/ambient-types";
 
 const ERDENET = { lat: 49.03, lng: 104.08 };
-const NO_SYMBOLS = /[\p{Extended_Pictographic}\u{2190}-\u{21FF}\u{2600}-\u{27BF}]/u;
 
 describe("sunPosition", () => {
   it("puts the June solstice noon sun over Erdenet at about 64 degrees", () => {
@@ -99,53 +96,6 @@ describe("cached photo", () => {
     expect(parseCachedPhoto(JSON.stringify({ ...good, url: "javascript:alert(1)" }))).toBeNull();
     expect(parseCachedPhoto(JSON.stringify({ url: good.url }))).toBeNull();
     expect(parseCachedPhoto("null")).toBeNull();
-  });
-});
-
-describe("Backdrop", () => {
-  const clear: AmbientSky = { kind: "clear", intensity: 0, isDay: true, windKph: 5, cloudCover: 10 };
-  const render = (props: Partial<Parameters<typeof Backdrop>[0]>) =>
-    renderToString(createElement(Backdrop, { photo: null, sky: clear, localHour: 13, effects: false, ...props }));
-
-  it("never leaves a plain screen: with no photo it draws the sky and a skyline", () => {
-    const html = render({});
-    expect(html).toContain("linear-gradient(180deg");
-    expect(html).toContain("<svg");
-    expect(html).toContain("color-mix(in srgb");
-    expect(html).not.toContain("<img");
-    expect(html).not.toMatch(NO_SYMBOLS);
-  });
-
-  it("lights the skyline's windows after dark only", () => {
-    expect(render({ localHour: 22, sky: { ...clear, isDay: false } })).toContain('fill="#FFD9A0"');
-    expect(render({})).not.toContain('fill="#FFD9A0"');
-  });
-
-  it("grades the photo by phase and follows the demo override", () => {
-    const photo = { url: "https://lh3.googleusercontent.com/p/x", attribution: { name: "A. Bat", uri: "https://maps.google.com/c/1" } };
-    const html = render({ photo, phase: "sunset", sky: { ...clear, kind: "snow", intensity: 0.7 } });
-    expect(html).toContain('data-phase="sunset"');
-    expect(html).toContain('data-time="dusk"');
-    expect(html).toContain("sepia(0.25)");
-    expect(html).toContain("hue-rotate(8deg)"); // the snow grade on top
-    expect(html).toContain("A. Bat");
-  });
-
-  it("credits Google only for a Google photo", () => {
-    const wiki = { url: "https://upload.wikimedia.org/a/b.jpg", attribution: { name: "Wikimedia Commons: Erdenet", uri: "https://en.wikipedia.org/wiki/Erdenet" } };
-    const html = render({ photo: wiki });
-    expect(html).toContain("Wikimedia Commons: Erdenet");
-    expect(html).not.toContain("Google Maps");
-  });
-
-  it("draws no moon (its position is not computed) and no sun glow over an unknown sky", () => {
-    expect(render({ localHour: 23, sky: { ...clear, isDay: false } })).not.toContain("rgb(205 218 255");
-    expect(render({})).toContain("rgb(255 240 210");
-    expect(render({ sky: { ...clear, known: false } })).not.toContain("rgb(255 240 210");
-  });
-
-  it("uses the hour on the server, where there is no clock yet, even with a position", () => {
-    expect(render({ coords: ERDENET, localHour: 20, sky: { ...clear, isDay: false } })).toContain('data-phase="evening"');
   });
 });
 

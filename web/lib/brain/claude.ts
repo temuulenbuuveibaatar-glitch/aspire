@@ -1,17 +1,17 @@
 // Claude (Anthropic): the default brain, with web search + web fetch and the shared toolbox.
 import Anthropic from "@anthropic-ai/sdk";
 import type { Lang } from "@/lib/lang";
-import { addSource, type AgentRun, type Brain, contextNote, fallbackLine, forSpeech, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
+import { addSource, type AgentRun, type Brain, contextNote, fallbackLine, forSpeech, MAX_STEPS, runTool, SYSTEM, toolSpecs } from "./shared";
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 
 let client: Anthropic | null = null;
 const getClient = () => (client ??= new Anthropic());
 
-const tools: Anthropic.Beta.BetaToolUnion[] = [
+const toolsFor = (run: AgentRun): Anthropic.Beta.BetaToolUnion[] => [
   { type: "web_search_20260209", name: "web_search", max_uses: 5 },
   { type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 },
-  ...TOOL_SPECS.map((t) => ({
+  ...toolSpecs(run.ctx).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters as unknown as Anthropic.Beta.BetaTool.InputSchema,
@@ -53,7 +53,7 @@ export const claude: Brain = {
         fallbacks: "default",
         output_config: { effort: "low" },
         system,
-        tools,
+        tools: toolsFor(run),
         messages,
       });
 

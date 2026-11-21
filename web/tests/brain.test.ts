@@ -301,6 +301,25 @@ describe("Jarvis tone and every city", () => {
   });
 });
 
+describe("desktop tools reach the model only in a signed-in web turn", () => {
+  it("bots and cron are not told about desktop_* tools", async () => {
+    const { toolSpecs } = await import("@/lib/brain/shared");
+    const has = (ctx: Parameters<typeof toolSpecs>[0]) => toolSpecs(ctx).some((t) => t.name.startsWith("desktop_"));
+    expect(has({ userId: "u1", source: "web" })).toBe(true);
+    expect(has({ userId: "u1", source: "bot" })).toBe(false);
+    expect(has({ source: "cron" })).toBe(false);
+    expect(has({ source: "web" })).toBe(false);
+  });
+
+  it("refuses a desktop job once the turn has read third-party text", async () => {
+    const { runTool } = await import("@/lib/brain/shared");
+    const run = { ctx: { userId: "u1", source: "web" as const }, steps: [{ tool: "check_email", label: "Email", ok: true }], sources: [] };
+    expect(JSON.parse(await runTool("desktop_open_url", { url: "https://example.com" }, run as never)).error).toMatch(/repeat the computer request/);
+    const read = { ctx: run.ctx, steps: [], sources: [{ url: "https://example.com", title: "x", host: "example.com" }] };
+    expect(JSON.parse(await runTool("desktop_type_text", { text: "hi" }, read as never)).error).toMatch(/repeat the computer request/);
+  });
+});
+
 describe("brain v4: Jarvis persona, media, calendar, Erdenet live buses", () => {
   it("registers the calendar and media tools for every provider", async () => {
     const { TOOL_SPECS } = await import("@/lib/brain/shared");

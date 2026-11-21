@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 /*
- * Aspire v4 "Jarvis HUD" design tokens and global styles.
- * Source of truth: docs/design/aspire-v4-hud.md (v3 tokens kept for untouched files).
+ * Aspire v6 design tokens (dark, green-tinted) and global styles.
+ * Source of truth: docs/design/aspire-v6-spec.md section "Tokens". The v4 names (panel, hud, signal,
+ * success) stay as aliases of the v6 values so untouched files follow the new palette.
  *
  * Layering: component classes (.hud, .panel, .press ...) live in
  * @layer components so any Tailwind utility on the same element wins.
@@ -13,51 +14,65 @@
 /* ------------------------------------------------------------------ */
 @theme static {
   /* Surfaces */
-  --color-bg: #060b16;
-  --color-panel: #0b1220;
-  --color-panel-2: #121c2e;
-  --color-panel-3: #1a2740;
+  --color-bg: #0b1311;
+  --color-surface: #121c19; /* cards */
+  --color-surface-2: #1a2622; /* raised, chat bubble */
+  --color-surface-3: #24332e; /* chips, inputs */
+  --color-panel: #121c19; /* v4 alias of surface */
+  --color-panel-2: #1a2622;
+  --color-panel-3: #24332e;
 
-  /* Text */
-  --color-ink: #f2f6fc;
-  --color-ink-muted: #b6c2d6;
-  --color-ink-faint: #93a3bc;
+  /* Text (ink-muted 8:1 on surface, ink-faint at least 5.5:1 on surface-2) */
+  --color-ink: #eef3f0;
+  --color-ink-muted: #b9c7c1;
+  --color-ink-faint: #98aaa3;
 
   /* Accents and status (each also carries an icon and a word in the UI) */
-  --color-accent: #5ee7ff;
-  --color-on-accent: #0b1220;
-  --color-accent-2: #8fb2ff;
-  --color-signal: #f5c26b;
+  --color-accent: #a8e6c4;
+  --color-on-accent: #0b1311;
+  --color-accent-2: #8fd3c0;
+  --color-live: #5be3a4; /* live dot, real-time minutes only */
+  --color-sched: #c9d3cf; /* scheduled minutes (no dot) */
+  --color-warn: #f5c26b;
+  --color-signal: #f5c26b; /* v4 alias of warn */
   --color-danger: #ff8a8a;
-  --color-success: #5be3a4;
+  --color-success: #5be3a4; /* v4 alias of live */
+
+  /* AQI scale, good to hazardous */
+  --color-aqi-1: #5be3a4;
+  --color-aqi-2: #e8d36a;
+  --color-aqi-3: #f5a35b;
+  --color-aqi-4: #ff7a7a;
+  --color-aqi-5: #c58bd8;
+  --color-aqi-6: #b0607a;
 
   /* Lines */
-  --color-line: rgb(242 246 252 / 0.14);
-  --color-line-strong: rgb(242 246 252 / 0.28);
+  --color-line: #2a3a35;
+  --color-line-strong: #3d524b;
 
-  /* HUD (v4): lines, brackets, reticle, bus chevrons. --color-hud is never body text. */
-  --color-hud: #7fe3ff;
-  --color-hud-glass: rgb(4 8 16 / 0.82); /* the one panel material, unblurred: .82 keeps 4.5:1 over any photo */
-  --color-hud-line: rgb(127 227 255 / 0.35);
+  /* HUD (v4 names, v6 green): lines, brackets, reticle, bus chevrons. --color-hud is never body text. */
+  --color-hud: #a8e6c4;
+  --color-hud-glass: rgb(11 19 17 / 0.82); /* unblurred: .82 keeps 4.5:1 over any photo */
+  --color-hud-line: rgb(168 230 196 / 0.3);
 
   /* No pure white or black anywhere (halation): remap the defaults. */
-  --color-white: #f2f6fc;
-  --color-black: #060b16;
+  --color-white: #eef3f0;
+  --color-black: #0b1311;
 
-  /* Legacy aliases (v2 names still used by untouched files; remove in v3.1) */
-  --color-cyan: #5ee7ff; /* = accent */
-  --color-glass: rgb(11 18 32 / 0.88);
+  /* Legacy aliases (v2 names still used by untouched files) */
+  --color-cyan: #a8e6c4; /* = accent */
+  --color-glass: rgb(18 28 25 / 0.9);
 
-  /* Radii */
-  --radius-sm: 10px;
+  /* Radii (v6: 12, 20, 28) */
+  --radius-sm: 12px;
   --radius-md: 16px;
-  --radius-lg: 22px;
+  --radius-lg: 20px;
   --radius-xl: 28px;
 
   /* Elevation */
-  --shadow-panel: inset 0 1px 0 rgb(242 246 252 / 0.08), 0 16px 40px -16px rgb(2 6 16 / 0.65);
-  --shadow-lift: inset 0 1px 0 rgb(242 246 252 / 0.1), 0 24px 56px -20px rgb(2 6 16 / 0.75);
-  --shadow-accent: 0 0 0 1px rgb(94 231 255 / 0.35), 0 10px 28px -10px rgb(94 231 255 / 0.55);
+  --shadow-panel: inset 0 1px 0 rgb(238 243 240 / 0.06), 0 16px 40px -16px rgb(0 0 0 / 0.6);
+  --shadow-lift: inset 0 1px 0 rgb(238 243 240 / 0.08), 0 24px 56px -20px rgb(0 0 0 / 0.7);
+  --shadow-accent: 0 0 0 1px rgb(168 230 196 / 0.35), 0 10px 28px -10px rgb(168 230 196 / 0.45);
 
   /* Fonts: Inter body, Tektur display, Noto Sans SC then system CJK fallbacks */
   --font-sans:
@@ -102,8 +117,30 @@
   --text-wordmark--font-weight: 700;
   --text-wordmark--letter-spacing: 0.28em;
 
+  /* v6 dashboard scale (spec "Type"; nothing under 12px, rem so A / A+ / A++ still scales it) */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.35;
+  --text-meta--font-weight: 500;
+  --text-copy: 0.875rem;
+  --text-copy--line-height: 1.5;
+  --text-card: 0.9375rem;
+  --text-card--line-height: 1.3;
+  --text-card--font-weight: 600;
+  --text-clock: clamp(2rem, 1.6rem + 1.2vw, 2.5rem);
+  --text-clock--line-height: 1;
+  --text-clock--font-weight: 300;
+  --text-city: clamp(2.5rem, 1.9rem + 2.2vw, 3.5rem);
+  --text-city--line-height: 1.05;
+  --text-city--font-weight: 500;
+  --text-city--letter-spacing: -0.02em;
+  --text-temp: clamp(4rem, 3rem + 3.4vw, 6rem);
+  --text-temp--line-height: 0.95;
+  --text-temp--font-weight: 300;
+  --text-temp--letter-spacing: -0.03em;
+
   /* Easing */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* Sky fog drift (transform only; frozen under reduced motion and Calm mode) */
   --animate-fog-80: aspire-fog 80s ease-in-out infinite alternate;
@@ -118,7 +155,34 @@
     transform: translate3d(6%, 0, 0);
   }
 }
-/* Sky gradient crossfade and the backdrop photo arriving (opacity only). */
+/* v6: the live dot (1.6 s), card entrance, skeleton shimmer. */
+/* Transform and opacity only (composited): no repaint per frame. */
+@keyframes v6-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+@keyframes v6-enter {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@keyframes v6-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+/* Sky gradient crossfade (opacity only). */
 @keyframes aspire-fade-in {
   from {
     opacity: 0;
@@ -168,7 +232,9 @@
     color-scheme: dark;
     /* WCAG 2.4.11: keyboard focus never lands under the fixed composer. */
     scroll-padding-top: 1rem;
-    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 8rem);
+    /* The measured phone dock (Assistant writes --dock-h, safe area included) plus the keyboard, so a
+       focused control never ends up under the dock (WCAG 2.4.11). */
+    scroll-padding-bottom: calc(var(--dock-h, calc(env(safe-area-inset-bottom) + 8rem)) + var(--kb, 0px) + 8px);
     font-size: calc(100% * var(--text-scale));
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
@@ -179,7 +245,7 @@
   body {
     min-height: 100dvh;
     background:
-      radial-gradient(900px 600px at 50% -10%, rgb(94 231 255 / 0.07), transparent 60%),
+      radial-gradient(900px 600px at 50% -10%, rgb(168 230 196 / 0.06), transparent 60%),
       var(--color-bg);
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -236,7 +302,7 @@
 
 
   ::selection {
-    background-color: rgb(94 231 255 / 0.32);
+    background-color: rgb(168 230 196 / 0.32);
     color: var(--color-ink);
   }
 
@@ -261,7 +327,7 @@
      No backdrop-filter: blurring a moving canvas recomposites every frame. */
   .panel,
   .glass {
-    background-color: rgb(11 18 32 / 0.88);
+    background-color: rgb(18 28 25 / 0.9);
     border: 1px solid var(--color-line);
     box-shadow: var(--shadow-panel);
     border-radius: var(--radius-lg);
@@ -328,6 +394,93 @@
     outline-color: var(--color-ink);
   }
 
+  /* ---- v6 dashboard ---- */
+
+  /* The card material (spec: surface, 1px line, radius 20, soft lift). */
+  .v6-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  /* Chips and small buttons: surface-3, ellipsis for long text (full text goes in title). */
+  .v6-chip {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-line);
+    background-color: var(--color-surface-3);
+    color: var(--color-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .v6-chip:hover {
+    border-color: var(--color-line-strong);
+  }
+  /* Live data only: a 1.6 s pulse (stilled under reduced motion and Calm mode by the global rule). */
+  .v6-live-dot {
+    position: relative;
+  }
+  .v6-live-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--color-live);
+    animation: v6-pulse 1.6s ease-out infinite;
+  }
+  /* Phones: the tab bar steps aside while the on-screen keyboard is open (Assistant sets data-kb). */
+  :root[data-kb] .v6-dock-nav {
+    display: none;
+  }
+  /* Cards enter with a 40 ms stagger (set --i on the element). */
+  .v6-enter {
+    animation: v6-enter 200ms var(--ease-enter) both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+  .v6-skeleton {
+    background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-3) 50%, var(--color-surface-2) 75%);
+    background-size: 200% 100%;
+    animation: v6-shimmer 1.4s linear infinite;
+  }
+  /* The hero scrim. Worst case is a white photo: small text needs about .6 of bg over it for 4.5:1,
+     large text about .5 for 3:1. A .3 base, a top band for place and clock, a bottom ramp for the
+     temperature and hours, and a left wash for the city name reach that where text sits. */
+  .v6-scrim {
+    background:
+      linear-gradient(180deg, rgb(11 19 17 / 0.55) 0%, rgb(11 19 17 / 0) 40%),
+      linear-gradient(180deg, rgb(11 19 17 / 0) 30%, rgb(11 19 17 / 0.85) 100%),
+      linear-gradient(90deg, rgb(11 19 17 / 0.4) 0%, rgb(11 19 17 / 0) 65%),
+      rgb(11 19 17 / 0.3);
+  }
+  /* Text over the photo: a soft shadow covers the bright patches the scrim leaves. */
+  .v6-on-photo {
+    text-shadow:
+      0 1px 2px rgb(11 19 17 / 0.6),
+      0 0 12px rgb(11 19 17 / 0.4);
+  }
+  .v6-on-photo [data-on-accent] {
+    text-shadow: none;
+  }
+  .v6-photo {
+    animation: aspire-fade-in 600ms ease-out both;
+  }
+  .v6-sunrise-photo {
+    filter: saturate(1.15) sepia(0.25) brightness(0.9);
+  }
+  /* The only sideways scroller: no visible bar. */
+  .v6-scroll-x {
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .v6-scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
   /* ---- v4 HUD ---- */
 
   /* The one panel material: glass, a hairline, corner brackets (TL, TR, BL) and a cut BR corner.
@@ -347,23 +500,6 @@
     color: var(--color-ink);
     overflow-wrap: break-word;
   }
-  /* Viewport corner brackets for HudFrame. */
-  .hud-frame::before {
-    --hb: linear-gradient(var(--color-hud), var(--color-hud));
-    content: "";
-    position: fixed;
-    z-index: 30;
-    pointer-events: none;
-    inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
-      max(10px, env(safe-area-inset-left));
-    background-image: var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb);
-    background-repeat: no-repeat;
-    background-size: 28px 2px, 2px 28px, 28px 2px, 2px 28px, 28px 2px, 2px 28px, 28px 2px, 2px 28px;
-    background-position:
-      left top, left top, right top, right top,
-      left bottom, left bottom, right bottom, right bottom;
-    opacity: 0.8;
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -379,7 +515,7 @@
     outline-offset: 2px;
     box-shadow:
       0 0 0 2px var(--color-bg),
-      0 0 0 7px rgb(6 11 22 / 0.9);
+      0 0 0 7px rgb(11 19 17 / 0.9);
   }
   /* On accent and success fills the accent ring vanishes; use ink instead. */
   :where(.bg-accent, .bg-success, .on-accent, [data-on-accent], .skip-link):focus-visible {
@@ -409,9 +545,9 @@
   /* More contrast: stronger hairlines and labels. */
   @media (prefers-contrast: more) {
     :root {
-      --color-line: rgb(242 246 252 / 0.32);
-      --color-line-strong: rgb(242 246 252 / 0.5);
-      --color-ink-faint: #b6c2d6;
+      --color-line: #4d6660;
+      --color-line-strong: #6b847d;
+      --color-ink-faint: #b9c7c1;
     }
   }
 
@@ -499,13 +635,23 @@
     }
   }
 
+  /* Reduced transparency: one even, darker scrim. (Reduced motion and Calm mode are handled by the
+     global rule above, which also freezes the live dot and the skeleton.) */
+  @media (prefers-reduced-transparency: reduce) {
+    .v6-scrim {
+      background: linear-gradient(180deg, rgb(11 19 17 / 0.6), rgb(11 19 17 / 0.85));
+    }
+  }
+
   /* Windows high contrast: keep panel edges visible. */
   @media (forced-colors: active) {
     .panel,
     .panel-2,
     .panel-3,
     .glass,
-    .hud {
+    .hud,
+    .v6-card,
+    .v6-chip {
       border-color: CanvasText;
     }
   }

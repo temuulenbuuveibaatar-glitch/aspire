@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyActions, takeDue } from "@/lib/device-store";
-import { runTool, TOOL_LABELS, TOOLS, type ToolStep } from "@/lib/tools";
+import { ALL_TOOLS, runTool, TOOL_LABELS, TOOLS, type ToolStep } from "@/lib/tools";
 import { partOfDay, validTimeZone, zonedTime } from "@/lib/tools/time";
 import type { ToolContext } from "@/lib/tools/types";
 import { calculate, kindFromWords } from "@/lib/tools/world";
@@ -122,9 +122,28 @@ describe("memory and calls (privacy + safety)", () => {
   });
 });
 
+describe("toolbox registration", () => {
+  it("open_app is a shared tool; desktop_* tools are only in ALL_TOOLS", () => {
+    const shared = TOOLS.map((t) => t.name);
+    expect(shared).toContain("open_app");
+    expect(shared).toContain("find_cameras");
+    expect(shared.some((n) => n.startsWith("desktop_"))).toBe(false);
+    expect(ALL_TOOLS.map((t) => t.name)).toContain("desktop_type_text");
+    expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(ALL_TOOLS.length);
+  });
+
+  it("refuses desktop_* tools outside a signed-in web request without queueing anything", async () => {
+    for (const c of [ctx(), { ...ctx(), userId: "user_a", source: "bot" as const }, { ...ctx(), source: "web" as const }]) {
+      const { out, steps } = await run("desktop_type_text", { text: "hi" }, c);
+      expect(out.error).toMatch(/signed-in person/);
+      expect(steps).toEqual([]);
+    }
+  });
+});
+
 describe("no emojis", () => {
   it("tool labels are plain text with no icon field", () => {
-    for (const t of TOOLS) {
+    for (const t of ALL_TOOLS) {
       expect(Object.keys(t.label).sort()).toEqual(["en", "mn"]);
       expect(t.label.en).not.toMatch(PICTOGRAPH);
       expect(t.label.mn).not.toMatch(PICTOGRAPH);

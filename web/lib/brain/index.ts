@@ -36,7 +36,7 @@ export interface AskResult {
 
 const EMPTY_DEVICE: DeviceContext = { memory: {}, reminders: [] };
 
-export type AskExtra = Pick<ToolContext, "gmailToken" | "timeZone" | "city" | "country" | "approxLocation">;
+export type AskExtra = Pick<ToolContext, "gmailToken" | "timeZone" | "city" | "country" | "approxLocation" | "userId" | "source">;
 
 export async function ask(
   text: string,

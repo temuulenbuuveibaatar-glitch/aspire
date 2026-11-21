@@ -5,7 +5,8 @@ import { isPublicPath } from "@/lib/auth";
 // Runs before every matched request. Clerk verifies (and in development, hands off) the session;
 // people who are not signed in are sent to /login?next=<path>. API paths are never redirected:
 // guarded routes answer 401 themselves via requireUser(). Public paths come from isPublicPath()
-// (/login…, /privacy, /terms, /api/bots/…, /api/cron/…, static files), the same list the tests pin.
+// ("/" itself, the landing page for signed-out visitors; /login…, /privacy, /terms, /api/bots/…,
+// /api/cron/…, static files), the same list the tests pin.
 export default clerkMiddleware(async (auth, request) => {
   const { pathname, search } = request.nextUrl;
   if (pathname.startsWith("/api/") || isPublicPath(pathname)) return;

@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/ui/themes";
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_SC, Tektur } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // next/font emits an @font-face (with its unicode-range) for EVERY subset Google serves, so
@@ -38,15 +39,46 @@ const cjk = Noto_Sans_SC({
   adjustFontFallback: false,
 });
 
+const TITLE = "Aspire - voice city assistant for Erdenet and every city";
+const DESCRIPTION =
+  "Aspire, a Jarvis-style voice assistant for Erdenet and every city: live buses, weather, traffic and news. Ask out loud in Mongolian, Chinese, English, Russian or German.";
+
+// Site-wide defaults. The homepage (app/page.tsx) localises title, description and Open Graph per
+// language via landingMetadata; the Open Graph image comes from app/opengraph-image.tsx.
 export const metadata: Metadata = {
-  title: "Aspire",
-  description:
-    "Aspire, a Jarvis-style voice assistant for any city. Ask out loud in Mongolian, Chinese, English, Russian or German.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: TITLE, template: "%s | Aspire" },
+  description: DESCRIPTION,
   applicationName: "Aspire",
+  keywords: [
+    "Aspire",
+    "Aspire Erdenet",
+    "Aspire Mongolia",
+    "voice assistant",
+    "Jarvis",
+    "Erdenet bus",
+    "Эрдэнэт автобус",
+    "Aspire туслах",
+    "Orkhon Hackathon",
+  ],
+  // No canonical, hreflang or og:url here: every route would inherit the homepage ones.
+  // landingMetadata sets them for "/", and each public page sets its own canonical.
+  openGraph: {
+    type: "website",
+    siteName: "Aspire",
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: "en_US",
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
+  // app/favicon.ico is also picked up by the file convention as rel="icon".
+  icons: { shortcut: "/favicon.ico" },
+  category: "lifestyle",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#040810", // = --color-hud-glass without alpha: the status bar blends into the HUD
+  themeColor: "#0b1311", // = --color-bg (globals.css): the status bar blends into the page
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
@@ -67,7 +99,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // suppressHydrationWarning: prefs (text size, Calm mode) and the sky write attributes and
     // CSS variables on <html> on the client.
     // lang="en": English is the app's own fallback. Assistant and LoginForm set the real
-    // language on <html> after mount, and the legal sections carry their own lang attributes.
+    // language on <html> after mount, Landing sets it with an inline script, and the legal
+    // sections carry their own lang attributes.
     <html lang="en" className={`${body.variable} ${brand.variable} ${cjk.variable}`} suppressHydrationWarning>
       <head>
         {/* Display prefs before first paint: Calm mode, text size and units apply on every page

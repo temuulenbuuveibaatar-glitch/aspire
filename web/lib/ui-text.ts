@@ -27,16 +27,11 @@ export interface NotableText {
 
 /** v4 HUD: readouts, the location prompt, the map and the weather card. */
 export interface HudText {
-  weather: string;
-  air: string;
-  traffic: string;
-  bus: string;
-  taxi: string;
-  map: string;
-  gps: string;
-  set: string;
+  /** Footer: "{n} of {m} sources answering". */
+  status: string;
+  /** Phone tab that jumps to the agent. */
+  agent: string;
   approx: string;
-  min: string;
   feels: string;
   today: string;
   whereTitle: string;
@@ -47,21 +42,10 @@ export interface HudText {
   myCity: string;
   cityPlaceholder: string;
   cityHelp: string;
-  openMap: string;
-  fullscreen: string;
-  /** Quick-access row: the news toggle, the bus map and its group label. */
-  news: string;
-  buses: string;
-  quick: string;
   voiceVia: string;
   noLocation: string;
-  photo: string;
-  /** The AQI abbreviation in the readout. */
-  aqiShort: string;
   /** The browser refused or could not get a location fix. */
   denied: string;
-  aqi: Record<"good" | "moderate" | "sensitive" | "unhealthy" | "very_unhealthy" | "hazardous", string>;
-  level: Record<"light" | "moderate" | "heavy", string>;
   kinds: Record<"clear" | "partly" | "cloudy" | "fog" | "drizzle" | "rain" | "storm" | "snow" | "sleet" | "hail", string>;
 }
 
@@ -87,6 +71,9 @@ export const UI: Record<
     consent: string;
     privacy: string;
     terms: string;
+    /** Settings, Desktop: link to the Aspire Desktop download page. */
+    desktopDownload: string;
+    desktopDownloadHelp: string;
     memory: string;
     reminders: string;
     nothingSaved: string;
@@ -221,6 +208,8 @@ export const UI: Record<
     consent: "Таны дуу хоолойг зөвхөн асуултад хариулахад ашиглана. Хувийн мэдээллээ бүү хэлээрэй. Товчийг дарснаар та нөхцөлийг зөвшөөрч байна.",
     privacy: "Нууцлал",
     terms: "Нөхцөл",
+    desktopDownload: "Aspire Desktop татах",
+    desktopDownloadHelp: "GitHub дээрх Aspire Desktop-ийн татах хуудсыг нээнэ.",
     memory: "Санах ой",
     reminders: "Сануулга",
     nothingSaved: "Одоогоор юу ч хадгалаагүй.",
@@ -297,7 +286,7 @@ export const UI: Record<
     botPrimary: "Сануулга энд ирнэ",
     botUnlink: "Салгах",
     botDeleteCloud: "Үүлэн дэх миний өгөгдлийг устгах",
-    botDeleteConfirm: "Бүх чатыг салгаж, үүлэн дэх санах ой, сануулга, тохиргоог устгана. Утсан дээрх хуулбар хэвээр үлдэнэ. Баталгаажуулахын тулд дахин дарна уу.",
+    botDeleteConfirm: "Бүх чат, холбосон компьютерийг салгаж, үүлэн дэх санах ой, сануулга, тохиргоог устгана. Утсан дээрх хуулбар хэвээр үлдэнэ. Баталгаажуулахын тулд дахин дарна уу.",
     botDeleted: "Үүлэн дэх өгөгдөл устлаа.",
     botUnavailable: "Одоогоор холбох боломжгүй байна.",
     botAddSlack: "Slack-д нэмэх",
@@ -330,7 +319,7 @@ export const UI: Record<
     suggestionsLabel: "Санал",
     language: "Хэл",
     notable: { rain: "Гадаа бороо орж байна.", snow: "Гадаа цас орж байна.", storm: "Гадаа аянгатай бороо орж байна.", air: "Өнөөдөр агаар эрүүл мэндэд хортой байна.", traffic: "Замын түгжрэл их байна.", bus: "{route} автобус ойролцоогоор {n} минутын дараа ирнэ (тооцоолол)." },
-    hud: { weather: "Цаг агаар", air: "Агаар", traffic: "Замын хөдөлгөөн", bus: "Дараагийн автобус", taxi: "Ойрын такси", map: "Газрын зураг", gps: "GPS", set: "Сонгосон", approx: "ойролцоо", min: "мин", aqi: {"good": "Сайн", "moderate": "Дунд зэрэг", "sensitive": "Эмзэг бүлэгт хортой", "unhealthy": "Эрүүл бус", "very_unhealthy": "Маш эрүүл бус", "hazardous": "Аюултай"}, level: {"light": "Чөлөөтэй", "moderate": "Дунд зэрэг", "heavy": "Түгжрэлтэй"}, kinds: {"clear": "Цэлмэг", "partly": "Багавтар үүлтэй", "cloudy": "Үүлэрхэг", "fog": "Манан", "drizzle": "Шиврээ бороо", "rain": "Бороо", "storm": "Аадар", "snow": "Цас", "sleet": "Нойтон цас", "hail": "Мөндөр"}, feels: "Мэдрэгдэх {t}", today: "Өнөөдөр", whereTitle: "Та хаана байна вэ?", whereWhy: "Жарвис таны утасны нарийн байршлаар яг байгаа газрын цаг агаар, зураг, агаар, замын хөдөлгөөн, автобусыг харуулна. Байршлыг зөвхөн тухайн хүсэлтэд ашиглаж, хэзээ ч хадгалахгүй.", allow: "Нарийн байршлаа ашиглах", setCity: "Хотоо сонгох", notNow: "Одоо биш", myCity: "Миний хот", cityPlaceholder: "жишээ нь Эрдэнэт", cityHelp: "GPS унтраалттай эсвэл ажиллахгүй үед ашиглана.", openMap: "Шууд газрын зургийг нээх", fullscreen: "Бүтэн дэлгэц", news: "Мэдээ", buses: "Автобус", quick: "Шуурхай", voiceVia: "Дуу: {name}", noLocation: "Байршил тодорхойгүй", photo: "Зураг", aqiShort: "АЧИ", denied: "Байршил ашиглахыг зөвшөөрсөнгүй. Хотоо сонгоно уу." },
+    hud: { status: "{m} эх сурвалжаас {n} нь хариу өгч байна", agent: "Асуух", approx: "ойролцоо", kinds: {"clear": "Цэлмэг", "partly": "Багавтар үүлтэй", "cloudy": "Үүлэрхэг", "fog": "Манан", "drizzle": "Шиврээ бороо", "rain": "Бороо", "storm": "Аадар", "snow": "Цас", "sleet": "Нойтон цас", "hail": "Мөндөр"}, feels: "Мэдрэгдэх {t}", today: "Өнөөдөр", whereTitle: "Та хаана байна вэ?", whereWhy: "Жарвис таны утасны нарийн байршлаар яг байгаа газрын цаг агаар, зураг, агаар, замын хөдөлгөөн, автобусыг харуулна. Байршлыг зөвхөн тухайн хүсэлтэд ашиглаж, хэзээ ч хадгалахгүй.", allow: "Нарийн байршлаа ашиглах", setCity: "Хотоо сонгох", notNow: "Одоо биш", myCity: "Миний хот", cityPlaceholder: "жишээ нь Эрдэнэт", cityHelp: "GPS унтраалттай эсвэл ажиллахгүй үед ашиглана.", voiceVia: "Дуу: {name}", noLocation: "Байршил тодорхойгүй", denied: "Байршил ашиглахыг зөвшөөрсөнгүй. Хотоо сонгоно уу." },
   },
   zh: {
     idle: "按下说话",
@@ -350,6 +339,8 @@ export const UI: Record<
     consent: "您的声音只用于回答问题。请不要说出个人信息。按下按钮即表示您同意使用条款。",
     privacy: "隐私",
     terms: "条款",
+    desktopDownload: "下载 Aspire Desktop",
+    desktopDownloadHelp: "打开 GitHub 上的 Aspire Desktop 下载页面。",
     memory: "记忆",
     reminders: "提醒",
     nothingSaved: "还没有保存任何内容。",
@@ -426,7 +417,7 @@ export const UI: Record<
     botPrimary: "提醒发到这里",
     botUnlink: "取消关联",
     botDeleteCloud: "删除我的云端数据",
-    botDeleteConfirm: "这会取消所有聊天的关联，并删除云端的记忆、提醒和设置。手机上的副本会保留。再点一次确认。",
+    botDeleteConfirm: "这会取消所有聊天和已配对电脑的关联，并删除云端的记忆、提醒和设置。手机上的副本会保留。再点一次确认。",
     botDeleted: "云端数据已删除。",
     botUnavailable: "暂时无法关联。",
     botAddSlack: "添加到 Slack",
@@ -459,7 +450,7 @@ export const UI: Record<
     suggestionsLabel: "建议",
     language: "语言",
     notable: { rain: "外面正在下雨。", snow: "外面正在下雪。", storm: "外面有雷雨。", air: "今天的空气不利于健康。", traffic: "现在交通很拥堵。", bus: "{route}路公交车大约{n}分钟后到站（估计）。" },
-    hud: { weather: "天气", air: "空气", traffic: "路况", bus: "下一班公交", taxi: "附近出租车", map: "地图", gps: "GPS", set: "已设定", approx: "大致", min: "分钟", aqi: {"good": "良好", "moderate": "中等", "sensitive": "对敏感人群不健康", "unhealthy": "不健康", "very_unhealthy": "非常不健康", "hazardous": "危险"}, level: {"light": "畅通", "moderate": "缓行", "heavy": "拥堵"}, kinds: {"clear": "晴", "partly": "少云", "cloudy": "多云", "fog": "雾", "drizzle": "毛毛雨", "rain": "雨", "storm": "雷雨", "snow": "雪", "sleet": "雨夹雪", "hail": "冰雹"}, feels: "体感 {t}", today: "今天", whereTitle: "您在哪里？", whereWhy: "贾维斯会用手机的精确位置，显示您真正所在之处的天气、照片、空气、路况和公交。位置只用于每次请求，从不保存。", allow: "使用我的精确位置", setCity: "设置我的城市", notNow: "以后再说", myCity: "我的城市", cityPlaceholder: "例如 额尔登特", cityHelp: "在 GPS 关闭或不可用时使用。", openMap: "打开实时地图", fullscreen: "全屏", news: "新闻", buses: "公交", quick: "快捷入口", voiceVia: "语音：{name}", noLocation: "位置未知", photo: "照片", aqiShort: "AQI", denied: "未获准使用位置。请设置您的城市。" },
+    hud: { status: "{m} 个数据源中有 {n} 个在线", agent: "提问", approx: "大致", kinds: {"clear": "晴", "partly": "少云", "cloudy": "多云", "fog": "雾", "drizzle": "毛毛雨", "rain": "雨", "storm": "雷雨", "snow": "雪", "sleet": "雨夹雪", "hail": "冰雹"}, feels: "体感 {t}", today: "今天", whereTitle: "您在哪里？", whereWhy: "贾维斯会用手机的精确位置，显示您真正所在之处的天气、照片、空气、路况和公交。位置只用于每次请求，从不保存。", allow: "使用我的精确位置", setCity: "设置我的城市", notNow: "以后再说", myCity: "我的城市", cityPlaceholder: "例如 额尔登特", cityHelp: "在 GPS 关闭或不可用时使用。", voiceVia: "语音：{name}", noLocation: "位置未知", denied: "未获准使用位置。请设置您的城市。" },
   },
   en: {
     idle: "Press and speak",
@@ -479,6 +470,8 @@ export const UI: Record<
     consent: "Your voice is only used to answer your question. Please don't share personal details. By pressing the button you agree to the terms.",
     privacy: "Privacy",
     terms: "Terms",
+    desktopDownload: "Download Aspire Desktop",
+    desktopDownloadHelp: "Opens the Aspire Desktop download page on GitHub.",
     memory: "Memory",
     reminders: "Reminders",
     nothingSaved: "Nothing saved yet.",
@@ -555,7 +548,7 @@ export const UI: Record<
     botPrimary: "Reminders go here",
     botUnlink: "Unlink",
     botDeleteCloud: "Delete my cloud data",
-    botDeleteConfirm: "This unlinks every chat and deletes your memory, reminders and settings from the cloud. Your phone keeps its copy. Tap again to confirm.",
+    botDeleteConfirm: "This unlinks every chat and paired computer and deletes your memory, reminders and settings from the cloud. Your phone keeps its copy. Tap again to confirm.",
     botDeleted: "Cloud data deleted.",
     botUnavailable: "Linking is not available right now.",
     botAddSlack: "Add to Slack",
@@ -588,7 +581,7 @@ export const UI: Record<
     suggestionsLabel: "Suggestions",
     language: "Language",
     notable: { rain: "It is raining outside.", snow: "It is snowing outside.", storm: "There is a thunderstorm outside.", air: "The air is unhealthy today.", traffic: "The traffic is heavy.", bus: "Bus {route} is about {n} minutes from your stop (estimate)." },
-    hud: { weather: "Weather", air: "Air", traffic: "Traffic", bus: "Next bus", taxi: "Nearest taxi", map: "Map", gps: "GPS", set: "Set", approx: "approx.", min: "min", aqi: {"good": "Good", "moderate": "Moderate", "sensitive": "Unhealthy for some", "unhealthy": "Unhealthy", "very_unhealthy": "Very unhealthy", "hazardous": "Hazardous"}, level: {"light": "Light", "moderate": "Moderate", "heavy": "Heavy"}, kinds: {"clear": "Clear", "partly": "Partly cloudy", "cloudy": "Cloudy", "fog": "Fog", "drizzle": "Drizzle", "rain": "Rain", "storm": "Thunderstorm", "snow": "Snow", "sleet": "Sleet", "hail": "Hail"}, feels: "Feels like {t}", today: "Today", whereTitle: "Where are you?", whereWhy: "Jarvis uses your phone's precise location for the weather, photo, air, traffic and buses where you really are. It is used only for each request and never stored.", allow: "Use my precise location", setCity: "Set my city", notNow: "Not now", myCity: "My city", cityPlaceholder: "e.g. Erdenet", cityHelp: "Used when GPS is off or not available.", openMap: "Open the live map", fullscreen: "Full screen", news: "News", buses: "Buses", quick: "Quick access", voiceVia: "Voice: {name}", noLocation: "Location unknown", photo: "Photo", aqiShort: "AQI", denied: "Location access was refused. Set your city instead." },
+    hud: { status: "{n} of {m} sources answering", agent: "Ask", approx: "approx.", kinds: {"clear": "Clear", "partly": "Partly cloudy", "cloudy": "Cloudy", "fog": "Fog", "drizzle": "Drizzle", "rain": "Rain", "storm": "Thunderstorm", "snow": "Snow", "sleet": "Sleet", "hail": "Hail"}, feels: "Feels like {t}", today: "Today", whereTitle: "Where are you?", whereWhy: "Jarvis uses your phone's precise location for the weather, photo, air, traffic and buses where you really are. It is used only for each request and never stored.", allow: "Use my precise location", setCity: "Set my city", notNow: "Not now", myCity: "My city", cityPlaceholder: "e.g. Erdenet", cityHelp: "Used when GPS is off or not available.", voiceVia: "Voice: {name}", noLocation: "Location unknown", denied: "Location access was refused. Set your city instead." },
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -608,6 +601,8 @@ export const UI: Record<
     consent: "Ваш голос используется только для ответа. Не называйте личные данные. Нажимая кнопку, вы соглашаетесь с условиями.",
     privacy: "Конфиденциальность",
     terms: "Условия",
+    desktopDownload: "Скачать Aspire Desktop",
+    desktopDownloadHelp: "Откроет страницу загрузки Aspire Desktop на GitHub.",
     memory: "Память",
     reminders: "Напоминания",
     nothingSaved: "Пока ничего не сохранено.",
@@ -684,7 +679,7 @@ export const UI: Record<
     botPrimary: "Напоминания приходят сюда",
     botUnlink: "Отвязать",
     botDeleteCloud: "Удалить мои данные из облака",
-    botDeleteConfirm: "Все чаты будут отвязаны, а память, напоминания и настройки удалены из облака. Копия на телефоне останется. Нажмите ещё раз для подтверждения.",
+    botDeleteConfirm: "Все чаты и подключённые компьютеры будут отвязаны, а память, напоминания и настройки удалены из облака. Копия на телефоне останется. Нажмите ещё раз для подтверждения.",
     botDeleted: "Данные в облаке удалены.",
     botUnavailable: "Привязка сейчас недоступна.",
     botAddSlack: "Добавить в Slack",
@@ -717,7 +712,7 @@ export const UI: Record<
     suggestionsLabel: "Подсказки",
     language: "Язык",
     notable: { rain: "На улице идёт дождь.", snow: "На улице идёт снег.", storm: "На улице гроза.", air: "Сегодня воздух вреден для здоровья.", traffic: "На дорогах сильные пробки.", bus: "Автобус {route} будет примерно через {n} мин (оценка)." },
-    hud: { weather: "Погода", air: "Воздух", traffic: "Дороги", bus: "Ближайший автобус", taxi: "Ближайшее такси", map: "Карта", gps: "GPS", set: "Задан", approx: "примерно", min: "мин", aqi: {"good": "Хороший", "moderate": "Умеренный", "sensitive": "Вреден для чувствительных", "unhealthy": "Вредный", "very_unhealthy": "Очень вредный", "hazardous": "Опасный"}, level: {"light": "Свободно", "moderate": "Умеренно", "heavy": "Пробки"}, kinds: {"clear": "Ясно", "partly": "Переменная облачность", "cloudy": "Облачно", "fog": "Туман", "drizzle": "Морось", "rain": "Дождь", "storm": "Гроза", "snow": "Снег", "sleet": "Мокрый снег", "hail": "Град"}, feels: "Ощущается как {t}", today: "Сегодня", whereTitle: "Где вы?", whereWhy: "Джарвис использует точное местоположение телефона, чтобы показывать погоду, фото, воздух, пробки и автобусы там, где вы на самом деле. Оно нужно только для каждого запроса и никогда не сохраняется.", allow: "Использовать точное местоположение", setCity: "Указать мой город", notNow: "Не сейчас", myCity: "Мой город", cityPlaceholder: "например, Эрдэнэт", cityHelp: "Используется, когда GPS выключен или недоступен.", openMap: "Открыть живую карту", fullscreen: "Во весь экран", news: "Новости", buses: "Автобусы", quick: "Быстрый доступ", voiceVia: "Голос: {name}", noLocation: "Местоположение неизвестно", photo: "Фото", aqiShort: "ИКВ", denied: "Доступ к местоположению запрещён. Укажите ваш город." },
+    hud: { status: "Отвечают {n} из {m} источников", agent: "Спросить", approx: "примерно", kinds: {"clear": "Ясно", "partly": "Переменная облачность", "cloudy": "Облачно", "fog": "Туман", "drizzle": "Морось", "rain": "Дождь", "storm": "Гроза", "snow": "Снег", "sleet": "Мокрый снег", "hail": "Град"}, feels: "Ощущается как {t}", today: "Сегодня", whereTitle: "Где вы?", whereWhy: "Джарвис использует точное местоположение телефона, чтобы показывать погоду, фото, воздух, пробки и автобусы там, где вы на самом деле. Оно нужно только для каждого запроса и никогда не сохраняется.", allow: "Использовать точное местоположение", setCity: "Указать мой город", notNow: "Не сейчас", myCity: "Мой город", cityPlaceholder: "например, Эрдэнэт", cityHelp: "Используется, когда GPS выключен или недоступен.", voiceVia: "Голос: {name}", noLocation: "Местоположение неизвестно", denied: "Доступ к местоположению запрещён. Укажите ваш город." },
   },
   de: {
     idle: "Drücken und sprechen",
@@ -737,6 +732,8 @@ export const UI: Record<
     consent: "Ihre Stimme wird nur für die Antwort verwendet. Bitte nennen Sie keine persönlichen Daten. Mit dem Drücken stimmen Sie den Bedingungen zu.",
     privacy: "Datenschutz",
     terms: "Bedingungen",
+    desktopDownload: "Aspire Desktop herunterladen",
+    desktopDownloadHelp: "Öffnet die Download-Seite von Aspire Desktop auf GitHub.",
     memory: "Gedächtnis",
     reminders: "Erinnerungen",
     nothingSaved: "Noch nichts gespeichert.",
@@ -813,7 +810,7 @@ export const UI: Record<
     botPrimary: "Erinnerungen kommen hierher",
     botUnlink: "Trennen",
     botDeleteCloud: "Meine Cloud-Daten löschen",
-    botDeleteConfirm: "Alle Chats werden getrennt und Gedächtnis, Erinnerungen und Einstellungen aus der Cloud gelöscht. Die Kopie auf dem Telefon bleibt. Zum Bestätigen erneut tippen.",
+    botDeleteConfirm: "Alle Chats und gekoppelten Computer werden getrennt und Gedächtnis, Erinnerungen und Einstellungen aus der Cloud gelöscht. Die Kopie auf dem Telefon bleibt. Zum Bestätigen erneut tippen.",
     botDeleted: "Cloud-Daten gelöscht.",
     botUnavailable: "Verknüpfen ist gerade nicht möglich.",
     botAddSlack: "Zu Slack hinzufügen",
@@ -846,7 +843,7 @@ export const UI: Record<
     suggestionsLabel: "Vorschläge",
     language: "Sprache",
     notable: { rain: "Draußen regnet es.", snow: "Draußen schneit es.", storm: "Draußen ist ein Gewitter.", air: "Die Luft ist heute ungesund.", traffic: "Es ist viel Verkehr.", bus: "Bus {route} kommt in etwa {n} Minuten (Schätzung)." },
-    hud: { weather: "Wetter", air: "Luft", traffic: "Verkehr", bus: "Nächster Bus", taxi: "Nächstes Taxi", map: "Karte", gps: "GPS", set: "Gewählt", approx: "ungefähr", min: "Min.", aqi: {"good": "Gut", "moderate": "Mäßig", "sensitive": "Ungesund für Empfindliche", "unhealthy": "Ungesund", "very_unhealthy": "Sehr ungesund", "hazardous": "Gefährlich"}, level: {"light": "Frei", "moderate": "Mäßig", "heavy": "Stau"}, kinds: {"clear": "Klar", "partly": "Teils bewölkt", "cloudy": "Bewölkt", "fog": "Nebel", "drizzle": "Nieselregen", "rain": "Regen", "storm": "Gewitter", "snow": "Schnee", "sleet": "Schneeregen", "hail": "Hagel"}, feels: "Gefühlt {t}", today: "Heute", whereTitle: "Wo sind Sie?", whereWhy: "Jarvis nutzt den genauen Standort Ihres Telefons für Wetter, Foto, Luft, Verkehr und Busse dort, wo Sie wirklich sind. Er dient nur der jeweiligen Anfrage und wird nie gespeichert.", allow: "Genauen Standort verwenden", setCity: "Meine Stadt festlegen", notNow: "Nicht jetzt", myCity: "Meine Stadt", cityPlaceholder: "z. B. Erdenet", cityHelp: "Wird genutzt, wenn GPS aus oder nicht verfügbar ist.", openMap: "Live-Karte öffnen", fullscreen: "Vollbild", news: "Nachrichten", buses: "Busse", quick: "Schnellzugriff", voiceVia: "Stimme: {name}", noLocation: "Standort unbekannt", photo: "Foto", aqiShort: "LQI", denied: "Standortzugriff abgelehnt. Bitte Stadt festlegen." },
+    hud: { status: "{n} von {m} Quellen antworten", agent: "Fragen", approx: "ungefähr", kinds: {"clear": "Klar", "partly": "Teils bewölkt", "cloudy": "Bewölkt", "fog": "Nebel", "drizzle": "Nieselregen", "rain": "Regen", "storm": "Gewitter", "snow": "Schnee", "sleet": "Schneeregen", "hail": "Hagel"}, feels: "Gefühlt {t}", today: "Heute", whereTitle: "Wo sind Sie?", whereWhy: "Jarvis nutzt den genauen Standort Ihres Telefons für Wetter, Foto, Luft, Verkehr und Busse dort, wo Sie wirklich sind. Er dient nur der jeweiligen Anfrage und wird nie gespeichert.", allow: "Genauen Standort verwenden", setCity: "Meine Stadt festlegen", notNow: "Nicht jetzt", myCity: "Meine Stadt", cityPlaceholder: "z. B. Erdenet", cityHelp: "Wird genutzt, wenn GPS aus oder nicht verfügbar ist.", voiceVia: "Stimme: {name}", noLocation: "Standort unbekannt", denied: "Standortzugriff abgelehnt. Bitte Stadt festlegen." },
   },
 };
 

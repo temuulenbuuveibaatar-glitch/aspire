@@ -1,60 +1,78 @@
 "use client";
 
-// The main screen, v5 "Jarvis HUD" (docs/design/aspire-v4-hud.md): the person's own city photo (from
-// this device's cache the moment the app opens) with the time of day and the live weather over it
-// (Backdrop), the HUD frame with here-and-now readouts (HudFrame), one-tap Map / News / Buses, the orb
-// in a reticle at the centre, the conversation with its code and form cards, the headlines
-// (NewsStrip), and the OpenStreetMap live map (side panel on desktop, full screen on phones). Sheet
-// contents live in components/aspire/SettingsSheets.tsx.
+// The main screen, v6 (docs/design/aspire-v6-spec.md, target docs/design/aspire-v6-reference.webp): the
+// top nav; the hero (the city photo with the live weather over it, temperature, hourly strip, "Open city
+// map"); four cards (Nearby transit, Live traffic with the live cameras, Air quality, Tomorrow's sunrise);
+// the news; and the agent panel on the right (orb, conversation, composer). Phones stack it all, with
+// the composer and a tab bar fixed at the bottom, so the agent is one tap away. Every figure carries its
+// source and age, unknown is said and never invented, and there is no taxi readout (taxis are map pins).
 //
-// Behaviour kept from v3: voice capture with silence detection (the mobile-safe listen() now in lib/use-voice.ts),
-// per-message language detection, /api/ask, /api/listen, /api/speak, the 401 guard, the Settings,
-// Connections and Memory sheets, Gmail, Calendar and bot links, the daily briefing, reminders and
-// the alarm banner, action and media cards, sign-out, and the device store with cloud sync.
+// Live data: /api/ambient every 3 min (lib/use-ambient), /api/city every 60 s (Erdenet traffic cameras,
+// parking, fuel), Erdenet's live buses every 30 s; all only while visible. "Live cameras" (and a
+// find_cameras answer) opens the camera sheet (/api/cameras) for the place shown.
+//
+// Behaviour kept from v5: voice capture with silence detection (lib/use-voice.ts), per-message language
+// detection, /api/ask, /api/listen, /api/speak, the 401 guard, the Settings, Connections, Memory and
+// Where sheets, Gmail, Calendar and bot links, the daily briefing, reminders and the alarm banner, action,
+// task and media cards, the live map (a view on desktop, full screen on phones), the news, sign-out, and
+// the device store with cloud sync.
 
-import { Bus, MapIcon, Maximize2, Menu, Newspaper, Sunrise } from "lucide-react";
-import { MotionConfig } from "motion/react";
+import { Bookmark, Fuel, LayoutDashboard, Map as MapIcon, MessageCircle, SquareParking } from "lucide-react";
+import { MotionConfig, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { isCard } from "@/components/aspire/ActionCard";
-import { Backdrop } from "@/components/aspire/Backdrop";
 import { useDailyBriefing } from "@/components/aspire/BriefingCard";
+import { CameraSheet } from "@/components/aspire/CameraSheet";
 import { Composer } from "@/components/aspire/Composer";
-import { HudFrame } from "@/components/aspire/HudFrame";
 import { LiveMap, prefetchMap } from "@/components/aspire/LiveMap";
 import { MessageList, type ChatMessage } from "@/components/aspire/MessageList";
 import { NewsStrip } from "@/components/aspire/NewsStrip";
-import { hudReadouts } from "@/components/aspire/readouts";
 import { ConnectionsBody, MemoryBody, MenuBody, SettingsBody, WherePrompt } from "@/components/aspire/SettingsSheets";
 import { Sheet } from "@/components/aspire/Sheet";
 import { skyFamily } from "@/components/aspire/Sky";
 import { VoiceOrb, voiceOrbWord, type VoiceOrbState } from "@/components/ui/voice-orb";
-import { AQI_ORDER, SKY_KINDS, type AmbientSky, type SkyKind } from "@/lib/ambient-types";
+import { AgentPanel } from "@/components/v6/AgentPanel";
+import { AirCard } from "@/components/v6/AirCard";
+import { ageS, PROVIDER, type CardState, type Provenance } from "@/components/v6/Card";
+import { CitySheet, cityTabs, stationsSelling, type CityTab } from "@/components/v6/CitySheet";
+import { HeroCard, placeClock } from "@/components/v6/HeroCard";
+import { SunCard } from "@/components/v6/SunCard";
+import { TopNav, type V6View } from "@/components/v6/TopNav";
+import { TrafficCard, trafficProvenance } from "@/components/v6/TrafficCard";
+import { departuresFromAmbient, OSM_STOPS_PROV, osmStops, TRANSITOUS_SOURCES, transitCredit, TransitCard, type Coverage } from "@/components/v6/TransitCard";
+import { fill, textFor } from "@/components/v6/text";
+import { AQI_ORDER, SKY_KINDS, type Ambient, type AmbientSky, type SkyKind } from "@/lib/ambient-types";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
 import { isImperial, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
+import type { CityData } from "@/lib/erdenet-city";
 import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
 import { detectTextLanguage, HTML_LANG, isLang, type Lang } from "@/lib/lang";
 import { buildSuggestions } from "@/lib/suggestions";
-import { phaseParam } from "@/lib/sun";
-import type { Channel, ClientAction, Reminder, Title } from "@/lib/tools/types";
+import type { CameraAction, Channel, ClientAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
-import { devicePosition, roundedPosition, useAmbient } from "@/lib/use-ambient";
+import { devicePosition, roundedPosition, useAmbient, useCachedPhoto, usePoll } from "@/lib/use-ambient";
 import { useVoice } from "@/lib/use-voice";
 import { cn } from "@/lib/utils";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
 type Msg = ChatMessage;
-type SheetName = "settings" | "connections" | "memory" | "menu" | null;
+type SheetName = "settings" | "connections" | "memory" | "menu" | "where" | null;
 
 const ERROR_HOLD_MS = 2400;
 const FLASH_MS = 2500;
 const CONDITIONS_EVERY_MS = 10 * 60_000;
+const CITY_EVERY_MS = 60_000;
+/** A place with no city feeds (all null) is asked again only this often. */
+const NO_CITY_EVERY_MS = 30 * 60_000;
+const BUSES_EVERY_MS = 30_000;
+/** An average walk, 80 m a minute: the walk to the stop in "Leave in N min". */
+const WALK_M_PER_MIN = 80;
 const LANG_KEY = "aspire-lang";
 const WHERE_KEY = "aspire-where";
-const NEWS_KEY = "aspire-news";
 const ENGINE: Record<string, string> = { elevenlabs: "ElevenLabs", azure: "Azure", gemini: "Gemini", omnivoice: "OmniVoice" };
-const GUARDED = /^\/api\/(ask|listen|speak|send|briefing|ambient|transit|calendar|news)$/;
+const GUARDED = /^\/api\/(ask|listen|speak|send|briefing|ambient|transit|city|cameras|calendar|news)$/;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const storeIn = (area: () => Storage) => ({
@@ -87,34 +105,84 @@ function startingLang(): Lang {
   return "en";
 }
 
-/** Demo override: ?sky=rain|snow|storm|fog|drizzle|sleet|hail|cloudy|partly|clear and &night=1 (time of day: ?time=sunset, lib/sun). */
+/** Demo override: ?sky=rain|snow|storm|fog|drizzle|sleet|hail|cloudy|partly|clear and &night=1. */
 function skyOverride(search: string): { kind: SkyKind; night: boolean } | null {
   const q = new URLSearchParams(search);
   const kind = q.get("sky")?.toLowerCase();
   return kind && (SKY_KINDS as readonly string[]).includes(kind) ? { kind: kind as SkyKind, night: q.get("night") === "1" } : null;
 }
 
-/** "14:32 Sat 21 Nov" at the place (its IANA zone), else on the device. */
-function clockText(minute: number | null, lang: Lang, timeZone: string | null | undefined): string {
-  if (minute == null) return " ";
-  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short", day: "numeric", month: "short" };
-  try {
-    return new Intl.DateTimeFormat(HTML_LANG[lang], { ...opts, timeZone: timeZone ?? undefined }).format(minute * 60_000);
-  } catch {
-    return new Intl.DateTimeFormat(HTML_LANG[lang], opts).format(minute * 60_000);
-  }
+/** Trust boundary for /api/city: an object with the CityData keys (the cards check every URL again). */
+function parseCity(x: unknown): CityData | null {
+  if (!x || typeof x !== "object") return null;
+  const c = x as Partial<CityData>;
+  return "traffic" in c && "parking" in c && "fuel" in c && "cameras" in c ? (c as CityData) : null;
+}
+
+/** Erdenet's live buses (/api/transit?live=1): vehicles whose position is fresh, and the feed's time. */
+function parseBuses(x: unknown): { count: number; at: string } | null {
+  const v = x as { vehicles?: unknown; updatedAt?: unknown } | null;
+  if (!v || !Array.isArray(v.vehicles) || typeof v.updatedAt !== "string" || !Number.isFinite(Date.parse(v.updatedAt))) return null;
+  return { count: v.vehicles.filter((b) => !!b && typeof b === "object" && (b as { stale?: unknown }).stale === false).length, at: v.updatedAt };
+}
+
+/** Nearby transit from a snapshot: departures, how they are known, the stop and the walk, and the source line. */
+export function transitFrom(a: Ambient, receivedAt: number, now: number | null) {
+  const at = a.nextBus?.at ?? new Date(receivedAt).toISOString();
+  const departures = departuresFromAmbient(a, at);
+  // Credit whoever gave the departures: the stop's own lines, else the next bus (Google stops with no
+  // lines and a Transitous bus are Transitous's).
+  const fromStop = !!a.stops[0]?.lines?.length && !!a.stopsSource;
+  const source = fromStop ? a.stopsSource : (a.nextBus?.source ?? a.stopsSource);
+  const anyLive = departures.some((d) => d.kind === "live");
+  // Stops with no departure from any source are "stops only" ("No timetable data"), never a timetable
+  // that answered with nothing due. The Erdenet feed is live even when nothing is due.
+  const coverage: Coverage = anyLive || source === "erdenet-live" ? "live" : departures.length ? "scheduled" : a.stops.length ? "static" : "none";
+  // OpenStreetMap stops: names only, credited, and never given minutes.
+  const osm = source ? [] : osmStops(a);
+  const bare = coverage === "static" ? (osm.length ? osm : a.stops) : [];
+  const prov: Provenance | null = osm.length
+    ? OSM_STOPS_PROV
+    : source
+    ? coverage === "static"
+      ? { source: transitCredit(source), ageS: null, kind: "static" }
+      : {
+          source: transitCredit(source),
+          ageS: ageS(at, now),
+          kind: source === "erdenet-live" ? "estimated" : anyLive ? "live" : "scheduled",
+          ...(source === "transitous" ? { href: TRANSITOUS_SOURCES } : {}),
+        }
+    : null;
+  return {
+    departures,
+    coverage,
+    prov,
+    // The stop the departures leave from: the stop's own lines, else the one the next bus names (never
+    // the nearest stop of another source above a departure that may leave elsewhere).
+    stopName: fromStop ? a.stops[0].name : (a.nextBus?.stop ?? null),
+    // Distances only from the device's own position: a typed city's coords are its centre, not the person.
+    stops: bare.map((s) => ({ name: s.name, distanceM: a.locatedBy === "device" ? s.distanceM : NaN })),
+    // The walk only from the device's own position (a typed city is its centre, not the person) to
+    // the stop the departures are from; without it the card shows no "Leave in".
+    walkMin: fromStop && a.locatedBy === "device" ? a.stops[0].distanceM / WALK_M_PER_MIN : null,
+  };
 }
 
 // ---- tiny external stores (stable during hydration) ----
 const subscribeNothing = () => () => {};
-const subscribeMinute = (cb: () => void) => {
-  const id = window.setInterval(cb, 15_000);
+const subscribeTick = (cb: () => void) => {
+  const id = window.setInterval(cb, 5_000);
   return () => window.clearInterval(id);
 };
-const useMinute = () => useSyncExternalStore(subscribeMinute, () => Math.floor(Date.now() / 60_000), () => null);
+/** The clock in 15 s steps (ages and countdowns); null on the server and during hydration. */
+const useNow = () => {
+  const step = useSyncExternalStore(subscribeTick, () => Math.floor(Date.now() / 15_000), () => null);
+  return step == null ? null : step * 15_000;
+};
 const useDeviceTags = () =>
   useSyncExternalStore(subscribeNothing, () => (navigator.languages?.length ? navigator.languages : [navigator.language]).join(","), () => "");
 const useSearch = () => useSyncExternalStore(subscribeNothing, () => window.location.search, () => "");
+const useMac = () => useSyncExternalStore(subscribeNothing, () => /Mac|iPhone|iPad/.test(navigator.userAgent), () => false);
 let firstOpen: boolean | null = null;
 /** True on the first open of this browser session (the greeting adds "How is it going?"). */
 function readFirstOpen(): boolean {
@@ -139,8 +207,12 @@ export default function Assistant() {
   const [alarm, setAlarm] = useState<Reminder | null>(null);
   const [sheet, setSheet] = useState<SheetName>(null);
   const [sheetWord, setSheetWord] = useState("");
+  const [view, setView] = useState<V6View>("overview");
+  const [cityTab, setCityTab] = useState<CityTab | null>(null);
+  /** Where the camera sheet is open (the place shown, or a find_cameras answer); null = closed. */
+  const [cameraAt, setCameraAt] = useState<{ lat: number; lng: number } | null>(null);
+  const [agentWide, setAgentWide] = useState(false);
   const [mapFull, setMapFull] = useState(false);
-  const [newsOpen, setNewsOpen] = useState(true);
   const [whereAsked, setWhereAsked] = useState<boolean | null>(null);
   const [consented, setConsented] = useState(true);
   const [ready, setReady] = useState(false);
@@ -152,15 +224,15 @@ export default function Assistant() {
 
   const [prefs, setPrefs] = useDisplayPrefs();
   const desktop = useMedia("(min-width: 1024px)");
-  const short = useMedia("(max-height: 719px)");
-  const minute = useMinute();
+  const now = useNow();
+  const minute = now == null ? null : Math.floor(now / 60_000);
   const search = useSearch();
   const first = useFirstOpen();
   const deviceTags = useDeviceTags();
+  const mac = useMac();
 
   const input = useRef<HTMLTextAreaElement>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const mapPanel = useRef<HTMLElement>(null);
 
   // Orb error state, held briefly after a failure; transient status pill text ("Voice: Jarvis (ElevenLabs)").
   const [orbError, setOrbError] = useState(false);
@@ -179,6 +251,7 @@ export default function Assistant() {
   const lastEngine = useRef("");
 
   const t = UI[lang];
+  const v6 = textFor(lang);
   const settings = device.settings ?? {};
   const title: Title = settings.title ?? "mr";
 
@@ -190,7 +263,6 @@ export default function Assistant() {
     // "Not now" lasts this session only, so the question comes back until a place is set.
     setWhereAsked(store.get(WHERE_KEY) === "1" || session.get(WHERE_KEY) === "1");
     setConsented(store.get("aspire-consent") === "1" || store.get("emee-consent") === "1");
-    setNewsOpen(store.get(NEWS_KEY) !== "0");
     setReady(true); // useDevice loads stored data in its own earlier effect
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -237,12 +309,12 @@ export default function Assistant() {
   };
   const setCity = (city: string) => update((d) => ({ ...d, settings: { ...d.settings, city: city || undefined } }));
 
-  const ambient = useAmbient({
-    lang,
-    shareLocation: settings.shareLocation === true,
-    city: settings.city ?? null,
-    enabled: langReady && whereAsked !== null && (whereAsked || located),
-  });
+  const ambientOn = langReady && whereAsked !== null && (whereAsked || located);
+  const {
+    data: ambient,
+    at: ambientAt,
+    reload: reloadAmbient,
+  } = useAmbient({ lang, shareLocation: settings.shareLocation === true, city: settings.city ?? null, enabled: ambientOn });
 
   const voice = useVoice({
     lang,
@@ -351,7 +423,10 @@ export default function Assistant() {
       }
       const actions = data.actions ?? [];
       if (actions.length) update((dev) => applyActions(dev, actions));
-      const cards = actions.filter((a) => isCard(a) || a.type === "video" || a.type === "spotify" || a.type === "code" || a.type === "form");
+      const cards = actions.filter((a) => isCard(a) || a.type === "video" || a.type === "spotify" || a.type === "code" || a.type === "form" || a.type === "open_app" || a.type === "cameras");
+      // find_cameras says the panel is open: open it (the reply keeps a button to open it again).
+      const cam = actions.find((a): a is CameraAction => a.type === "cameras" && Number.isFinite(a.lat) && Number.isFinite(a.lng));
+      if (cam) setCameraAt({ lat: cam.lat, lng: cam.lng });
       setMessages((m) => [...m, { id: uid(), role: "assistant", text: data.reply!, lang: l, steps: data.steps ?? [], cards, sources: data.sources ?? [] }]);
       await speak(data.reply, l);
     },
@@ -394,22 +469,48 @@ export default function Assistant() {
   };
 
   // ---- sheets: remember the opener ourselves (the app root turns inert while a sheet is open) ----
-  const openSheet = (name: Exclude<SheetName, null>) => {
+  const rememberOpener = () => {
     const active = document.activeElement;
-    if (sheet === null && active instanceof HTMLElement && active !== document.body) opener.current = active;
+    if (active instanceof HTMLElement && active !== document.body) opener.current = active;
+  };
+  const refocus = () => {
+    const back = opener.current;
+    requestAnimationFrame(() => back?.isConnected && back.focus());
+  };
+  const openSheet = (name: Exclude<SheetName, null>) => {
+    if (sheet === null) rememberOpener();
     setSheet(name);
   };
   const closeSheet = () => {
     setSheet(null);
     setSheetWord("");
-    const back = opener.current;
-    requestAnimationFrame(() => back?.isConnected && back.focus());
+    refocus();
   };
-  // Full screen map: a history entry so the phone's Back closes it, the app behind turns inert, and
+  const openCity = (tab: CityTab) => {
+    rememberOpener();
+    setCityTab(tab);
+  };
+  const closeCity = () => {
+    setCityTab(null);
+    refocus();
+  };
+  const openCameras = (at: { lat: number; lng: number }) => {
+    rememberOpener();
+    setCameraAt({ lat: at.lat, lng: at.lng });
+  };
+  const closeCameras = () => {
+    setCameraAt(null);
+    refocus();
+  };
+  // A searched city replaces the person's own position until they go back to it (the GPS, asked again).
+  const backToMe = () =>
+    void setShareLocation(true).then((ok) => {
+      if (ok) setCity("");
+    });
+  // Full screen map (phones): a history entry so Back closes it, the app behind turns inert, and
   // focus returns to whatever opened it.
   const openFullMap = () => {
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body) opener.current = active;
+    rememberOpener();
     history.pushState({ aspireMap: 1 }, "");
     setMapFull(true);
   };
@@ -427,19 +528,25 @@ export default function Assistant() {
       requestAnimationFrame(() => back?.isConnected && back.focus());
     };
   }, [mapFull]);
-  // Desktop: the map is already beside the chat, so bring it into view; phones open it full screen.
+  // A JS "smooth" overrides the global reduced-motion CSS, so the OS setting is checked here too.
+  const osReduced = useReducedMotion();
+  const smooth = prefs.calm || osReduced ? "auto" : "smooth";
+  // Desktop: the City map view; phones: the map full screen.
   const openMap = () => {
-    if (desktop && mapPanel.current) {
-      mapPanel.current.scrollIntoView({ block: "nearest" });
-      mapPanel.current.querySelector<HTMLElement>("[role=region]")?.focus();
+    if (desktop) {
+      setView("map");
+      window.scrollTo({ top: 0, behavior: smooth });
     } else openFullMap();
   };
-  const newsBox = useRef<HTMLDivElement>(null);
-  const toggleNews = () => {
-    const open = !newsOpen;
-    setNewsOpen(open);
-    store.set(NEWS_KEY, open ? "1" : "0");
-    if (open) requestAnimationFrame(() => newsBox.current?.scrollIntoView({ block: "nearest", behavior: prefs.calm ? "auto" : "smooth" }));
+  const onView = (v: V6View) => {
+    if (v === "saved") openSheet("memory");
+    else if (v === "map") openMap();
+    else setView("overview");
+  };
+  // Scroll, then move focus to the conversation (not the input: that would raise the keyboard over it).
+  const toAgent = () => {
+    document.getElementById("aspire-agent")?.scrollIntoView({ block: "start", behavior: smooth });
+    document.getElementById("aspire-thread")?.focus({ preventScroll: true });
   };
 
   // On-screen keyboard (iOS never resizes the layout viewport): lift the composer above it.
@@ -452,6 +559,8 @@ export default function Assistant() {
       root.setProperty("--kb", `${kb}px`);
       if (kb > 0) root.setProperty("--kb-pad", "8px");
       else root.removeProperty("--kb-pad");
+      // The tab bar steps aside while typing (globals.css: [data-kb] .v6-dock-nav).
+      document.documentElement.toggleAttribute("data-kb", kb > 0);
     };
     vv.addEventListener("resize", on);
     vv.addEventListener("scroll", on);
@@ -461,13 +570,39 @@ export default function Assistant() {
       vv.removeEventListener("scroll", on);
       root.removeProperty("--kb");
       root.removeProperty("--kb-pad");
+      document.documentElement.removeAttribute("data-kb");
     };
   }, []);
 
-  // Space on an unscrollable page = the core (kiosks and keyboards), only when nothing has focus.
+  // Phones: the dock's real height (consent notice, listening row, safe area), so the page and the
+  // newest message are never left under it.
+  const dock = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = dock.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement.style;
+    const ro = new ResizeObserver(() => root.setProperty("--dock-h", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.removeProperty("--dock-h");
+    };
+  }, [desktop]);
+
+  // Keys: Cmd/Ctrl+K searches cities; Space on an unscrollable page with nothing focused is the core.
+  const sheetRef = useRef(sheet);
+  useEffect(() => {
+    sheetRef.current = sheet;
+  }, [sheet]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || sheet || e.defaultPrevented) return;
+      if (e.defaultPrevented || sheetRef.current) return;
+      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        document.getElementById("aspire-search")?.click();
+        return;
+      }
+      if (e.code !== "Space") return;
       if (e.target !== document.body && e.target !== document.documentElement) return;
       const root = document.scrollingElement;
       if (root && root.scrollHeight > window.innerHeight + 1) return;
@@ -476,7 +611,39 @@ export default function Assistant() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sheet]);
+  }, []);
+
+  // Phones: the conversation sits under the cards, so a new message brings it into view.
+  const count = messages.length;
+  useEffect(() => {
+    if (count && !desktop) document.getElementById("aspire-agent")?.scrollIntoView({ block: "end", behavior: prefs.calm ? "auto" : "smooth" });
+  }, [count, desktop, prefs.calm]);
+
+  // ---- live feeds ----
+  const coords = ambient?.coords ?? null;
+  const erdenet = (!!coords && isErdenet(coords.lat, coords.lng)) || ambient?.nextBus?.source === "erdenet-live";
+  // About 110 m is plenty to find the city and sort parking and fuel by distance.
+  const cityUrl = coords ? `/api/city?lat=${coords.lat.toFixed(3)}&lng=${coords.lng.toFixed(3)}` : null;
+  const [cityEvery, setCityEvery] = useState(CITY_EVERY_MS);
+  const cityFeed = usePoll(cityUrl, cityEvery, parseCity);
+  const city = cityFeed.data;
+  const hasCity = !!city && !!(city.traffic || city.parking || city.fuel || city.down?.length);
+  // A city with no feeds at all is not asked every minute.
+  const wantEvery = city && !hasCity ? NO_CITY_EVERY_MS : CITY_EVERY_MS;
+  if (wantEvery !== cityEvery) setCityEvery(wantEvery);
+  const buses = usePoll(erdenet ? "/api/transit?live=1" : null, BUSES_EVERY_MS, parseBuses);
+
+  // Phones: fetch the map library while idle, so the first tap on the map shows a map, not a dark box.
+  useEffect(() => {
+    if (!ready || desktop) return;
+    const load = () => void prefetchMap();
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(load, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(load, 2000);
+    return () => window.clearTimeout(id);
+  }, [ready, desktop]);
 
   // ---- derived view state ----
   const empty = messages.length === 0;
@@ -500,8 +667,6 @@ export default function Assistant() {
     [shown, localHour, lang, deviceTags],
   );
   const imperial = isImperial(prefs.units);
-  const readouts = hudReadouts(shown, t, { imperial, openMap, openLocation: () => openSheet("settings"), now: minute == null ? null : minute * 60_000 });
-  const erdenet = (!!ambient?.coords && isErdenet(ambient.coords.lat, ambient.coords.lng)) || ambient?.nextBus?.source === "erdenet-live";
   const mapStops = erdenet ? [] : (ambient?.stops ?? []).flatMap((s) => (s.lat != null && s.lng != null ? [{ name: s.name, lat: s.lat, lng: s.lng }] : []));
   const orbWeather = {
     family: skyFamily(sky.kind),
@@ -509,32 +674,46 @@ export default function Assistant() {
     aqiSeverity: ambient?.air ? AQI_ORDER.indexOf(ambient.air.category) + 1 || 1 : 1,
     storm: sky.kind === "storm",
   };
-  const sphere = empty ? (desktop ? 200 : short ? 128 : 160) : desktop ? 120 : 96;
   const pill = orbState !== "idle" ? word : flash;
-  // The photo credit (bottom-left): Backdrop says when it is actually on screen.
-  const [credit, setCredit] = useState(false);
-  const quick: { id: string; icon: typeof Bus; label: string; onClick: () => void; expanded?: boolean; map?: boolean }[] = [
-    { id: "map", icon: MapIcon, label: t.hud.map, onClick: openMap, map: true },
-    { id: "news", icon: Newspaper, label: t.hud.news, onClick: toggleNews, expanded: newsOpen },
-    ...(erdenet ? [{ id: "bus", icon: Bus, label: t.hud.buses, onClick: openFullMap, map: true }] : []),
-  ];
-  // Phones: fetch the map library while idle, so the first tap on Map or Buses shows a map, not a dark box.
-  useEffect(() => {
-    if (!ready || desktop) return;
-    const load = () => void prefetchMap();
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(load, { timeout: 5000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const id = window.setTimeout(load, 2000);
-    return () => window.clearTimeout(id);
-  }, [ready, desktop]);
-  // Only once the screen language is known, so the first request is not wasted on the "en" default.
-  const news = newsOpen && langReady && (
-    <div ref={newsBox} id="aspire-news" className="scroll-mt-4">
-      <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 5 : 3} />
-    </div>
-  );
+
+  // The city photo: this snapshot's, else the last good one on this device (before the first snapshot, then only for the same place).
+  const cached = useCachedPhoto();
+  const photo = ambient ? (ambient.photo ?? (cached && cached.place === ambient.place ? cached : null)) : cached;
+  // An IP guess is said to be one, and the place picker lets the person fix it.
+  const approx = ambient?.locatedBy === "network";
+  const place = ambient?.place ? (approx ? `${ambient.place}, ${t.hud.approx}` : ambient.place) : (settings.city ?? null);
+  const loading: CardState | undefined = ambient === null && ambientOn ? "loading" : undefined;
+  const timeZone = ambient?.timeZone ?? null;
+
+  // Source and age of every figure (each card's source line; the agent's source chips).
+  const w = shown?.weather ?? null;
+  const weatherProv: Provenance | null = w?.source ? { source: PROVIDER[w.source], ageS: ageS(w.at, now), kind: "estimated" } : null;
+  const air = ambient?.air ?? null;
+  const airProv: Provenance | null = air?.source ? { source: PROVIDER[air.source], ageS: ageS(air.at, now), kind: "estimated" } : null;
+  const transit = ambient && ambientAt != null ? transitFrom(ambient, ambientAt, now) : null;
+  const trafficDown = !!city?.down?.includes("traffic") || (erdenet && cityFeed.failed && !city?.traffic);
+  // Google's probe route starts at the position: not for an IP guess (Erdenet's cameras are city-wide).
+  const google = approx ? null : (ambient?.traffic ?? null);
+  const trafficLine = trafficProvenance(city?.traffic, google, google?.at, city?.credit, now);
+  const trafficProv = trafficLine?.kind === "none" ? null : trafficLine;
+  const sources = (
+    [
+      [v6.weather, weatherProv],
+      [v6.transit, transit?.prov ?? null],
+      [v6.traffic, trafficProv],
+    ] as const
+  ).flatMap(([label, p]) => (p ? [{ ...p, label }] : []));
+  const answering = [weatherProv, airProv, transit?.departures.length || ambient?.stops.length ? transit?.prov : null, trafficProv].filter(Boolean).length;
+  const clock = now != null ? placeClock(now, timeZone, lang) : null;
+  const cityChips = cityTabs(city);
+  // The figure on each chip: free spaces (approx., camera vision) and stations with fuel on sale.
+  const parkingKnown = (city?.parking?.lots ?? []).filter((l) => l.free != null);
+  const chipText = (k: CityTab): string => {
+    if (k === "parking") return parkingKnown.length ? `${v6.parking} · ${fill(v6.free, { n: parkingKnown.reduce((n, l) => n + (l.free ?? 0), 0) })} (${v6.approx})` : v6.parking;
+    if (!city?.fuel) return v6.fuel;
+    const selling = stationsSelling(city.fuel.stations);
+    return `${v6.fuel} · ${selling ? fill(v6.fuelSelling, { n: selling }, lang) : v6.fuelUnknown}`;
+  };
 
   // A notable change in conditions is announced at most once per 10 minutes (the first is in the greeting).
   const [conditionsNote, setConditionsNote] = useState("");
@@ -543,224 +722,305 @@ export default function Assistant() {
     if (!ambient) return;
     const n = notableFrom(ambient);
     const text = n ? notableSentence(lang, n) : "";
-    const now = Date.now();
+    const at = Date.now();
     if (!lastNote.current) {
-      lastNote.current = { at: now, text };
+      lastNote.current = { at, text };
       return;
     }
-    if (!text || text === lastNote.current.text || now - lastNote.current.at < CONDITIONS_EVERY_MS) return;
-    lastNote.current = { at: now, text };
+    if (!text || text === lastNote.current.text || at - lastNote.current.at < CONDITIONS_EVERY_MS) return;
+    lastNote.current = { at, text };
     setConditionsNote(text);
   }, [ambient, lang]);
 
   const map = (full: boolean) => (
     <LiveMap
-      center={ambient?.coords ?? null}
+      center={coords}
       lang={lang}
       stops={mapStops}
       taxis={ambient?.taxis ?? []}
       erdenet={erdenet}
       fullscreen={full}
       onClose={full ? closeFullMap : undefined}
-      className={full ? undefined : "h-[min(420px,60vh)] rounded-md"}
+      className={full ? undefined : "h-[calc(100dvh-140px)] min-h-[420px] rounded-[var(--radius-xl)]"}
     />
   );
 
+  // Desktop: in the agent panel. Phones: in the dock, whose own padding covers the safe area (pb-0).
+  const composer = (className: string) => (
+    <Composer
+      className={className}
+      phase={phase}
+      draft={draft}
+      onDraft={setDraft}
+      onSubmit={send}
+      onMic={onCore}
+      level={voice.level}
+      lang={lang}
+      inputRef={input}
+      before={
+        notice || !consented ? (
+          <p className={cn("mb-2 rounded-[var(--radius-sm)] bg-surface-2 px-4 py-2 text-meta", notice ? "text-warn" : "text-ink-muted")} role={notice ? "alert" : undefined}>
+            {notice || t.consent}{" "}
+            {!notice && (
+              <>
+                <Link href="/privacy" className="text-ink underline">
+                  {t.privacy}
+                </Link>{" "}
+                ·{" "}
+                <Link href="/terms" className="text-ink underline">
+                  {t.terms}
+                </Link>
+              </>
+            )}
+          </p>
+        ) : null
+      }
+    />
+  );
+
+  // Live traffic as its own band (load, busiest roads, cameras, parking, fuel), then the reference row:
+  // Nearby transit, Air quality, Tomorrow's sunrise.
+  const cards = (
+    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <TrafficCard
+        className="sm:col-span-2 xl:col-span-3"
+        lang={lang}
+        now={now}
+        city={ambient?.place}
+        traffic={city?.traffic}
+        credit={city?.credit}
+        down={trafficDown}
+        google={google}
+        googleAt={google?.at}
+        onCameras={coords ? () => openCameras(coords) : undefined}
+        footer={
+          cityChips.length > 0 && (
+            <ul className="flex flex-wrap gap-2">
+              {cityChips.map((k) => (
+                <li key={k} className="min-w-0 max-w-full">
+                  <button type="button" onClick={() => openCity(k)} className="press v6-chip min-h-11 max-w-full gap-2 px-3">
+                    {k === "parking" ? <SquareParking aria-hidden className="size-4 shrink-0" /> : <Fuel aria-hidden className="size-4 shrink-0" />}
+                    <span className="num truncate">{chipText(k)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        state={loading}
+        index={1}
+        onRetry={cityFeed.reload}
+      />
+      <TransitCard
+        className="xl:min-h-[240px]"
+        lang={lang}
+        now={now}
+        coverage={transit?.coverage ?? "none"}
+        departures={transit?.departures ?? []}
+        stopName={transit?.stopName}
+        stops={transit?.stops}
+        walkMin={transit?.walkMin}
+        liveBuses={buses.data}
+        city={ambient?.place}
+        prov={transit?.prov}
+        // No stops or buses "from here" for an IP guess: ask for the place instead.
+        state={loading ?? (ambient && (approx || !ambient.locatedBy) ? "denied" : "ready")}
+        index={2}
+        onRetry={reloadAmbient}
+        onViewRoutes={openMap}
+      />
+      <AirCard className="xl:min-h-[240px]" lang={lang} air={air} pm25={air?.pm25} prov={airProv} state={loading} index={3} onRetry={reloadAmbient} />
+      <SunCard
+        className="xl:min-h-[240px]"
+        lang={lang}
+        now={now}
+        coords={coords}
+        timeZone={timeZone}
+        photo={photo}
+        autoScene={prefs.skyEffects}
+        onAutoScene={(on) => setPrefs({ skyEffects: on })}
+        state={loading}
+        index={4}
+      />
+    </div>
+  );
+
+  const agent = (
+    <AgentPanel
+      lang={lang}
+      expanded={agentWide}
+      onExpand={desktop ? () => setAgentWide((x) => !x) : undefined}
+      // Under the nav (16 px padding, 61 px nav, 20 px gap), so the composer is in view on first paint.
+      className="lg:sticky lg:top-5 lg:h-[calc(100dvh-117px)]"
+      orb={
+        <div className="flex flex-col items-center gap-2">
+          <button id="aspire-core" type="button" onClick={onCore} aria-label={coreLabel} className="press grid place-items-center rounded-full">
+            <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={empty ? 96 : 72} weather={orbWeather} lang={lang} label={word} />
+          </button>
+          <p aria-hidden className={cn("min-h-6 text-meta tracking-[0.12em] text-ink-muted uppercase", !pill && "invisible")}>
+            {pill || " "}
+          </p>
+        </div>
+      }
+      opener={empty ? <h2 id="aspire-greeting">{minute == null ? " " : greetingText}</h2> : undefined}
+      messages={
+        <>
+          {empty && (
+            <>
+              <p className="text-copy text-ink-muted">{t.tapOrSay}</p>
+              <ul aria-label={t.suggestionsLabel} className="mt-3 flex flex-col gap-2">
+                {starters.map((s) => (
+                  <li key={s.kind}>
+                    <button
+                      type="button"
+                      onClick={() => !busy && send(s.label)}
+                      aria-disabled={busy || undefined}
+                      className="press min-h-11 w-full rounded-[var(--radius-md)] bg-surface-2 px-4 py-3 text-left text-copy text-ink aria-disabled:opacity-60"
+                    >
+                      {s.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <MessageList
+            className="mt-3"
+            messages={messages}
+            lang={lang}
+            busy={busy}
+            thinking={phase === "thinking"}
+            webhooks={settings.webhooks ?? {}}
+            onReplay={(m) => voice.replay(m.text, m.lang)}
+            onOpenConnections={() => openSheet("connections")}
+            onCameras={openCameras}
+            onRetry={(q) => {
+              if (phase !== "idle") return;
+              voice.unlock();
+              void askBrain(q.text, q.lang);
+            }}
+            address={title}
+            briefing={briefing ? { text: briefing.text, lang: briefing.lang, gmailError: briefing.gmailError, headlines: briefing.headlines } : null}
+            onReplayBriefing={() => {
+              if (!briefing || phase !== "idle") return;
+              voice.unlock();
+              void speak(briefing.text, briefing.lang);
+            }}
+            alarm={alarm}
+            onDismissAlarm={() => setAlarm(null)}
+            reducedMotion={prefs.calm || undefined}
+          />
+        </>
+      }
+      sources={sources}
+      composer={desktop ? composer("pointer-events-auto w-full") : null}
+    />
+  );
+
+  const covered = sheet !== null || whereOpen || mapFull || cityTab !== null || cameraAt !== null;
   return (
     <MotionConfig reducedMotion={prefs.calm ? "always" : "user"}>
-      <div lang={HTML_LANG[lang]}>
+      <div lang={HTML_LANG[lang]} className="min-h-dvh bg-bg">
         <a href="#aspire-thread" className="skip-link">
           {t.skipToConversation}
         </a>
-        {/* Calm and reduced motion still show the weather (one still frame); the opaque full-screen map pauses it. */}
-        <Backdrop
-          photo={ambient?.photo ?? null}
-          sky={sky}
-          localHour={localHour}
-          effects={prefs.skyEffects && !mapFull}
-          label={t.hud.photo}
-          coords={ambient?.coords ?? null}
-          place={ambient?.place ?? null}
-          phase={phaseParam(search) ?? (override?.night ? "midnight" : null)}
-          loaded={ambient != null}
-          onCredit={setCredit}
-        />
 
         {/* Under the full-screen map: inert, and on phones not rendered at all (no hidden canvas loops). */}
-        <div inert={sheet !== null || whereOpen || mapFull} hidden={mapFull && !desktop} className="relative z-[1]">
-          <HudFrame readouts={readouts} clock={clockText(minute, lang, ambient?.timeZone)}>
-            <main className="mx-auto w-full max-w-[1200px] px-4 pb-56 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:gap-6 lg:px-6 lg:pt-6">
-              <div className="min-w-0">
-                <div className="hud mt-2 flex min-h-14 items-center gap-1 px-3">
-                  <span lang="en" className="font-display text-wordmark text-ink">
-                    ASPIRE
-                  </span>
-                  <button type="button" onClick={() => void refreshBriefing()} aria-label={t.briefing} title={t.briefing} className={cn(iconBtn, "ml-auto")}>
-                    <Sunrise className="size-6" aria-hidden />
-                  </button>
-                  <button type="button" onClick={() => openSheet("menu")} aria-label={t.menu} title={t.menu} className={iconBtn}>
-                    <Menu className="size-6" aria-hidden />
-                  </button>
-                </div>
+        <div inert={covered} hidden={mapFull && !desktop} className="mx-auto w-full max-w-[1440px] pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-[max(16px,env(safe-area-inset-top))] pb-[calc(var(--dock-h,200px)+16px)] md:px-6 lg:pb-6">
+          <TopNav
+            lang={lang}
+            view={view}
+            onView={onView}
+            onSearch={() => openSheet("where")}
+            onSettings={() => openSheet("menu")}
+            onMyLocation={settings.city && settings.shareLocation !== true ? backToMe : undefined}
+            mac={mac}
+          />
 
-                {/* ---- one tap to the map, the headlines and (Erdenet) the live buses ---- */}
-                <nav aria-label={t.hud.quick} className="mt-2">
-                  <ul className="flex flex-wrap gap-2">
-                    {quick.map(({ id, icon: Icon, label, onClick, expanded, map: isMap }) => (
-                      <li key={id}>
-                        <button
-                          type="button"
-                          onClick={onClick}
-                          onPointerDown={isMap ? () => void prefetchMap() : undefined}
-                          aria-expanded={expanded}
-                          aria-controls={expanded ? "aspire-news" : undefined}
-                          className="press hud inline-flex min-h-12 items-center gap-2 px-4 text-body font-medium text-ink"
-                        >
-                          <Icon className="size-5 shrink-0 text-hud" aria-hidden />
-                          {label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </nav>
-
-                {/* ---- the orb in its reticle, the status pill, and (empty state) the greeting ---- */}
-                <section aria-labelledby={empty ? "aspire-greeting" : undefined} className="flex flex-col items-center pt-[2vh]">
-                  {!empty && <h1 className="sr-only">Aspire</h1>}
-                  <button
-                    id="aspire-core"
-                    type="button"
-                    onClick={onCore}
-                    aria-label={coreLabel}
-                    className="press relative grid place-items-center rounded-full"
-                    style={{ width: Math.round(sphere * 1.4), height: Math.round(sphere * 1.4) }}
-                  >
-                    <svg
-                      aria-hidden
-                      viewBox="0 0 100 100"
-                      fill="none"
-                      stroke="currentColor"
-                      className={cn("pointer-events-none absolute inset-0 size-full text-hud", phase === "listening" && "animate-[spin_8s_linear_infinite] still:animate-none")}
-                    >
-                      <circle cx="50" cy="50" r="48" strokeWidth="0.8" strokeDasharray="44 10 6 10" />
-                      <circle cx="50" cy="50" r="43" strokeWidth="0.5" strokeOpacity="0.6" strokeDasharray="1.5 3.5" />
-                      <path d="M50 0v6M50 94v6M0 50h6M94 50h6" strokeWidth="0.8" />
-                    </svg>
-                    <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={sphere} weather={orbWeather} lang={lang} label={word} />
-                  </button>
-                  <p aria-hidden className={cn("hud mt-3 min-h-12 px-4 py-2 text-label tracking-[0.12em] text-ink uppercase", !pill && "invisible")}>
-                    {pill || " "}
-                  </p>
-                  {empty && (
-                    <div className="hud mt-3 w-full max-w-[640px] px-5 py-4 text-center">
-                      <h1 id="aspire-greeting" className="text-greeting text-ink">
-                        {minute == null ? " " : greetingText}
-                      </h1>
-                      <p className="mt-2 text-body text-ink-muted">{t.tapOrSay}</p>
-                    </div>
-                  )}
-                  {empty && (
-                    <ul aria-label={t.suggestionsLabel} className="mt-4 flex w-full max-w-[640px] flex-wrap justify-center gap-2">
-                      {starters.map((s) => (
-                        <li key={s.kind}>
-                          <button
-                            type="button"
-                            onClick={() => !busy && send(s.label)}
-                            aria-disabled={busy || undefined}
-                            className="press hud min-h-12 px-5 py-2 text-left text-body text-ink aria-disabled:opacity-60"
-                          >
-                            {s.label}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-
-                {!desktop && news && <div className="mx-auto mt-4 max-w-[720px]">{news}</div>}
-
-                <MessageList
-                  className="mx-auto mt-4 max-w-[720px]"
-                  messages={messages}
-                  lang={lang}
-                  busy={busy}
-                  thinking={phase === "thinking"}
-                  webhooks={settings.webhooks ?? {}}
-                  onReplay={(m) => voice.replay(m.text, m.lang)}
-                  onOpenConnections={() => openSheet("connections")}
-                  onRetry={(q) => {
-                if (phase !== "idle") return;
-                voice.unlock();
-                void askBrain(q.text, q.lang);
-              }}
-                  address={title}
-                  briefing={briefing ? { text: briefing.text, lang: briefing.lang, gmailError: briefing.gmailError, headlines: briefing.headlines } : null}
-                  onReplayBriefing={() => {
-                    if (!briefing || phase !== "idle") return;
-                    voice.unlock();
-                    void speak(briefing.text, briefing.lang);
-                  }}
-                  alarm={alarm}
-                  onDismissAlarm={() => setAlarm(null)}
-                  reducedMotion={prefs.calm || undefined}
-                />
-              </div>
-
-              {/* desktop: the live map beside the chat, with a full-screen toggle */}
-              {desktop && (
-                <aside ref={mapPanel} aria-label={t.hud.map} className="sticky top-6 mt-4 max-h-[calc(100dvh-3rem)] self-start overflow-y-auto pb-2">
-                  <div className="hud mb-2 flex items-center justify-between px-3">
-                    <h2 className="text-label tracking-[0.12em] text-ink-muted uppercase">{t.hud.map}</h2>
-                    <button type="button" onClick={openFullMap} aria-label={t.hud.fullscreen} title={t.hud.fullscreen} className={iconBtn}>
-                      <Maximize2 className="size-5" aria-hidden />
-                    </button>
-                  </div>
-                  {!mapFull && map(false)}
-                  {news && <div className="mt-4">{news}</div>}
-                </aside>
+          <div className={cn("mt-5 grid gap-5", agentWide ? "lg:grid-cols-[minmax(0,1fr)_520px]" : "lg:grid-cols-[minmax(0,1fr)_360px]")}>
+            <main className="flex min-w-0 flex-col gap-5">
+              {view === "map" && desktop ? (
+                <section aria-label={v6.cityMap}>{!mapFull && map(false)}</section>
+              ) : (
+                <>
+                  <HeroCard
+                    lang={lang}
+                    place={place}
+                    sky={sky}
+                    weather={w}
+                    photo={photo}
+                    timeZone={timeZone}
+                    now={now}
+                    coords={coords}
+                    imperial={imperial}
+                    prov={weatherProv}
+                    state={loading}
+                    effects={prefs.skyEffects && !mapFull}
+                    onOpenMap={openMap}
+                    onPlace={() => openSheet("where")}
+                  />
+                  {cards}
+                </>
               )}
+              {/* Only once the screen language is known, so the first request is not wasted on the "en" default. */}
+              {langReady && <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 5 : 3} />}
             </main>
-          </HudFrame>
-
-          {/* ---- composer: above the on-screen keyboard (--kb), and clear of the 48px photo credit ---- */}
-          <div
-            className="pointer-events-none fixed inset-x-0 z-20 bg-gradient-to-t from-bg/85 via-bg/50 to-transparent px-4 pt-8 lg:pl-[276px]"
-            style={{
-              bottom: "var(--kb, 0px)",
-              paddingBottom: `var(--kb-pad, calc(max(8px, env(safe-area-inset-bottom)) + ${credit ? 56 : 0}px))`,
-            }}
-          >
-            <Composer
-              className="pointer-events-auto mx-auto w-full max-w-[720px]"
-              phase={phase}
-              draft={draft}
-              onDraft={setDraft}
-              onSubmit={send}
-              onMic={onCore}
-              level={voice.level}
-              lang={lang}
-              inputRef={input}
-              before={
-                notice || !consented ? (
-                  <p className={cn("hud mb-2 px-4 py-2 text-small", notice ? "text-signal" : "text-ink-muted")} role={notice ? "alert" : undefined}>
-                    {notice || t.consent}{" "}
-                    {!notice && (
-                      <>
-                        <Link href="/privacy" className="text-ink underline">
-                          {t.privacy}
-                        </Link>{" "}
-                        ·{" "}
-                        <Link href="/terms" className="text-ink underline">
-                          {t.terms}
-                        </Link>
-                      </>
-                    )}
-                  </p>
-                ) : null
-              }
-            />
+            {/* Phones: a scroll to the agent's end stops above the dock, so the newest reply shows. */}
+            <div id="aspire-agent" className="min-w-0 scroll-mt-4 scroll-mb-[calc(var(--dock-h,220px)+8px)] lg:scroll-mb-0">
+              {agent}
+            </div>
           </div>
+
+          <footer className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-4 text-meta text-ink-faint">
+            {ambient && (
+              <span>
+                <span aria-hidden className={cn("mr-1.5 inline-block size-1.5 rounded-full align-middle", answering ? "bg-live" : "bg-warn")} />
+                {fill(t.hud.status, { n: answering, m: 4 })}
+              </span>
+            )}
+            {ambient?.address && <span className="min-w-0 truncate">{ambient.address}</span>}
+            {timeZone && (
+              <span className="num">
+                {timeZone}
+                {clock?.zone && ` · ${clock.zone}`}
+              </span>
+            )}
+          </footer>
         </div>
+
+        {/* ---- phones: the composer and the tab bar, above the on-screen keyboard (--kb) ---- */}
+        {!desktop && (
+          <div
+            ref={dock}
+            inert={covered}
+            hidden={mapFull}
+            className="pointer-events-none fixed inset-x-0 z-20 bg-gradient-to-t from-bg via-bg/90 to-transparent pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-6"
+            style={{ bottom: "var(--kb, 0px)", paddingBottom: "var(--kb-pad, max(8px, env(safe-area-inset-bottom)))" }}
+          >
+            {composer("pointer-events-auto w-full pb-0")}
+            <nav aria-label={v6.tabBar} className="v6-dock-nav pointer-events-auto mt-2 grid grid-cols-4 gap-1">
+              {(
+                [
+                  ["overview", v6.overview, LayoutDashboard, () => window.scrollTo({ top: 0, behavior: smooth })],
+                  ["map", v6.tabMap, MapIcon, openFullMap],
+                  ["saved", v6.tabSaved, Bookmark, () => openSheet("memory")],
+                  ["agent", t.hud.agent, MessageCircle, toAgent],
+                ] as const
+              ).map(([id, label, Icon, onClick]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={onClick}
+                  onPointerDown={id === "map" ? () => void prefetchMap() : undefined}
+                  className="press flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] text-meta text-ink-muted hover:text-ink"
+                >
+                  <Icon aria-hidden className="size-5" />
+                  <span className="max-w-full truncate">{label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
 
         {mapFull && map(true)}
 
@@ -769,6 +1029,8 @@ export default function Assistant() {
           <span>{pill}</span> <span>{sheetWord}</span> <span>{conditionsNote}</span>
         </p>
 
+        {cameraAt && <CameraSheet lat={cameraAt.lat} lng={cameraAt.lng} lang={lang} onClose={closeCameras} />}
+        <CitySheet open={cityTab !== null} onClose={closeCity} lang={lang} city={city} cityName={ambient?.place} now={now} tab={cityTab ?? undefined} />
         <Sheet open={whereOpen && sheet === null} title={t.hud.whereTitle} closeLabel={t.hud.notNow} onClose={() => answerWhere(false)} onAnnounce={setSheetWord}>
           <WherePrompt
             t={t}
@@ -784,6 +1046,25 @@ export default function Assistant() {
               answerWhere();
             }}
             onLater={() => answerWhere(false)}
+          />
+        </Sheet>
+        <Sheet open={sheet === "where"} title={v6.search} closeLabel={t.close} onClose={closeSheet} onAnnounce={setSheetWord}>
+          <WherePrompt
+            t={t}
+            onAllow={() =>
+              setShareLocation(true).then((ok) => {
+                if (ok) closeSheet();
+                return ok;
+              })
+            }
+            onCity={(c) => {
+              if (!c) return;
+              // A city picked here is the place the person wants to see: it takes over from the GPS.
+              update((d) => ({ ...d, settings: { ...d.settings, city: c, shareLocation: false } }));
+              answerWhere();
+              closeSheet();
+            }}
+            onLater={closeSheet}
           />
         </Sheet>
         <Sheet open={sheet === "menu"} title={t.menu} closeLabel={t.close} onClose={closeSheet} onAnnounce={setSheetWord}>
@@ -831,5 +1112,3 @@ export default function Assistant() {
     </MotionConfig>
   );
 }
-
-const iconBtn = "press grid size-12 place-items-center rounded-full text-ink-muted hover:bg-panel-3 hover:text-ink";

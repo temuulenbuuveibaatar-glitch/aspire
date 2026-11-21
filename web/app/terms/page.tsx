@@ -3,7 +3,13 @@ import Link from "next/link";
 import LegalPage, { Contact, LangJump } from "@/components/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Үйлчилгээний нөхцөл · Terms of Use — Aspire" };
+// The root template adds " | Aspire". Own canonical and og:url, so it is not folded into "/".
+const TITLE = "Үйлчилгээний нөхцөл · Terms of Use";
+export const metadata: Metadata = {
+  title: TITLE,
+  alternates: { canonical: "/terms" },
+  openGraph: { type: "website", siteName: "Aspire", title: `${TITLE} | Aspire`, url: "/terms" },
+};
 
 export default function Terms() {
   return (
@@ -23,7 +29,7 @@ export default function Terms() {
         <h2>Анхаарах зүйл</h2>
         <ul>
           <li>
-            <b>Автобус, нийтийн тээврийн цаг</b> Google Maps-аас ирдэг бөгөөд бүрэн бус байж болно; Эрдэнэт хотын хуваарь жишээ (sample)
+            <b>Автобус, нийтийн тээврийн цаг</b> Google Maps эсвэл Transitous-оос ирдэг бөгөөд бүрэн бус байж болно; Эрдэнэт хотын хуваарь жишээ (sample)
             мэдээлэл. Чухал аялалын өмнө тээврийн байгууллагаас лавлана уу.
           </li>
           <li>
@@ -41,6 +47,10 @@ export default function Terms() {
           <li>
             Мессеж, нийтлэл, SMS, дуудлага, имэйл зөвхөн таныг баталгаажуулах товч дарсны дараа илгээгдэнэ. Илгээхээсээ өмнө хүлээн
             авагч болон текстийг шалгаарай; илгээсэн зүйлийг та хариуцна.
+          </li>
+          <li>
+            Aspire Desktop таны компьютер дээр зөвхөн та &quot;Зөвшөөрөх&quot; дарсны дараа ажиллана. Зөвшөөрөхөөсөө өмнө бичих текст,
+            хадгалах файл, нээх апп эсвэл холбоосыг шалгаарай; зөвшөөрсөн зүйлийг та хариуцна.
           </li>
         </ul>
         <h2>Зөв хэрэглээ</h2>
@@ -75,7 +85,7 @@ export default function Terms() {
         <h2>Please note</h2>
         <ul>
           <li>
-            <b>Bus and transit times</b> come from Google Maps and may be incomplete; the Erdenet timetable is sample data. Check with
+            <b>Bus and transit times</b> come from Google Maps or Transitous and may be incomplete; the Erdenet timetable is sample data. Check with
             the transport operator before an important trip.
           </li>
           <li>
@@ -93,6 +103,10 @@ export default function Terms() {
           <li>
             Messages, posts, SMS, calls and emails are only sent after you tap a confirm button. Check the recipient and the text before
             you send; you are responsible for what you send.
+          </li>
+          <li>
+            Aspire Desktop acts on your computer only after you click Allow there. Check the text to type, the file to save, or the
+            app or link to open before you allow it; you are responsible for what you allow.
           </li>
         </ul>
         <h2>Acceptable use</h2>
@@ -114,7 +128,7 @@ export default function Terms() {
         <h2>请注意</h2>
         <ul>
           <li>Aspire 是为 {SITE.event} 制作的免费演示服务，按“现状”提供。</li>
-          <li>公交和公共交通时间来自 Google 地图，可能不完整；额尔登特的时刻表为示例数据。重要出行前请向运营方确认。</li>
+          <li>公交和公共交通时间来自 Google 地图或 Transitous，可能不完整；额尔登特的时刻表为示例数据。重要出行前请向运营方确认。</li>
           <li>AI 的回答可能有误。Aspire 不提供医疗或法律建议。</li>
           <li>
             <b>紧急情况</b>请直接拨打当地急救电话，不要询问 Aspire（欧洲及多数国家 112，美洲 911，英国 999，澳大利亚 000；中国 120 急救、119
@@ -122,6 +136,7 @@ export default function Terms() {
           </li>
           <li>Aspire 及其机器人绝不会索要密码、登录验证码、卡号或 PIN，也不会要求您转账。</li>
           <li>消息、短信、电话和邮件只有在您点击确认按钮后才会发送。</li>
+          <li>Aspire Desktop 只有在您在电脑上点击“允许”后才会执行操作。允许前请检查要输入的文字、要保存的文件或要打开的应用和链接；您对允许的操作负责。</li>
         </ul>
         <p>
           联系方式：<Contact lang="zh" />。
@@ -135,7 +150,7 @@ export default function Terms() {
         <ul>
           <li>Aspire — бесплатный демонстрационный сервис, созданный для {SITE.event}, предоставляется «как есть».</li>
           <li>
-            Время автобусов и транспорта берётся из Google Maps и может быть неполным; расписание Эрдэнэта — пример. Перед важной поездкой
+            Время автобусов и транспорта берётся из Google Maps или Transitous и может быть неполным; расписание Эрдэнэта — пример. Перед важной поездкой
             уточните у перевозчика.
           </li>
           <li>Ответы ИИ могут быть ошибочными. Aspire не даёт медицинских и юридических советов.</li>
@@ -145,6 +160,10 @@ export default function Terms() {
           </li>
           <li>Aspire и его боты никогда не просят пароль, код входа, номер карты или PIN и не просят перевести деньги.</li>
           <li>Сообщения, SMS, звонки и письма отправляются только после нажатия кнопки подтверждения.</li>
+          <li>
+            Aspire Desktop действует на вашем компьютере только после нажатия «Разрешить». Перед этим проверьте текст, файл, приложение
+            или ссылку; за разрешённые действия отвечаете вы.
+          </li>
         </ul>
         <p>
           Контакт: <Contact lang="ru" />.
@@ -158,7 +177,7 @@ export default function Terms() {
         <ul>
           <li>Aspire ist ein kostenloser Demo-Dienst für den {SITE.event} und wird „wie besehen“ bereitgestellt.</li>
           <li>
-            Bus- und Verkehrszeiten stammen von Google Maps und können unvollständig sein; der Fahrplan von Erdenet ist ein Beispiel. Prüfen
+            Bus- und Verkehrszeiten stammen von Google Maps oder Transitous und können unvollständig sein; der Fahrplan von Erdenet ist ein Beispiel. Prüfen
             Sie vor einer wichtigen Fahrt beim Verkehrsunternehmen nach.
           </li>
           <li>KI-Antworten können falsch sein. Aspire gibt keine medizinische oder rechtliche Beratung.</li>
@@ -169,6 +188,10 @@ export default function Terms() {
           </li>
           <li>Aspire und seine Bots fragen nie nach Passwort, Anmeldecode, Kartennummer oder PIN und fordern nie zu Überweisungen auf.</li>
           <li>Nachrichten, SMS, Anrufe und E-Mails werden erst gesendet, wenn Sie eine Bestätigungstaste tippen.</li>
+          <li>
+            Aspire Desktop handelt auf Ihrem Computer erst, wenn Sie dort „Erlauben“ klicken. Prüfen Sie vorher Text, Datei, App oder
+            Link; für Erlaubtes sind Sie verantwortlich.
+          </li>
         </ul>
         <p>
           Kontakt: <Contact lang="de" />.

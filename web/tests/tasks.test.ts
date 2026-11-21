@@ -146,6 +146,10 @@ describe("On it prompt", () => {
     expect(SYSTEM).toContain("write_code");
     expect(SYSTEM).toContain("fill_form");
     expect(SYSTEM).toContain("never invent personal data");
-    expect(SYSTEM).toContain("cannot open or operate apps");
+    // Apps and the computer: honest that nothing opens or runs until the person taps or allows it.
+    expect(SYSTEM).toContain("open_app");
+    expect(SYSTEM).toContain("never that the app is open");
+    expect(SYSTEM).toContain("waits for them to allow it");
+    expect(SYSTEM).toContain("Never say it is done");
   });
 });

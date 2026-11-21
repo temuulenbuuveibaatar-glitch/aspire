@@ -26,7 +26,6 @@ import { useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { CALENDAR, hasScope } from "@/components/aspire/GmailConnect";
-import { temp } from "@/components/aspire/readouts";
 import { useStillMotion } from "@/components/aspire/Sheet";
 import { isImperial, useDisplayPrefs } from "@/lib/display-prefs";
 import { HTML_LANG, LANGS, type Lang } from "@/lib/lang";
@@ -34,6 +33,7 @@ import { gmailComposeUrl, isGoogleMapsUrl, mailtoUrl, smsUrl, telegramShareUrl, 
 import type { Channel, ClientAction } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
 import { isAllowedWebhook } from "@/lib/webhooks";
+import { temp } from "@/lib/utils";
 
 type T = (typeof UI)["en"];
 type Card = Extract<ClientAction, { type: "message" | "call" | "calendar" | "map" | "weather" }>;

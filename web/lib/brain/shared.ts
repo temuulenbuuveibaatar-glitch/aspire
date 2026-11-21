@@ -1,6 +1,6 @@
 // Shared by every AI provider: instructions, context and the agent run state.
 import { LANG_NAMES, type Lang } from "@/lib/lang";
-import { runTool as runToolImpl, TOOLS, type ToolContext, type ToolStep } from "@/lib/tools";
+import { ALL_TOOLS, desktopToolsFor, runTool as runToolImpl, type ToolContext, type ToolStep, TOOLS } from "@/lib/tools";
 import { clockIn, dayIn, hourIn, partOfDay, type PartOfDay, validTimeZone } from "@/lib/tools/time";
 
 export interface Turn {
@@ -68,6 +68,7 @@ How to answer:
 Buses:
 - Erdenet, Mongolia: get_next_bus and plan_trip use the city's live bus feed (from Орхон ТКХДТ). For "next bus" call get_next_bus with an empty stop: it picks the stop nearest the person. Never ask which stop when their location is known. Minutes are estimates: say "about". Stop names are Mongolian Cyrillic; pass the person's words and retry with a name from the tool's list if it does not match.
 - Anywhere else: use get_directions with mode "transit" for "which bus", "next bus to X" and "how do I get to X" (lines, stops, departure times), and find_places "bus stop" for nearby stops. Say the line, the stop and the minutes until it leaves.
+- get_next_bus outside Erdenet uses Google, then Transitous (open data: many cities such as Berlin, Moscow, Paris, New York, Singapore, Tokyo and Seoul, but not Ulaanbaatar or Beijing). Say whether a time is live or scheduled. The app's Nearby transit card may list OpenStreetMap stops that have no times: for those say there is no timetable data; never make up a time.
 - With no destination or stop known and no location, use the saved home stop from memory; otherwise ask in one short question.
 
 Directions and places: get_directions and find_places work anywhere. When their location is shared, leave the origin empty (it means where they are) and never ask where they start; add their city to the destination ("market, Erdenet").
@@ -92,7 +93,13 @@ Teaching (tutor mode): when they want to learn a topic step by step, call start_
 
 Routines: when they teach you "when I say X, do Y", save it with save_routine. When a message matches a routine trigger in the note (same meaning in any language), run its steps with your tools and answer with the results.
 
-Tasks ("On it"): when the person asks you to do something for them (write or fix code, draft a text, fill in some information), begin your reply with the exact acknowledgement the note gives (the one allowed preamble), then do it with your tools. Code, scripts, configs and queries go in write_code: keep the spoken reply to one or two sentences saying what it does and how to use it, never read code aloud and never repeat it in your reply. A longer draft (letter, essay, post) goes in write_code with language "text"; a message they want to send goes in send_message. "Fill this in" goes in fill_form: use only facts the person gave in this conversation or saved memory, never invent personal data, leave unknown fields empty and say which ones they still need to fill in; leave passwords, card numbers, PIN codes and ID numbers empty for them to type. You are a website: you cannot open or operate apps or other sites on their phone or computer. If they ask for that, say so in one short sentence and offer the card in the app, which they can copy into the other app.
+Tasks ("On it"): when the person asks you to do something for them (write or fix code, draft a text, fill in some information), begin your reply with the exact acknowledgement the note gives (the one allowed preamble), then do it with your tools. Code, scripts, configs and queries go in write_code: keep the spoken reply to one or two sentences saying what it does and how to use it, never read code aloud and never repeat it in your reply. A longer draft (letter, essay, post) goes in write_code with language "text"; a message they want to send goes in send_message. "Fill this in" goes in fill_form: use only facts the person gave in this conversation or saved memory, never invent personal data, leave unknown fields empty and say which ones they still need to fill in; leave passwords, card numbers, PIN codes and ID numbers empty for them to type.
+
+Opening apps: for "open Spotify", "open the calculator", "open Telegram" call open_app. It only puts an Open button on their screen (it opens if the app is installed); say the button is ready, never that the app is open. If the app is not in its list, offer the close matches it returns or say they can open it themselves.
+
+Their computer ("On it, sir"): desktop_open_app, desktop_open_url, desktop_type_text, desktop_save_file and desktop_fill_form queue a job on the computer they paired with Aspire Desktop. Use them only when they ask for something on their computer. Begin with the acknowledgement from the note, then say in one sentence that it was sent to their computer and waits for them to allow it there. Never say it is done, opened, typed or saved: you cannot see their screen and nothing runs until they allow it. If no computer is paired, tell them to pair it in Settings, Desktop. For anything these tools cannot do (clicking, reading their screen, other apps' accounts), say so plainly and offer a card in the app instead.
+
+Live cameras: for "show me the cameras", "is there a webcam in Paris?" or "traffic cameras near me", call find_cameras (empty place = where the person is). It works worldwide where public cameras exist: the city cameras of Erdenet and Ulaanbaatar, government traffic cameras (London, Singapore, Hong Kong, California, New Zealand), YouTube live streams and webcams mapped on OpenStreetMap; the panel opens on screen. Say how many it found and name one or two with who runs them. If it finds none, say there are no public cameras known near there. Never invent a camera or a link, and never offer private or unsecured cameras.
 
 Sending for the person: send_message, call_phone and add_to_calendar only put a card on the screen; the person presses Send, Call or Add. So never say a message was sent or a call was made: say it is ready. Telegram, Discord and Slack work only when the note lists them as connected; otherwise tell them to connect it in Settings, Connections, or offer SMS or email. If call_phone marks a number as new, ask them to check it.
 
@@ -195,10 +202,25 @@ export function contextNote(lang: Lang, run: AgentRun): string {
   return parts.join("\n");
 }
 
-/** Provider-neutral tool definitions (JSON Schema). */
-export const TOOL_SPECS = TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+/** Provider-neutral tool definitions (JSON Schema): every tool, desktop_* included. */
+export const TOOL_SPECS = ALL_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+const SHARED_SPECS = TOOL_SPECS.filter((s) => TOOLS.some((t) => t.name === s.name));
 
+/** The tools a model is told about in this run: bots and cron never see the desktop_* tools. */
+export const toolSpecs = (ctx: Pick<ToolContext, "userId" | "source">) => (desktopToolsFor(ctx).length ? TOOL_SPECS : SHARED_SPECS);
+
+// Tools that return third-party text (mail senders and subjects, news, encyclopedia pages).
+const THIRD_PARTY_TEXT = new Set(["check_email", "get_news", "encyclopedia"]);
+
+/**
+ * Defense in depth against injected instructions: once this turn has read third-party text (one of
+ * the tools above, or web pages noted in run.sources), no desktop_* job is queued. The person
+ * typing y in the helper stays the main barrier.
+ */
 export function runTool(name: string, input: unknown, run: AgentRun): Promise<string> {
+  if (name.startsWith("desktop_") && (run.sources.length > 0 || run.steps.some((s) => THIRD_PARTY_TEXT.has(s.tool)))) {
+    return Promise.resolve(JSON.stringify({ error: "Ask the person to repeat the computer request on its own." }));
+  }
   return runToolImpl(name, input, run.ctx, run.steps);
 }
 

@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { unstable_rethrow } from "next/navigation";
 
 export interface SessionUser {
   /** Clerk user id, e.g. "user_2abc…" (a string, not a uuid). */
@@ -18,6 +19,8 @@ export async function requireUser(): Promise<SessionUser | null> {
     const email = sessionClaims?.email;
     return { id: userId, email: typeof email === "string" && email ? email : null };
   } catch (e) {
+    // Next's own control-flow errors (a prerender ending while headers() waits) are not outages.
+    unstable_rethrow(e);
     // Fail closed: an auth outage looks like "signed out", never like "signed in".
     console.error("requireUser:", e instanceof Error ? e.name : "error");
     return null;
@@ -29,10 +32,13 @@ export function signedOut(): Response {
   return Response.json({ error: "signed_out" }, { status: 401 });
 }
 
-const PUBLIC_PREFIXES = ["/login", "/privacy", "/terms", "/api/bots", "/api/cron", "/_next"];
+// /opengraph-image has no file extension, so it is listed: share-card crawlers are never signed in.
+const PUBLIC_PREFIXES = ["/login", "/privacy", "/terms", "/opengraph-image", "/api/bots", "/api/cron", "/_next"];
 
-/** Paths anyone may open without signing in. */
+/** Paths anyone may open without signing in. "/" itself is public (signed-out visitors get the
+ * landing page there); only the exact path, never as a prefix. */
 export function isPublicPath(pathname: string): boolean {
+  if (pathname === "/") return true;
   if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true;
   // Static files (favicon.ico, robots.txt, images in public/).
   return /\/[^/]+\.[a-z0-9]+$/i.test(pathname);

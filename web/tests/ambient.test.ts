@@ -152,7 +152,7 @@ describe("location precedence", () => {
     const calls = mockFetch([["places:searchText", { places: [{ displayName: { text: "Erdenet" }, location: { latitude: 49.027812, longitude: 104.044391 } }] }]]);
     for (let i = 0; i < 2; i++) {
       const loc = await locate(new URLSearchParams("city=%20Erdenet%20"), vercel);
-      expect(loc).toEqual({ coords: { lat: 49.0278, lng: 104.0444 }, locatedBy: "city", city: "Erdenet", country: null, timeZone: null });
+      expect(loc).toEqual({ coords: { lat: 49.0278, lng: 104.0444 }, locatedBy: "city", city: "Erdenet", english: "Erdenet", country: null, timeZone: null });
     }
     expect(calls).toHaveLength(1);
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ textQuery: "Erdenet" });
@@ -163,6 +163,22 @@ describe("location precedence", () => {
     const calls = mockFetch([["geocoding-api.open-meteo.com", { results: [{ name: "Darkhan", country: "Mongolia", latitude: 49.4867, longitude: 105.9228 }] }]]);
     expect(await locate(new URLSearchParams("city=Darkhan"), vercel)).toMatchObject({ locatedBy: "city", city: "Darkhan", coords: { lat: 49.4867, lng: 105.9228 } });
     expect(calls[0].url).toContain("name=Darkhan");
+  });
+
+  it("searches the city photo by the geocoder's English name, not the typed Cyrillic", async () => {
+    const calls = mockFetch([
+      ["geocoding-api.open-meteo.com", { results: [{ name: "Darkhan", country: "Mongolia", latitude: 49.4867, longitude: 105.9228 }] }],
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+      ["commons.wikimedia.org/w/api.php", { query: { pages: {} } }],
+    ]);
+    const loc = await locate(new URLSearchParams(`city=${encodeURIComponent("Дархан")}`), new Headers());
+    expect(loc).toMatchObject({ locatedBy: "city", city: "Дархан", english: "Darkhan" });
+    const a = await getAmbient(loc, "mn", NOW);
+    expect(a.place).toBe("Дархан");
+    const searches = calls.filter((c) => c.url.includes("commons.wikimedia.org")).map((c) => new URL(c.url).searchParams.get("gsrsearch"));
+    expect(searches.length).toBeGreaterThan(0);
+    expect(searches.every((q) => q?.startsWith("Darkhan "))).toBe(true);
   });
 
   it("uses the network when the city is invalid or unknown", async () => {
@@ -221,7 +237,9 @@ describe("snapshot without a Google key", () => {
     expect(a.sky).toEqual({ kind: "snow", intensity: 0.35, isDay: true, windKph: 14, cloudCover: 90 });
     expect(a.weather).toMatchObject({ tempC: -12, feelsC: -18, text: "Небольшой снег" });
     expect(a.weather?.days[0]).toMatchObject({ date: "2026-11-21", minC: -20, maxC: -8, kind: "snow", precipChance: 60 });
-    expect(a.air).toEqual({ aqi: 112, category: "sensitive" });
+    expect(a.air).toEqual({ aqi: 112, category: "sensitive", pm25: 40.2, source: "open-meteo", at: expect.any(String) });
+    expect(a.weather).toMatchObject({ source: "open-meteo", at: expect.any(String) });
+    expect(a.stopsSource).toBe("erdenet-live");
     expect(a.traffic).toBeNull();
     // Erdenet's own feed works without a Maps key: real stop positions, live estimates.
     expect(a.coords).toEqual({ lat: 49.0301, lng: 104.0801 });
@@ -230,7 +248,8 @@ describe("snapshot without a Google key", () => {
     expect(a.stops[0].distanceM).toBeLessThan(20);
     expect(a.stops[1].lines).toEqual([{ route: "Ч:1-Ч:2", minutes: 6 }]);
     expect(a.stops[2].lines).toBeUndefined();
-    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live", kind: "estimate", at: NOW.toISOString() });
+    // The stop the soonest bus leaves from is named with it.
+    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live", kind: "estimate", at: NOW.toISOString(), stop: "Төв" });
     expect(a.taxis).toEqual([]);
     expect(a.photo).toBeNull();
     expect(a.timeZone).toBe("Asia/Ulaanbaatar");
@@ -248,6 +267,7 @@ describe("snapshot without a Google key", () => {
       ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
       ["en.wikipedia.org/w/api.php", { query: { pages: {} } }], // "no image here" is kept for the day
       ["api.transitous.org", { stopTimes: [] }], // "no departures here" is kept for 30 s
+      ["overpass-api.de", { elements: [] }], // "no OSM stops here" is kept for the day
     ]);
     const first = await getAmbient(await locate(new URLSearchParams("lat=47.9211&lng=106.9211"), new Headers()), "en", NOW);
     // The street address is per ~11 m, so only it is looked up again.
@@ -272,10 +292,10 @@ describe("snapshot without a Google key", () => {
     ]);
     const a = await getAmbient(await locate(new URLSearchParams("lat=48.8449&lng=2.3739"), new Headers()), "en", NOW);
     expect(a.stops).toEqual([
-      { name: "Gare", distanceM: expect.any(Number), lat: 48.8443, lng: 2.3745, lines: [{ route: "91", minutes: 4 }, { route: "24", minutes: 9 }] },
-      { name: "Bastille", distanceM: expect.any(Number), lat: 48.8532, lng: 2.3691, lines: [{ route: "29", minutes: 2 }] },
+      { name: "Gare", distanceM: expect.any(Number), lat: 48.8443, lng: 2.3745, lines: [{ route: "91", minutes: 4, live: false }, { route: "24", minutes: 9, live: true }] },
+      { name: "Bastille", distanceM: expect.any(Number), lat: 48.8532, lng: 2.3691, lines: [{ route: "29", minutes: 2, live: true }] },
     ]);
-    expect(a.nextBus).toEqual({ line: "29", departsInMin: 2, source: "transitous", kind: "live", at: NOW.toISOString() });
+    expect(a.nextBus).toEqual({ line: "29", departsInMin: 2, source: "transitous", kind: "live", at: NOW.toISOString(), stop: "Bastille" });
     const t = calls.find((c) => c.url.includes("transitous"))!;
     expect(new URL(t.url).searchParams.get("center")).toBe("48.84,2.37");
     expect(t.url).not.toContain("48.8449");
@@ -283,6 +303,73 @@ describe("snapshot without a Google key", () => {
     resetAmbientCache();
     const ip = await getAmbient(await locate(new URLSearchParams(), new Headers({ "x-vercel-ip-latitude": "48.84", "x-vercel-ip-longitude": "2.37" })), "en", NOW);
     expect(ip).toMatchObject({ stops: [], nextBus: null });
+  });
+
+  it("falls back to OpenStreetMap stops (no times, credited to OSM) where no feed has departures", async () => {
+    const node = (id: number, lat: number, lon: number, tags: Record<string, string>) => ({ type: "node", id, lat, lon, tags });
+    const calls = mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["api.transitous.org/api/v5/stoptimes", { stopTimes: [] }],
+      ["overpass-api.de", { elements: [node(1, 47.9195, 106.918, { highway: "bus_stop", name: "Сансар", "name:en": "Sansar" }), node(2, 47.925, 106.93, { highway: "bus_stop" })] }],
+    ]);
+    const mn = await getAmbient(await locate(new URLSearchParams("lat=47.9189&lng=106.9189"), new Headers()), "mn", NOW);
+    expect(mn.stops).toEqual([{ name: "Сансар", distanceM: expect.any(Number), lat: 47.9195, lng: 106.918, kind: "stop", source: "osm" }]);
+    expect(mn.stops[0]).not.toHaveProperty("lines");
+    expect(mn).not.toHaveProperty("stopsSource");
+    expect(mn.nextBus).toBeNull();
+    // Transitous was asked first; Overpass got only the ~1 km cell.
+    const order = calls.map((c) => c.url).filter((u) => /transitous|overpass/.test(u));
+    expect(order[0]).toContain("transitous");
+    const q = new URLSearchParams(String(calls.find((c) => c.url.includes("overpass"))!.init.body)).get("data")!;
+    expect(q).toContain("around:800,47.92,106.92");
+    expect(q).not.toContain("47.9189");
+    // English asks name:en of the same (cached) cell.
+    const en = await getAmbient(await locate(new URLSearchParams("lat=47.9189&lng=106.9189"), new Headers()), "en", NOW);
+    expect(en.stops[0].name).toBe("Sansar");
+    expect(calls.filter((c) => c.url.includes("overpass"))).toHaveLength(1);
+  });
+
+  it("prefers Transitous departures over OSM stops (OSM is never asked)", async () => {
+    const calls = mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["api.transitous.org/api/v5/stoptimes", { stopTimes: [{ place: { name: "Gare", lat: 48.8443, lon: 2.3745, departure: new Date(NOW.getTime() + 4 * 60_000).toISOString() }, routeShortName: "91", realTime: false }] }],
+      ["overpass", { elements: [{ type: "node", id: 1, lat: 48.845, lon: 2.374, tags: { name: "Other" } }] }],
+    ]);
+    const a = await getAmbient(await locate(new URLSearchParams("lat=48.8449&lng=2.3739"), new Headers()), "en", NOW);
+    expect(a.stopsSource).toBe("transitous");
+    expect(a.stops.map((s) => s.name)).toEqual(["Gare"]);
+    expect(calls.some((c) => c.url.includes("overpass"))).toBe(false);
+  });
+
+  it("a typed city uses its geocoded centre for departures (searching Berlin shows Berlin)", async () => {
+    const calls = mockFetch([
+      ["geocoding-api.open-meteo.com", { results: [{ name: "Berlin", country: "Germany", latitude: 52.52437, longitude: 13.41053 }] }],
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["api.transitous.org/api/v5/stoptimes", { stopTimes: [{ place: { name: "Alexanderplatz", lat: 52.5215, lon: 13.4115, tz: "Europe/Berlin", departure: new Date(NOW.getTime() + 3 * 60_000).toISOString() }, routeShortName: "100", realTime: true }] }],
+    ]);
+    // The network says Erdenet; the typed city wins over it.
+    const net = new Headers({ "x-vercel-ip-latitude": "49.03", "x-vercel-ip-longitude": "104.08" });
+    const a = await getAmbient(await locate(new URLSearchParams("city=Berlin"), net), "de", NOW);
+    expect(a).toMatchObject({ locatedBy: "city", stopsSource: "transitous", nextBus: { line: "100", source: "transitous", kind: "live" } });
+    expect(a.stops[0].name).toBe("Alexanderplatz");
+    expect(new URL(calls.find((c) => c.url.includes("transitous"))!.url).searchParams.get("center")).toBe("52.52,13.41");
+    expect(calls.some((c) => c.url.includes("dedtuv.erdenet.mn"))).toBe(false);
+  });
+
+  it("fills the hero's hourly strip from Open-Meteo (UTC times), and an hourly failure never fails the weather", async () => {
+    const t0 = Math.floor(Date.now() / 3_600_000) * 3600;
+    const hourly = { hourly: { time: [t0, t0 + 3600], temperature_2m: [-12, -13], weather_code: [71, 0], precipitation_probability: [40, 150] } };
+    mockFetch([["api.open-meteo.com/v1/forecast", (url: string) => (url.includes("hourly=") ? hourly : OPEN_METEO)]]);
+    const a = await getAmbient(await locate(new URLSearchParams("lat=47.9189&lng=106.9189"), new Headers()), "en", NOW);
+    expect(a.weather?.hourly).toEqual([
+      { time: new Date(t0 * 1000).toISOString(), tempC: -12, kind: "snow", precipChance: 40 },
+      { time: new Date((t0 + 3600) * 1000).toISOString(), tempC: -13, kind: "clear", precipChance: null },
+    ]);
+    resetAmbientCache();
+    mockFetch([["api.open-meteo.com/v1/forecast", (url: string) => (url.includes("hourly=") ? new Response("", { status: 503 }) : OPEN_METEO)]]);
+    const b = await getAmbient(await locate(new URLSearchParams("lat=47.9189&lng=106.9189"), new Headers()), "en", NOW);
+    expect(b.weather?.tempC).toBe(-12);
+    expect(b.weather).not.toHaveProperty("hourly");
   });
 
   it("still answers when every source fails", async () => {
@@ -386,8 +473,8 @@ describe("snapshot with Google", () => {
     expect(a.weather).toMatchObject({ tempC: 6.5, feelsC: 3, text: "Starker Regen" });
     expect(a.weather?.days).toEqual([{ date: "2026-11-21", minC: 2, maxC: 8, text: "Regen", kind: "rain", precipChance: 80 }]);
     // No US index from Google here: the number comes from PM2.5.
-    expect(a.air).toEqual({ aqi: 44, category: "good" });
-    expect(a.traffic).toEqual({ level: "heavy", delayMin: 8 });
+    expect(a.air).toMatchObject({ aqi: 44, category: "good", source: "google" });
+    expect(a.traffic).toEqual({ level: "heavy", delayMin: 8, at: expect.any(String) });
     expect(a.timeZone).toBe("Europe/Berlin");
     expect(a.localHour).toBe(11);
     expect(a.stops.map((s) => s.name)).toEqual(["Rosenthaler Platz", "Alexanderplatz"]);
@@ -403,6 +490,8 @@ describe("snapshot with Google", () => {
     expect(a.nextBus).toEqual({ line: "M10", departsInMin: 7, source: "google", kind: "scheduled", at: NOW.toISOString() });
     // No landmark photo from Google any more (owner: the whole city only, from Commons).
     expect(calls.some((c) => c.url.includes("/media?"))).toBe(false);
+    // Google stops and bus: neither Transitous nor OpenStreetMap is asked.
+    expect(calls.some((c) => /transitous|overpass/.test(c.url))).toBe(false);
 
     // The key travels only in the header, never in a URL.
     const googleCalls = calls.filter((c) => c.url.includes("googleapis.com"));
@@ -422,7 +511,7 @@ describe("snapshot with Google", () => {
   it("probes nearby roads when already in the centre", async () => {
     google({ duration: "600s", staticDuration: "580s" });
     const a = await getAmbient(await locate(new URLSearchParams("lat=52.52&lng=13.41"), new Headers()), "en", NOW);
-    expect(a.traffic).toEqual({ level: "light", delayMin: 0 });
+    expect(a.traffic).toEqual({ level: "light", delayMin: 0, at: expect.any(String) });
     expect(a.nextBus).toBeNull();
   });
 
@@ -475,7 +564,7 @@ describe("snapshot with Google", () => {
     ]);
     const a = await getAmbient(await locate(new URLSearchParams("lat=52.55&lng=13.40"), new Headers()), "en", NOW);
     expect(a.place).toBeNull();
-    expect(a.traffic).toEqual({ level: "moderate", delayMin: 2 });
+    expect(a.traffic).toEqual({ level: "moderate", delayMin: 2, at: expect.any(String) });
   });
 
   it("keeps stops, taxis, the centre and the photo for a day, and refreshes the weather after 10 minutes", async () => {

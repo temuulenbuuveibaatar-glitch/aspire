@@ -1,6 +1,9 @@
 // Agent tool system: every AI provider sees the same tools.
 import type { SkyKind } from "@/lib/ambient-types";
 import type { Lang } from "@/lib/lang";
+import type { CameraAction } from "./camera-types";
+
+export type { CameraAction } from "./camera-types";
 
 /** Where "send for me" can deliver a message. */
 export type Channel = "telegram" | "discord" | "slack" | "sms" | "email";
@@ -51,7 +54,23 @@ export type ClientAction =
   /** Code card ("On it"): monospace block with Copy and Download. language is a lowercase tag, "text" if unknown. */
   | { type: "code"; language: string; title: string; code: string }
   /** Filled-in form card ("On it"): label/value rows with Copy all. An empty value = not known, the person fills it. */
-  | { type: "form"; title: string; fields: FormField[] };
+  | { type: "form"; title: string; fields: FormField[] }
+  /** "Cameras near here": opens CameraSheet at lat/lng (3 decimals). Types and URL guards: camera-types.ts. */
+  | CameraAction
+  | OpenAppAction;
+
+/** "Open <app>" card: scheme/web come from lib/app-links.ts and are re-checked by the card. Never auto-opened. */
+export interface OpenAppAction {
+  type: "open_app";
+  /** AppLink id from APPS. */
+  id: string;
+  /** Display name in the message's language. */
+  name: string;
+  /** Allow-listed app URL (custom scheme), opened only by a tap. */
+  scheme: string;
+  /** https fallback; "" = none. */
+  web: string;
+}
 
 export interface FormField {
   label: string;
@@ -134,6 +153,10 @@ export interface ToolContext {
   country?: string;
   /** City-level position from the network (never the device). Used only when no place is named. */
   approxLocation?: { lat: number; lng: number };
+  /** Signed-in person (server only). With source "web" it unlocks the desktop_* tools. */
+  userId?: string;
+  /** Where the request came from. Only "web" (a direct /api/ask call) may queue jobs on their computer. */
+  source?: "web" | "bot" | "cron";
 }
 
 export interface Tool {

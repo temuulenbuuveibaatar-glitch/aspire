@@ -38,7 +38,11 @@ describe("isPublicPath", () => {
     ["/favicon.ico", true],
     ["/auth/callback", false],
     ["/api/ask", false],
-    ["/", false],
+    ["/", true],
+    ["/x", false],
+    ["//", false],
+    ["/api/desktop/pair", false],
+    ["/opengraph-image", true],
     ["/loginx", false],
     ["/settings", false],
   ])("%s -> %s", async (path, expected) => {
@@ -172,5 +176,14 @@ describe("proxy", () => {
     }
     authMock.mockResolvedValue({ userId: "user_2abc" });
     expect(location(await run("http://localhost/"))).toBeNull();
+  });
+
+  it("serves the homepage to signed-out visitors (landing page) but still guards every other page", async () => {
+    authMock.mockResolvedValue({ userId: null });
+    for (const url of ["http://localhost/", "http://localhost/?lang=mn", "http://localhost/opengraph-image"]) {
+      expect(location(await run(url)), url).toBeNull();
+    }
+    const res = await run("http://localhost/x");
+    expect(new URL(location(res)!).pathname).toBe("/login");
   });
 });

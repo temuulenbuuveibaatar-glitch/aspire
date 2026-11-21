@@ -37,8 +37,10 @@ const ask = (device: unknown) => post({ device });
 
 /** The where-and-when part of what the route passes to the brain (the Gmail token is a function). */
 const where = () => {
-  const { gmailToken, ...rest } = seen.extra ?? {};
+  const { gmailToken, userId, source, ...rest } = seen.extra ?? {};
   expect(typeof gmailToken).toBe("function");
+  // Every request is a direct, signed-in web request (the only kind that may use desktop_* tools).
+  expect({ userId, source }).toEqual({ userId: "user-1", source: "web" });
   return rest;
 };
 
@@ -94,5 +96,10 @@ describe("POST /api/ask time zone and city (every country)", () => {
   it("knows nothing without client data or headers (no Erdenet default)", async () => {
     await post({ device: { memory: {}, reminders: [] } });
     expect(where()).toEqual({});
+  });
+
+  it("does not let the body pick the user or the source", async () => {
+    await post({ device: { memory: {}, reminders: [] }, userId: "someone-else", source: "bot" });
+    expect(seen.extra).toMatchObject({ userId: "user-1", source: "web" });
   });
 });

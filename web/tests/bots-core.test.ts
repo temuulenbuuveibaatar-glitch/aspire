@@ -32,7 +32,9 @@ describe("bot core (unlinked users)", () => {
     const { handleBotMessage } = await import("@/lib/bots/core");
     const out = await handleBotMessage(msg("Сайн байна уу"));
     expect(out).toEqual({ text: "Сайн байна уу!", lang: "mn", linked: false });
-    expect(ask).toHaveBeenCalledWith("Сайн байна уу", "mn", []);
+    expect(ask.mock.calls[0].slice(0, 3)).toEqual(["Сайн байна уу", "mn", []]);
+    // Tools know they answer in a chat (no camera panel, no desktop tools).
+    expect(ask.mock.calls[0][5]).toEqual({ source: "bot" });
   });
 
   it("an explicit language (from a voice note) wins over text detection", async () => {
@@ -122,6 +124,7 @@ describe("bot core (linked users)", () => {
     const out = await handleBotMessage(msg("my son is Bat"));
     expect(out).toMatchObject({ text: "Saved.", linked: true });
     const device = ask.mock.calls[0][3];
+    expect(ask.mock.calls[0][5]).toMatchObject({ userId: "user_A", source: "bot" });
     expect(device).toMatchObject({ memory: { home: "Erdenet" }, connected: ["telegram"] });
     expect(googleAccessToken).toHaveBeenCalledWith("user_A");
     const saved = fake.table("user_state")[0].state as { memory: Record<string, { value: string }> };
@@ -159,7 +162,7 @@ describe("bot core (linked users)", () => {
     expect(out.text).toMatch(/Add to calendar: Dentist, .*09:00.*\nhttps:\/\/calendar\.google\.com\/x/);
     expect(out.text).not.toMatch(/[\u2190-\u21FF]/); // no arrow glyphs
     // BOT_TIME_ZONE reaches the tools
-    expect(ask.mock.calls[0][5]).toEqual({ timeZone: "Asia/Ulaanbaatar" });
+    expect(ask.mock.calls[0][5]).toEqual({ timeZone: "Asia/Ulaanbaatar", source: "bot" });
   });
 
   it("code and form cards reach the chat as text (the reply itself only says they are ready)", async () => {
@@ -185,7 +188,7 @@ describe("bot core (linked users)", () => {
     const { handleBotMessage } = await import("@/lib/bots/core");
     const out = await handleBotMessage(msg("prepare things", "utc1"));
     expect(out.text).toMatch(/Dentist, .*01:00.*UTC/);
-    expect(ask.mock.calls[0]).toHaveLength(3); // no time zone passed
+    expect(ask.mock.calls[0][5]).toEqual({ source: "bot" }); // no time zone passed
   });
 
   it("a failing cloud save still answers", async () => {

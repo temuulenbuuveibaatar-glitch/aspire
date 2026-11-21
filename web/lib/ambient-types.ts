@@ -1,4 +1,4 @@
-// Shape of /api/ambient: the live "world around you" snapshot behind the HUD (photo,
+// Shape of /api/ambient: the live "world around you" snapshot behind the dashboard (photo,
 // weather over it, readouts, map). Shared by server and client.
 
 export type SkyKind = "clear" | "partly" | "cloudy" | "fog" | "drizzle" | "rain" | "storm" | "snow" | "sleet" | "hail";
@@ -43,32 +43,46 @@ export interface AmbientHour {
   precipChance: number | null;
 }
 
+/** Who measured a figure and when (ISO): every card shows source and age. */
+export type AmbientSource = "google" | "open-meteo";
+
 export interface AmbientWeather {
+  source?: AmbientSource;
+  /** When the provider was asked (ISO). */
+  at?: string;
   tempC: number;
   feelsC: number;
   text: string;
   days: AmbientDay[];
   /** Up to the next 12 hours, from the current hour. Absent or empty: unknown, show nothing. */
   hourly?: AmbientHour[];
+  /** Who gave the hourly strip when it differs from `source` (Google falls back to Open-Meteo). */
+  hourlySource?: AmbientSource;
 }
 
 export interface AmbientAir {
   /** US EPA AQI */
   aqi: number;
   category: AqiCategory;
+  /** micrograms per cubic metre, when the provider gives it. */
+  pm25?: number | null;
+  source?: AmbientSource;
+  at?: string;
 }
 
 export interface AmbientTraffic {
   level: TrafficLevel;
   /** Extra minutes versus free-flowing traffic on the probe route. */
   delayMin: number;
+  /** When Google measured it (ISO). */
+  at?: string;
 }
 
 export interface AmbientStop {
   name: string;
   distanceM: number;
-  /** Next arrivals when known (e.g. the Erdenet live feed). */
-  lines?: { route: string; minutes: number }[];
+  /** Next arrivals when known (Erdenet: estimated from live positions; Transitous: `live` from realTime). */
+  lines?: { route: string; minutes: number; live?: boolean }[];
   /** Exact stop position, for the map marker. */
   lat?: number;
   lng?: number;
@@ -91,12 +105,14 @@ export interface AmbientTaxi {
 export interface AmbientNextBus {
   line: string;
   departsInMin: number;
-  /** "erdenet-live": the city's live feed (credit Орхон ТКХДТ); "google": Google transit. */
-  source: "erdenet-live" | "google";
+  /** "erdenet-live": the city's live feed (credit Орхон ТКХДТ); "google": Google transit; "transitous": Transitous open data. */
+  source: "erdenet-live" | "google" | "transitous";
   /** live: a vehicle position or real-time feed; scheduled: a timetable; estimate: inferred. Absent: treat as scheduled. */
   kind?: "live" | "scheduled" | "estimate";
   /** Server time (ISO) the estimate was made: the client counts down from it and drops it when old. */
   at: string;
+  /** The stop it leaves from, when the source names it (Erdenet station, Transitous stop). */
+  stop?: string;
 }
 
 export interface Ambient {
@@ -110,6 +126,8 @@ export interface Ambient {
   air: AmbientAir | null;
   traffic: AmbientTraffic | null;
   stops: AmbientStop[];
+  /** Where `stops` came from (absent when there are none). */
+  stopsSource?: "erdenet-live" | "google" | "transitous";
   photo?: AmbientPhoto | null;
   /** Exact street address of a device position ("Кувейтийн гудамж 6-1, Баян-Өндөр"); null otherwise. */
   address?: string | null;

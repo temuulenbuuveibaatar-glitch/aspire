@@ -104,9 +104,13 @@ export async function markReminderFired(
   await saveCloudState(userId, { ...state, reminders }, now, db);
 }
 
-/** Everything the cloud holds for a person: state, secrets, reminders, links and pending codes. */
+/**
+ * Everything the cloud holds for a person: paired computers (jobs, codes, devices), state, secrets,
+ * reminders, links and pending codes. Jobs go before devices (the FK cascades anyway).
+ * Needs supabase/migrations/20261121100000_desktop.sql applied (else 42P01 on the desktop tables).
+ */
 export async function deleteCloudData(userId: string, db: Db = supabaseAdmin()): Promise<void> {
-  for (const table of ["user_state", "secrets", "bot_reminders", "bot_links", "link_codes"]) {
+  for (const table of ["desktop_jobs", "desktop_codes", "desktop_devices", "user_state", "secrets", "bot_reminders", "bot_links", "link_codes"]) {
     const { error } = await db.from(table).delete().eq("user_id", userId);
     if (error) fail(`delete ${table}`, error);
   }

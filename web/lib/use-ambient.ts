@@ -1,17 +1,19 @@
 "use client";
-// The live "world around you" snapshot (POST /api/ambient) for the HUD. Fetched on open, every
-// 10 minutes while open, and again when the tab comes back into view. The device position is sent
+// The live "world around you" snapshot (POST /api/ambient) for the dashboard. Fetched on open, every
+// 3 minutes while visible (the server keeps the costly parts cached, so this mostly refreshes buses),
+// and again when the tab comes back into view. usePoll keeps the faster live feeds (city cameras,
+// parking and fuel every 60 s; Erdenet's live buses every 30 s) fresh while the page is visible. The device position is sent
 // in the request body (never the URL, so it stays out of request logs) only when the person turned
 // location sharing on; otherwise the city they set, if any; otherwise the server falls back to its
-// approximate network location. The last good photo is kept on this device so the backdrop shows a
+// approximate network location. The last good photo is kept on this device so the hero shows a
 // photo the moment the app opens, before the first snapshot arrives.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Ambient, AmbientPhoto } from "@/lib/ambient-types";
 import type { Lang } from "@/lib/lang";
 
-const REFRESH_MS = 10 * 60_000;
-/** A tab that comes back sooner than this keeps what it has (the response itself says max-age=300). */
-const STALE_ON_SHOW_MS = 5 * 60_000;
+const REFRESH_MS = 3 * 60_000;
+/** A tab that comes back sooner than this keeps what it has. */
+const STALE_ON_SHOW_MS = 60_000;
 /** A fix younger than this is reused: no GPS wake-up per question or refresh. */
 const FIX_MAX_AGE_MS = 10 * 60_000;
 
@@ -96,7 +98,7 @@ function photoSnapshot(): CachedPhoto | null {
   try {
     raw = localStorage.getItem(PHOTO_KEY);
   } catch {
-    // storage blocked: no cache, the default skyline shows until the photo loads
+    // storage blocked: no cache, the hero shows the sky until the photo loads
   }
   if (raw !== photoRaw) {
     photoRaw = raw;
@@ -130,11 +132,6 @@ export function rememberPhoto(photo: AmbientPhoto | null | undefined, place: str
   if (p && (p.url !== cur?.url || p.place !== cur?.place)) writePhoto(JSON.stringify(p));
 }
 
-/** Drops the cached photo when its URL stopped loading (Google photo links can expire). */
-export function forgetPhoto(url: string) {
-  if (photoSnapshot()?.url === url) writePhoto(null);
-}
-
 /** The last good photo on this device; null on the server and during hydration. */
 export function useCachedPhoto(): CachedPhoto | null {
   return useSyncExternalStore(subscribePhoto, photoSnapshot, () => null);
@@ -157,8 +154,8 @@ export function useAmbient({
   /** The city the person set (used when location sharing is off or the fix fails). */
   city?: string | null;
   enabled?: boolean;
-}): Ambient | null {
-  const [data, setData] = useState<Ambient | null>(null);
+}): { data: Ambient | null; at: number | null; reload: () => void } {
+  const [snap, setSnap] = useState<{ data: Ambient; at: number } | null>(null);
   const last = useRef(0);
   const inFlight = useRef(false);
   // A load asked for while one is in flight (say, a language switch) runs once it settles,
@@ -200,7 +197,7 @@ export function useAmbient({
         if (isAmbient(json)) {
           if (json.photo) rememberPhoto(json.photo, json.place);
           byLang.current.set(`${l}|${share ? 1 : 0}|${c}`, { at: Date.now(), data: json });
-          if (opts.current.lang === l) setData(json);
+          if (opts.current.lang === l) setSnap({ data: json, at: Date.now() });
         }
       }
     } finally {
@@ -227,7 +224,7 @@ export function useAmbient({
     if (!enabled) return;
     const hit = byLang.current.get(`${lang}|${shareLocation ? 1 : 0}|${place}`);
     if (hit && Date.now() - hit.at < REFRESH_MS) {
-      setData(hit.data);
+      setSnap(hit);
       return;
     }
     void load();
@@ -246,5 +243,58 @@ export function useAmbient({
     };
   }, [enabled, load]);
 
-  return data;
+  const reload = useCallback(() => void loadRef.current(), []);
+  return { data: snap?.data ?? null, at: snap?.at ?? null, reload };
+}
+
+/**
+ * GET `url` now and every `everyMs` while the page is visible (and on coming back into view); null
+ * url = off. `parse` is the trust boundary: it returns null for anything malformed. A failure keeps
+ * the last good value and sets `failed`, so a card can say the feed is not answering. An answer equal
+ * to the last one changes nothing (no re-render), so `at` is when the data last changed.
+ */
+export function usePoll<T>(url: string | null, everyMs: number, parse: (json: unknown) => T | null): { data: T | null; at: number | null; failed: boolean; reload: () => void } {
+  const [state, setState] = useState<{ url: string; data: T | null; at: number | null; failed: boolean } | null>(null);
+  const parseRef = useRef(parse);
+  useEffect(() => {
+    parseRef.current = parse;
+  });
+  const [tick, setTick] = useState(0);
+  const last = useRef("");
+  useEffect(() => {
+    if (!url) return;
+    let live = true;
+    let timer = 0;
+    const get = async () => {
+      window.clearTimeout(timer);
+      if (document.visibilityState === "visible") {
+        const res = await fetch(url).catch(() => null);
+        const value = res?.ok ? parseRef.current(await res.json().catch(() => null)) : null;
+        if (!live) return;
+        if (value === null) {
+          last.current = "";
+          setState((s) => ({ url, data: s?.url === url ? s.data : null, at: s?.url === url ? s.at : null, failed: true }));
+        } else {
+          const key = `${url}
+${JSON.stringify(value)}`;
+          if (key !== last.current) {
+            last.current = key;
+            setState({ url, data: value, at: Date.now(), failed: false });
+          }
+        }
+      }
+      if (live) timer = window.setTimeout(get, everyMs);
+    };
+    const onShow = () => document.visibilityState === "visible" && void get();
+    void get();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [url, everyMs, tick]);
+  const reload = useCallback(() => setTick((n) => n + 1), []);
+  const mine = state && state.url === url ? state : null;
+  return { data: mine?.data ?? null, at: mine?.at ?? null, failed: mine?.failed ?? false, reload };
 }

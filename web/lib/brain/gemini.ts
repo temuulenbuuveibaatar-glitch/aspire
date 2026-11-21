@@ -1,6 +1,6 @@
 // Google Gemini via the generateContent REST API (function calling + Google Search).
 import type { Lang } from "@/lib/lang";
-import { type Brain, contextNote, forSpeech, MAX_STEPS, runTool, SYSTEM, TOOL_SPECS } from "./shared";
+import { type Brain, contextNote, forSpeech, MAX_STEPS, runTool, SYSTEM, toolSpecs } from "./shared";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
 const ENDPOINT = (model: string) =>
@@ -18,11 +18,10 @@ interface Content {
   parts: Part[];
 }
 
-const declarations = TOOL_SPECS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
 
 let searchSupported = process.env.GEMINI_SEARCH !== "0";
 
-async function call(contents: Content[], note: string): Promise<Content> {
+async function call(contents: Content[], note: string, declarations: ReturnType<typeof toolSpecs>): Promise<Content> {
   const tools: unknown[] = [{ functionDeclarations: declarations }];
   if (searchSupported) tools.push({ googleSearch: {} });
 
@@ -43,7 +42,7 @@ async function call(contents: Content[], note: string): Promise<Content> {
     // Some models can't combine Google Search with function calling: retry without it.
     if (res.status === 400 && searchSupported && /search|tool/i.test(detail)) {
       searchSupported = false;
-      return call(contents, note);
+      return call(contents, note, declarations);
     }
     throw new Error(`Gemini error ${res.status}: ${detail}`);
   }
@@ -66,7 +65,7 @@ export const gemini: Brain = {
 
     const note = contextNote(lang, run);
     for (let step = 0; step < MAX_STEPS; step++) {
-      const content = await call(contents, note);
+      const content = await call(contents, note, toolSpecs(run.ctx));
       const calls = content.parts.filter((p) => p.functionCall);
       if (calls.length === 0) {
         const reply = forSpeech(

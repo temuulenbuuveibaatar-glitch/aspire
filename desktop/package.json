@@ -1,0 +1,10 @@
+{
+  "name": "aspire-desktop",
+  "version": "0.1.0",
+  "description": "Lets Aspire open apps and links, type text, save files and fill forms on your computer, only after you allow each one.",
+  "type": "module",
+  "bin": { "aspire-desktop": "index.mjs" },
+  "files": ["index.mjs", "escape.mjs", "README.md"],
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}

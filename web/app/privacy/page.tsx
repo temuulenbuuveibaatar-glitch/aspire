@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage, { Contact, LangJump } from "@/components/LegalPage";
 
-export const metadata: Metadata = { title: "Нууцлалын бодлого · Privacy Policy — Aspire" };
+// The root template adds " | Aspire". Own canonical and og:url, so it is not folded into "/".
+const TITLE = "Нууцлалын бодлого · Privacy Policy";
+export const metadata: Metadata = {
+  title: TITLE,
+  alternates: { canonical: "/privacy" },
+  openGraph: { type: "website", siteName: "Aspire", title: `${TITLE} | Aspire`, url: "/privacy" },
+};
 
 const GOOGLE_POLICY = "https://developers.google.com/terms/api-services-user-data-policy";
 
@@ -27,6 +33,10 @@ export default function Privacy() {
           <li>Gmail-ийг зөвхөн уншина, захидлын мэдээллийг хадгалдаггүй.</li>
           <li>Google Calendar: таныг асуухад өнөөдрийн болон энэ долоо хоногийн үйл явдлыг уншина; үйл явдлыг зөвхөн таныг &quot;Нэмэх&quot; дарсны дараа нэмнэ.</li>
           <li>Мессеж, нийтлэл, SMS, дуудлага, имэйлийг зөвхөн таныг баталгаажуулах товч дарсны дараа илгээнэ.</li>
+          <li>
+            Aspire Desktop таны компьютер дээр юу ч хийхээсээ өмнө тэр компьютер дээр тань асууна: та &quot;Зөвшөөрөх&quot; (Allow)
+            дарсны дараа л ажиллана.
+          </li>
           <li>Бид зар сурталчилгааны хянах хэрэгсэл ашигладаггүй. Таны мэдээллийг худалдахгүй.</li>
         </ul>
 
@@ -58,11 +68,66 @@ export default function Privacy() {
           хотын нэр) л илгээгдэнэ; байршил хуваалцах үед чиглэл эсвэл ойролцоох газар асуувал Google ойролцоогоор 100 м нарийвчлалтай
           байршил авна. Байршил хүсэлтийн биед явах тул сайтын бүртгэлд үлддэггүй; буудал хүртэлх зайг манай сервер нарийвчилсан байршлаас тооцоод мартана. Үр дүн серверийн санах ойд түр байгаад
           устана: цаг агаар 10 минут, дараагийн автобус 10 минут, замын хөдөлгөөн 20 минут, агаарын чанар 30 минут, урьдчилсан мэдээ 3
-          цаг, буудал, такси, хотын төв ба зураг нэг өдөр хүртэл. Арын зургийг Google Maps-ээс, эсвэл тэнд байхгүй бол Wikimedia
-          Commons-оос авна (Wikipedia руу ойролцоогоор 10 км хүртэл бөөрөнхийлсөн байршил илгээгдэнэ); зурагчны нэр ба лицензийг
-          дэлгэц дээр үргэлж харуулна. Эрдэнэт хотын автобусны шууд байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил
-          огт илгээгдэхгүй. Төхөөрөмжийн байршлыг Тохиргоо эсвэл хөтчийн тохиргооноос хэзээ ч унтрааж болно.
+          цаг, буудал, такси, хотын төв ба зураг нэг өдөр хүртэл. Арын зураг нь таны хотын нэрээр Wikimedia Commons-оос хайсан бүтэн
+          хотын зураг (байршил илгээгдэхгүй); зурагчны нэр ба лицензийг дэлгэц дээр үргэлж харуулна. Эрдэнэт хотын автобусны шууд
+          байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил огт илгээгдэхгүй. Төхөөрөмжийн байршлыг
+          Тохиргоо эсвэл хөтчийн тохиргооноос хэзээ ч унтрааж болно.
         </p>
+
+        <h2>Гудамжны хаяг</h2>
+        <p>
+          Төхөөрөмжийн байршлыг зөвшөөрсөн үед дэлгэц дээр гарах гудамж, байрны дугаарыг ойролцоогоор 11 м хүртэл бөөрөнхийлсөн
+          байршлаар тодорхойлно: эхлээд <b>Google Geocoding</b>, Google-д зөвхөн plus code байгаа газарт <b>OpenStreetMap Nominatim</b>.
+          Таны нэр илгээгдэхгүй. Хаяг манай мэдээллийн санд хадгалагдахгүй, бүртгэлтэй тань холбогдохгүй; ижил газрыг дахин хайхгүйн
+          тулд сервер үр дүнг санах ойдоо нэг өдөр хүртэл байлгаад устгана.
+        </p>
+
+        <h2>Нийтийн тээвэр (Transitous)</h2>
+        <p>
+          Google-д нийтийн тээврийн мэдээлэл байхгүй, Эрдэнэтийн мэдээлэл хамаарахгүй газарт хөдлөх цаг ба чиглэлийг{" "}
+          <b>Transitous</b> (transitous.org)-оос авна. Энэ нь нээлттэй хуваарь, шууд мэдээллээс бүтээсэн, олон нийтийн үнэгүй
+          үйлчилгээ. Ойролцоох хөдлөх цагт зөвхөн ойролцоогоор 1 км хүртэл бөөрөнхийлсөн байршил, чиглэлд эхлэх ба очих цэг
+          (ойролцоогоор 100 м хүртэл бөөрөнхийлсөн) болон таны хайсан газрын нэр илгээгдэнэ. Үр дүн серверийн санах ойд богино хугацаанд
+          байгаад устана (хөдлөх цаг 30 секунд, чиглэл 5 минут, газрын нэр нэг өдөр).
+        </p>
+        <p>
+          Хөдлөх цаг аль ч эх сурвалжид байхгүй газарт ойролцоох автобусны буудлын нэрийг (цагийн хуваарьгүй) <b>OpenStreetMap</b>-аас
+          нийтийн Overpass серверүүдээр (overpass-api.de, overpass.kumi.systems, overpass.private.coffee) авна. Тэдэнд зөвхөн
+          ойролцоогоор 1 км хүртэл бөөрөнхийлсөн бүс илгээгдэх ба үр дүн серверийн санах ойд нэг өдөр хадгалагдана.
+        </p>
+
+        <h2>Замын камер</h2>
+        <p>
+          Камерын самбар зөвхөн нийтэд нээлттэй камерыг харуулна. Эрдэнэтэд Орхон ТКХДТ-ийн шууд камерын хуудсыг (dedtuv.erdenet.mn)
+          ачаална; Улаанбаатарт ubtraffic.mn сайтын холбоос өгнө. Бусад газарт Лондоны тээврийн газар (Transport for London), Сингапурын
+          LTA, Хонконгийн тээврийн газар (Transport Department), Калифорнийн Caltrans, Шинэ Зеландын NZ Transport Agency Waka Kotahi-гийн
+          нийтэлсэн замын камерын зураг, YouTube-ийн шууд дамжуулалт (youtube-nocookie.com) болон OpenStreetMap дээр тэмдэглэсэн вэб
+          камерыг харуулна. Манай сервер нийтийн камерын жагсаалтыг таны байршилгүйгээр татна; YouTube болон OpenStreetMap-аас хайхдаа
+          зөвхөн ойролцоогоор 10 км хүртэл бөөрөнхийлсөн бүсийг илгээнэ. Зураг, бичлэг, камерын хуудас таны хөтөчид нийтлэгчээс нь шууд
+          ачаалагдах тул аль ч вэб сайтын адил тэд таны IP хаягийг харна. Aspire камерын зургийг бичиж хадгалдаггүй.
+        </p>
+
+        <h2>Aspire Desktop (таны компьютер)</h2>
+        <p>
+          Aspire Desktop туслах программыг суулгавал Aspire таны компьютер дээр апп эсвэл вэб хуудас нээх, текст бичих, текст файл
+          хадгалах, маягт бөглөх боломжтой.
+        </p>
+        <ul>
+          <li>
+            <b>Холбох:</b> Тохиргоо 10 минут хүчинтэй, нэг удаагийн 10 тэмдэгтэй код өгнө. Туслах программ үүнийг төхөөрөмжийн
+            токеноор солих ба токен таны компьютер дээр хадгалагдана. Манай мэдээллийн сан зөвхөн төхөөрөмжийн нэр (туслах программын
+            илгээсэн компьютерийн нэр), холбосон ба сүүлд холбогдсон цаг, код ба токены SHA-256 хэшийг хадгална; код, токен өөрийг нь
+            хадгалдаггүй.
+          </li>
+          <li>
+            <b>Ажил:</b> таны хүссэн ажил (аппын нэр, холбоос, бичих текст, файлын нэр ба агуулга, маягтын утга) компьютер тань авах
+            хүртэл манай мэдээллийн санд байна. Бүтэн ажлыг тэр компьютер дээр харуулах ба та &quot;Зөвшөөрөх&quot; (Allow) дарсны дараа
+            л ажиллана (командын мөрийн туслах программд <code>y</code> гэж бичнэ). 5 минутын дотор зөвшөөрөөгүй ажил хүчингүй болно.
+            Ажил дуусмагц (хийгдсэн, татгалзсан эсвэл алдаатай) агуулга нь шууд устна; хүчингүй болсон ажлын агуулга компьютер дахин
+            холбогдох эсвэл шинэ ажил үүсэх үед устна. Ажлын бүх бичлэг богино үр дүнгийн хамт 24 цагийн дараа устна.
+          </li>
+          <li>Тохиргооноос компьютерээ хэзээ ч салгаж болно: токен нь ажиллахаа болиод, ажлууд нь устна.</li>
+        </ul>
 
         <h2>Мэдээллийн сан (Supabase)</h2>
         <p>Supabase мэдээллийн сан (Сөүл, Өмнөд Солонгос) зөвхөн дараахыг хадгална:</p>
@@ -71,12 +136,17 @@ export default function Privacy() {
           <li>Aspire-ийг суулгасан Slack ажлын орчны (workspace) мэдээлэл;</li>
           <li>
             зөвхөн Telegram, Discord эсвэл Slack ботоо холбосон хэрэглэгчийн санах ой, сануулга, дадал, хичээлийн явцын хуулбар (бот таныг
-            таньж ажиллахад хэрэгтэй).
+            таньж ажиллахад хэрэгтэй);
+          </li>
+          <li>
+            компьютер холбосон бол Aspire Desktop: төхөөрөмжийн нэр, код ба токены хэш, ажлууд (дуусмагц агуулга нь устна, бичлэг 24
+            цагийн дараа устна).
           </li>
         </ul>
         <p>
           Нууц түлхүүрүүдийг (Slack ботын токен) AES-256-GCM аргаар шифрлэж хадгална. Ботоо салгахад үүлэн дэх хуулбар устна.
-          Тохиргоо дахь &quot;Үүлэн дэх мэдээллээ устгах&quot; товч бүгдийг нь устгана.
+          Тохиргоо дахь &quot;Үүлэн дэх мэдээллээ устгах&quot; товч ботын холбоос, холбосон компьютер болон хуулбарыг бүгдийг нь устгана. Холбосон
+          компьютерийг Тохиргооноос салгахад төхөөрөмж ба түүний ажлууд устна.
         </p>
 
         <h2>Gmail</h2>
@@ -127,12 +197,23 @@ export default function Privacy() {
           <li>Open-Meteo (цаг агаар, агаарын бохирдол), Wikipedia (мэдлэг), open.er-api.com (валютын ханш).</li>
           <li>
             Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар, автобусны буудал ба такси, замын түгжрэл, цаг агаар, агаарын
-            бохирдол, газрын зураг (зурагчны нэрийг харуулна).
+            бохирдол, гудамжны хаяг (Geocoding).
           </li>
-          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): Эрдэнэт хотын автобусны шууд байршил.</li>
+          <li>OpenStreetMap Nominatim: Google-д байхгүй үеийн гудамжны хаяг (~11 м хүртэл бөөрөнхийлсөн байршил).</li>
+          <li>Transitous (transitous.org): нийтийн тээврийн хөдлөх цаг ба чиглэл.</li>
+          <li>
+            OpenStreetMap Overpass (overpass-api.de, overpass.kumi.systems, overpass.private.coffee): ойролцоох автобусны буудал ба вэб
+            камер (ойролцоогоор 1-10 км хүртэл бөөрөнхийлсөн бүс).
+          </li>
+          <li>
+            Замын камер нийтлэгчид: Transport for London, Сингапурын LTA, Хонконгийн тээврийн газар, Caltrans, NZ Transport Agency Waka
+            Kotahi (камерын жагсаалт байршилгүй татагдана; зургийг таны хөтөч шууд ачаална). YouTube (Google): ойролцоогоор 10 км хүртэл
+            бөөрөнхийлсөн бүс дэх шууд дамжуулалт.
+          </li>
+          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): Эрдэнэт хотын автобусны шууд байршил, замын камер, зогсоол, шатахуун.</li>
           <li>OpenFreeMap / OpenStreetMap: газрын зургийн хавтан, таны хөтөч шууд ачаална (таны IP хаяг ба харж буй газрын хэсэг).</li>
-          <li>newsdata.io: мэдээний гарчиг (зөвхөн таны улс ба хэл).</li>
-          <li>Wikipedia / Wikimedia Commons: Google-д зураг байхгүй үеийн арын зураг.</li>
+          <li>newsdata.io: мэдээний гарчиг (зөвхөн улс, хэл, сэдэв эсвэл хайх үг).</li>
+          <li>Wikimedia Commons: таны хотын нэрээр хайсан арын зураг.</li>
         </ul>
         <p>
           Эдгээр компани өөрсдийн нөхцөлийн дагуу мэдээллийг аюулгүй байдлын зорилгоор богино хугацаанд хадгалж болно.{" "}
@@ -147,7 +228,7 @@ export default function Privacy() {
         <p>
           Монгол Улсын Хувь хүний мэдээлэл хамгаалах тухай хуулийн дагуу та өөрийн мэдээллийг үзэх, засуулах, устгуулах эрхтэй.
           Төхөөрөмж дээрх мэдээллээ &quot;Санах ой&quot; болон &quot;Тохиргоо&quot; хэсгээс харж, засаж, устгана. Үүлэн дэх мэдээллээ
-          &quot;Үүлэн дэх мэдээллээ устгах&quot; товчоор устгана. Бусад хүсэлт, тухайлбал бүртгэлээ бүрэн устгуулах бол холбогдоно уу:{" "}
+          &quot;Үүлэн дэх мэдээллээ устгах&quot; товчоор, холбосон компьютерээ Тохиргооноос салгаж устгана. Бусад хүсэлт, тухайлбал бүртгэлээ бүрэн устгуулах бол холбогдоно уу:{" "}
           <Contact lang="mn" />.
         </p>
 
@@ -173,6 +254,7 @@ export default function Privacy() {
           <li>Gmail is read-only, and nothing from your mail is stored.</li>
           <li>Google Calendar: today&apos;s or this week&apos;s events are read when you ask; an event is added only after you press Add.</li>
           <li>Messages, posts, SMS, calls and emails are only sent after you tap a confirm button.</li>
+          <li>Aspire Desktop asks on your computer before it does anything there: it acts only after you click Allow.</li>
           <li>No advertising trackers, and we never sell your data.</li>
         </ul>
 
@@ -205,12 +287,66 @@ export default function Privacy() {
           sharing on, Google receives your position to about 100 m; distances to stops are worked
           out from the precise position on our server and then forgotten. Results stay in server memory for a short time and are then
           discarded: weather and the next bus 10 minutes, traffic 20 minutes, air quality 30 minutes, the forecast 3 hours, and stops,
-          taxis, the city centre and the photo up to a day. The background photo comes from Google Maps or, when it has none, from
-          Wikimedia Commons (a position rounded to about 10 km is sent to Wikipedia); its author and licence are always credited on
-          screen. Live bus positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic
-          camera service; your location is never sent to it. You can turn device location off at any time in Settings or in your
-          browser settings.
+          taxis, the city centre and the photo up to a day. The background photo is a photo of your whole city found on Wikimedia
+          Commons by the city&apos;s name (no position is sent); its author and licence are always credited on screen. Live bus
+          positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic camera service; your location
+          is never sent to it. You can turn device location off at any time in Settings or in your browser settings.
         </p>
+
+        <h2>Street address</h2>
+        <p>
+          When device location is on, the street and house number shown on screen are looked up from your position rounded to about
+          11 m: first with <b>Google Geocoding</b> and, where Google only has a plus code, with <b>OpenStreetMap Nominatim</b>. Your
+          name is never sent. The address is not stored in our database or linked to your account; our server keeps the result in
+          memory for up to a day so the same spot is not looked up again, then discards it.
+        </p>
+
+        <h2>Public transport (Transitous)</h2>
+        <p>
+          Where Google has no public transport and Erdenet&apos;s own feed does not apply, departures and routes come from{" "}
+          <b>Transitous</b> (transitous.org), a free, community-run service built from open timetable and real-time feeds. For
+          departures near you it receives only your position rounded to about 1 km; for a route, its start and end rounded to about
+          100 m and the place name you asked for. Results stay in server memory for a short time and are then discarded (departures
+          30 seconds, routes 5 minutes, place names a day).
+        </p>
+        <p>
+          Where no source has departures, nearby bus stops (names only, no times) come from <b>OpenStreetMap</b> through the public
+          Overpass servers (overpass-api.de, overpass.kumi.systems, overpass.private.coffee). They receive only an area rounded to about
+          1 km, and the results stay in server memory for a day.
+        </p>
+
+        <h2>Traffic cameras</h2>
+        <p>
+          The camera panel shows only public cameras. In Erdenet it embeds the live camera page of Орхон ТКХДТ (dedtuv.erdenet.mn); in
+          Ulaanbaatar it links to ubtraffic.mn. Elsewhere it shows traffic camera pictures published by Transport for London,
+          Singapore&apos;s Land Transport Authority, the Hong Kong Transport Department, Caltrans (California) and NZ Transport Agency Waka
+          Kotahi, live streams on YouTube (youtube-nocookie.com) and webcams mapped on OpenStreetMap. Our server downloads the public camera
+          lists without your position; to find YouTube streams and OpenStreetMap webcams it sends only an area rounded to about 10 km.
+          Pictures, videos and camera pages load in your browser straight from their publishers, who see your IP address like any website.
+          Aspire does not record or store camera images.
+        </p>
+
+        <h2>Aspire Desktop (your computer)</h2>
+        <p>
+          If you install the Aspire Desktop helper, Aspire can open an app or a web page, type text, save a text file or fill a form
+          on your computer.
+        </p>
+        <ul>
+          <li>
+            <b>Pairing:</b> Settings gives you a one-time 10-character code that works for 10 minutes. The helper trades it for a
+            device token, which stays on your computer. Our database keeps only the device name (the computer name the helper
+            reports), when it was paired and last seen, and SHA-256 hashes of the code and the token, never the code or token
+            themselves.
+          </li>
+          <li>
+            <b>Jobs:</b> what you ask for (the app name, link, text to type, file name and content, or form values) waits in our
+            database until your computer collects it. The full job is shown on that computer and runs only after you click Allow (in
+            the command-line helper, type <code>y</code>). A job not allowed within 5 minutes expires. Its content is erased as soon
+            as it finishes (done, refused or failed); an expired job&apos;s content is erased the next time the computer checks in
+            or a job is queued. Every job record, with its short result, is deleted after 24 hours.
+          </li>
+          <li>You can unlink the computer in Settings at any time: its token stops working and its jobs are deleted.</li>
+        </ul>
 
         <h2>Our database (Supabase)</h2>
         <p>Our Supabase database (Seoul, South Korea) stores only:</p>
@@ -219,12 +355,17 @@ export default function Privacy() {
           <li>Slack workspace installs (the workspaces where Aspire was added);</li>
           <li>
             only for users who link a Telegram, Discord or Slack bot: a synced copy of your memory, reminders, routines and lessons, so
-            the bot can help you as you.
+            the bot can help you as you;
+          </li>
+          <li>
+            only if you pair a computer with Aspire Desktop: its device name, hashed codes and token, and jobs (content erased once
+            finished, records deleted after 24 hours).
           </li>
         </ul>
         <p>
           Secrets (Slack bot tokens) are encrypted with AES-256-GCM. Unlinking a bot removes the cloud copy. &quot;Delete my cloud
-          data&quot; in Settings removes all of it.
+          data&quot; in Settings removes all bot links, paired computers and the synced copy. Unlinking a paired computer in Settings removes it and
+          its jobs.
         </p>
 
         <h2>Gmail</h2>
@@ -275,13 +416,24 @@ export default function Privacy() {
           <li>Telegram, Discord, Slack: bots.</li>
           <li>Open-Meteo (weather and air quality), Wikipedia (encyclopedia), open.er-api.com (exchange rates).</li>
           <li>
-            Google Maps Platform: directions, public transport, nearby places, bus stops and taxis, traffic, weather, air quality and place
-            photos (credited to their authors).
+            Google Maps Platform: directions, public transport, nearby places, bus stops and taxis, traffic, weather, air quality and
+            street address (Geocoding).
           </li>
-          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): live bus positions in Erdenet.</li>
+          <li>OpenStreetMap Nominatim: street address where Google has none (a position rounded to about 11 m).</li>
+          <li>Transitous (transitous.org): public transport departures and routes.</li>
+          <li>
+            OpenStreetMap Overpass (overpass-api.de, overpass.kumi.systems, overpass.private.coffee): nearby bus stops and webcams (an area
+            rounded to about 1 to 10 km).
+          </li>
+          <li>
+            Traffic camera publishers: Transport for London, Singapore&apos;s Land Transport Authority, the Hong Kong Transport Department,
+            Caltrans and NZ Transport Agency Waka Kotahi (camera lists are fetched without your position; your browser loads the pictures).
+            YouTube (Google): live streams in an area rounded to about 10 km.
+          </li>
+          <li>Орхон ТКХДТ (dedtuv.erdenet.mn): live bus positions, traffic cameras, parking and fuel in Erdenet.</li>
           <li>OpenFreeMap / OpenStreetMap: map tiles, loaded by your browser (your IP address and the map area you view).</li>
-          <li>newsdata.io: headlines (your country and language only).</li>
-          <li>Wikipedia / Wikimedia Commons: background photo when Google has none.</li>
+          <li>newsdata.io: headlines (only a country, language, topic or search words).</li>
+          <li>Wikimedia Commons: the background photo, searched by your city&apos;s name.</li>
         </ul>
         <p>
           These providers may keep data briefly for safety and abuse monitoring under their own terms.{" "}
@@ -296,7 +448,7 @@ export default function Privacy() {
         <p>
           Under Mongolia&apos;s Law on Personal Data Protection you have the right to access, correct and delete your personal data. Data
           on your device can be viewed, changed and deleted in &quot;Memory&quot; and &quot;Settings&quot;. Cloud data is deleted with
-          &quot;Delete my cloud data&quot;. For anything else, such as deleting your account, contact us: <Contact />.
+          &quot;Delete my cloud data&quot;, and a paired computer with Unlink in Settings. For anything else, such as deleting your account, contact us: <Contact />.
         </p>
 
         <h2>Children</h2>
@@ -315,7 +467,25 @@ export default function Privacy() {
           <li>Google 日历：在您询问时读取今天或本周的日程；只有在您点击“添加”后才会添加日程，不保存任何内容。</li>
           <li>
             天气、空气质量、路况、车站、下一班车、出租车和背景照片：仅在您允许时使用设备的精确位置（约 11 米），否则使用您设置的城市，再否则使用网络大致位置。精确位置只用于当次请求，不会保存，也不会与您的账户关联。实时状况发送给
-            Google 的位置约为 1 公里精度；开启位置共享并询问路线或附近地点时，Google 会收到约 100 米精度的位置。背景照片来自 Google 地图并注明作者；额尔登特的实时公交数据来自 Орхон ТКХДТ。
+            Google 的位置约为 1 公里精度；开启位置共享并询问路线或附近地点时，Google 会收到约 100 米精度的位置。背景照片是按城市名在 Wikimedia Commons 上找到的城市照片，并注明作者；额尔登特的实时公交数据来自 Орхон ТКХДТ。
+          </li>
+          <li>
+            公共交通数据来自 Transitous（附近发车只发送约 1 公里精度的位置，路线的起点和终点约 100 米精度）。街道地址由 Google Geocoding 或
+            OpenStreetMap Nominatim 根据约 11 米精度的位置查询，不保存到数据库。新闻来自 newsdata.io。
+          </li>
+          <li>
+            没有发车数据的地方，附近公交站（只有站名，没有时刻）来自 OpenStreetMap，经公共 Overpass 服务器（overpass-api.de、overpass.kumi.systems、
+            overpass.private.coffee）查询，只发送约 1 公里精度的区域，结果在服务器内存中保留一天。
+          </li>
+          <li>
+            摄像头面板只显示公开的摄像头：额尔登特的实时摄像头页面（Орхон ТКХДТ，dedtuv.erdenet.mn），乌兰巴托则提供 ubtraffic.mn 的链接；其他地方显示伦敦交通局（Transport
+            for London）、新加坡陆路交通管理局（LTA）、香港运输署、加州交通局（Caltrans）和新西兰交通局（NZ Transport Agency Waka Kotahi）发布的交通摄像头画面、YouTube
+            直播（youtube-nocookie.com）以及 OpenStreetMap 上标注的网络摄像头。我们的服务器下载公开的摄像头列表时不发送您的位置；查找 YouTube 直播和 OpenStreetMap
+            摄像头时只发送约 10 公里精度的区域。画面和页面由您的浏览器直接从发布方加载，它们会看到您的 IP 地址。我们不保存摄像头图像。
+          </li>
+          <li>
+            Aspire Desktop：配对电脑时我们只保存设备名称以及配对码和设备令牌的 SHA-256 哈希值。任务只有在您在电脑上点击“允许”（Allow）后才会执行，5
+            分钟内未允许即失效；任务结束后内容立即删除，所有任务记录 24 小时后删除。可随时在设置中取消关联。
           </li>
           <li>
             语音回复由 ElevenLabs（可用时）或 Microsoft Azure Speech 生成；回复文本仅用于生成音频，我们不保存，音频在服务器内存中最多保留 10 分钟。
@@ -346,8 +516,31 @@ export default function Privacy() {
             11 м) используется только с вашего разрешения, иначе выбранный вами город, иначе приблизительное сетевое местоположение.
             Точная позиция нужна только для этого запроса, не хранится и не связывается с аккаунтом. Для текущих условий в Google
             передаётся позиция с точностью около 1 км; если при включённой передаче местоположения вы спрашиваете маршрут или места
-            рядом, Google получает позицию с точностью около 100 м. Фоновое фото берётся из Google Карт с указанием автора; данные об автобусах Эрдэнэта предоставляет
-            Орхон ТКХДТ.
+            рядом, Google получает позицию с точностью около 100 м. Фоновое фото города находится на Wikimedia Commons по названию города
+            и подписывается автором; данные об автобусах Эрдэнэта предоставляет Орхон ТКХДТ.
+          </li>
+          <li>
+            Общественный транспорт: Transitous (для ближайших отправлений позиция с точностью около 1 км, для маршрута начало и конец
+            около 100 м). Адрес улицы определяют Google Geocoding или OpenStreetMap Nominatim по позиции с точностью около 11 м; в базе
+            он не хранится. Новости: newsdata.io.
+          </li>
+          <li>
+            Там, где ни у одного источника нет отправлений, ближайшие остановки (только названия, без расписания) берутся из OpenStreetMap
+            через общедоступные серверы Overpass (overpass-api.de, overpass.kumi.systems, overpass.private.coffee); им отправляется только
+            район, округлённый примерно до 1 км, результаты хранятся в памяти сервера один день.
+          </li>
+          <li>
+            Панель камер показывает только общедоступные камеры: страницу камер Эрдэнэта (Орхон ТКХДТ, dedtuv.erdenet.mn), ссылку на
+            ubtraffic.mn для Улан-Батора, а в других местах снимки дорожных камер Transport for London, LTA Сингапура, Транспортного
+            департамента Гонконга, Caltrans (Калифорния) и NZ Transport Agency Waka Kotahi (Новая Зеландия), прямые трансляции YouTube
+            (youtube-nocookie.com) и веб-камеры, отмеченные в OpenStreetMap. Наш сервер загружает общедоступные списки камер без вашего
+            местоположения; для поиска трансляций YouTube и камер OpenStreetMap отправляется только район, округлённый примерно до 10 км.
+            Изображения и страницы загружает ваш браузер напрямую у их издателей, которые видят ваш IP-адрес. Кадры камер мы не храним.
+          </li>
+          <li>
+            Aspire Desktop: при подключении компьютера мы храним только имя устройства и SHA-256-хеши кода и токена. Задание выполняется
+            только после того, как вы нажмёте «Разрешить» (Allow) на своём компьютере, и истекает через 5 минут; его содержимое
+            удаляется сразу после завершения, все записи о заданиях удаляются через 24 часа. Отключить компьютер можно в настройках.
           </li>
           <li>
             Голосовые ответы создаёт ElevenLabs (если доступен) или Microsoft Azure Speech; текст ответа отправляется им только для
@@ -379,8 +572,33 @@ export default function Privacy() {
             wird nur mit Ihrer Erlaubnis genutzt, sonst die von Ihnen gewählte Stadt, sonst ein ungefährer Netzwerkstandort. Der genaue
             Standort dient nur der jeweiligen Anfrage, wird nicht gespeichert und nicht mit Ihrem Konto verknüpft. Für die Live-Lage geht
             an Google ein auf etwa 1 km gerundeter Standort; fragen Sie bei eingeschalteter Standortfreigabe nach Routen oder Orten in der
-            Nähe, erhält Google Ihren Standort auf etwa 100 m genau. Das Hintergrundfoto stammt aus Google Maps, mit Nennung des Urhebers; die Live-Busdaten für
-            Erdenet liefert Орхон ТКХДТ.
+            Nähe, erhält Google Ihren Standort auf etwa 100 m genau. Das Hintergrundfoto der Stadt wird auf Wikimedia Commons über den
+            Stadtnamen gefunden, mit Nennung des Urhebers; die Live-Busdaten für Erdenet liefert Орхон ТКХДТ.
+          </li>
+          <li>
+            Nahverkehr: Transitous (für Abfahrten in der Nähe ein auf etwa 1 km gerundeter Standort, für Routen Start und Ziel auf etwa
+            100 m). Die Straßenadresse ermitteln Google Geocoding oder OpenStreetMap Nominatim aus einem auf etwa 11 m gerundeten
+            Standort; sie wird nicht in der Datenbank gespeichert. Nachrichten: newsdata.io.
+          </li>
+          <li>
+            Wo keine Quelle Abfahrten hat, kommen Haltestellen in der Nähe (nur Namen, keine Zeiten) aus OpenStreetMap über öffentliche
+            Overpass-Server (overpass-api.de, overpass.kumi.systems, overpass.private.coffee); sie erhalten nur ein auf etwa 1 km gerundetes
+            Gebiet, die Ergebnisse bleiben einen Tag im Serverspeicher.
+          </li>
+          <li>
+            Das Kamerafenster zeigt nur öffentliche Kameras: die Kameraseite für Erdenet (Орхон ТКХДТ, dedtuv.erdenet.mn), einen Link zu
+            ubtraffic.mn für Ulaanbaatar und anderswo Verkehrskamerabilder von Transport for London, der Land Transport Authority Singapur,
+            dem Transport Department Hongkong, Caltrans (Kalifornien) und NZ Transport Agency Waka Kotahi (Neuseeland), Livestreams auf
+            YouTube (youtube-nocookie.com) sowie in OpenStreetMap eingetragene Webcams. Unser Server lädt die öffentlichen Kameralisten ohne
+            Ihren Standort; für die Suche nach YouTube-Livestreams und OpenStreetMap-Webcams wird nur ein auf etwa 10 km gerundetes Gebiet
+            gesendet. Bilder und Seiten lädt Ihr Browser direkt bei den Anbietern, die dabei Ihre IP-Adresse sehen. Kamerabilder speichern
+            wir nicht.
+          </li>
+          <li>
+            Aspire Desktop: Beim Koppeln eines Computers speichern wir nur den Gerätenamen und SHA-256-Hashes von Code und Token. Ein
+            Auftrag läuft erst, wenn Sie auf dem Computer „Erlauben“ (Allow) klicken, und verfällt nach 5 Minuten; sein Inhalt wird
+            nach Abschluss sofort gelöscht, alle Auftragsdatensätze nach 24 Stunden. Die Kopplung lässt sich in den Einstellungen
+            jederzeit aufheben.
           </li>
           <li>
             Gesprochene Antworten erzeugt ElevenLabs (wenn verfügbar) oder Microsoft Azure Speech; der Antworttext geht nur zur

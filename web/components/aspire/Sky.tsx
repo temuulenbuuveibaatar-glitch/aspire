@@ -193,6 +193,8 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
   let theta = 0, thetaTarget = 0, tanT = 0, drift = 0, sway = 1;
   let raf = 0, last = 0, lastDraw = 0, t = 0;
   let destroyed = false, nightKey = "";
+  // Off screen (the hero scrolled away): no frames until it is back.
+  let onScreen = true;
   const tail = ["", "", ""];
   const head = ["", "", ""];
 
@@ -336,7 +338,7 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
 
   function frame(now: number) {
     raf = 0;
-    if (destroyed || document.hidden) return;
+    if (destroyed || document.hidden || !onScreen) return;
     // 60 fps, 30 on the low tier.
     if (now - lastDraw >= 1000 / (tier < 1 ? 30 : 60) - 2) {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
@@ -348,7 +350,7 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     if (wantsAnim()) raf = requestAnimationFrame(frame);
   }
   function kick() {
-    if (raf || destroyed || document.hidden || !wantsAnim()) return;
+    if (raf || destroyed || document.hidden || !onScreen || !wantsAnim()) return;
     last = performance.now();
     lastDraw = 0;
     raf = requestAnimationFrame(frame);
@@ -383,6 +385,15 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
 
   const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
   ro?.observe(canvas);
+  const io =
+    typeof IntersectionObserver !== "undefined"
+      ? new IntersectionObserver(([e]) => {
+          onScreen = e.isIntersecting;
+          if (onScreen) kick();
+          else stop();
+        })
+      : null;
+  io?.observe(canvas);
   const onVis = () => (document.hidden ? stop() : kick());
   window.addEventListener("resize", resize);
   document.addEventListener("visibilitychange", onVis);
@@ -426,6 +437,7 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
       destroyed = true;
       stop();
       ro?.disconnect();
+      io?.disconnect();
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVis);
       canvas.width = canvas.height = night.width = night.height = 0;

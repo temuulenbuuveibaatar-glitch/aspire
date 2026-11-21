@@ -21,6 +21,27 @@ export function isLang(x: unknown): x is Lang {
   return typeof x === "string" && (LANGS as readonly string[]).includes(x);
 }
 
+/**
+ * The best supported language from an Accept-Language header (untrusted input: capped, parsed
+ * defensively, q-values honoured). English when nothing matches, so a page suits any country.
+ */
+export function langFrom(header: string | null | undefined): Lang {
+  if (!header) return "en";
+  const ranked = header
+    .slice(0, 512)
+    .split(",", 24)
+    .map((part, i) => {
+      const [tag = "", ...params] = part.trim().split(";");
+      const q = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
+      const weight = q ? Number(q.slice(2)) : 1;
+      return { base: tag.trim().toLowerCase().split("-")[0], q: Number.isFinite(weight) ? weight : 0, i };
+    })
+    .filter((x) => x.q > 0)
+    .sort((a, b) => b.q - a.q || a.i - b.i);
+  for (const { base } of ranked) if (isLang(base)) return base;
+  return "en";
+}
+
 // Greetings and very short phrases are where speech detectors fail most,
 // so they get an exact fast path ("hi" -> en, "ni hao" -> zh, ...).
 // `\b` is ASCII-only in JS, so use a Unicode-aware "end of word" instead.

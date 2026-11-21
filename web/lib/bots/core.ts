@@ -130,6 +130,8 @@ export function renderActions(actions: ClientAction[], lang: Lang, timeZone = bo
     }
     if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang, timeZone)}\n${a.url}`);
     if (a.type === "map" && isGoogleMapsUrl(a.url)) lines.push(`Google Maps: ${a.title}\n${a.url}`);
+    // "Open <app>" has no button in a chat: give the allow-listed web version when there is one.
+    if (a.type === "open_app" && /^https:\/\//.test(a.web)) lines.push(`${a.name}: ${a.web}`);
     // Task cards ("On it"): the chat gets the code or the form itself. 3500 keeps each under Telegram's 4096 limit.
     if (a.type === "code") lines.push(`${a.title} (${a.language}):\n${a.code}`.slice(0, 3500));
     if (a.type === "form") lines.push([a.title, ...a.fields.map((f) => `${f.label}: ${f.value || "-"}`)].join("\n").slice(0, 3500));
@@ -163,11 +165,14 @@ export async function handleBotMessage(input: BotMessage): Promise<BotReply> {
       result = await ask(text, lang, history, { ...toDevice(cloud), connected }, now, {
         gmailToken: () => googleAccessToken(userId),
         ...where,
+        userId,
+        // Tools word their notes for a chat (no camera panel here); desktop tools stay web-only.
+        source: "bot",
       });
       // The answer still goes out if saving fails; the person can repeat the request.
       await applyCloudActions(userId, cloud, result.actions, now).catch((e) => logError("cloud save", e));
     } else {
-      result = timeZone ? await ask(text, lang, history, undefined, now, where) : await ask(text, lang, history);
+      result = await ask(text, lang, history, undefined, now, { ...where, source: "bot" });
     }
     const extra = renderActions(result.actions, lang, timeZone);
     // Unlinked: point at linking once per chat (only when linking is available at all).

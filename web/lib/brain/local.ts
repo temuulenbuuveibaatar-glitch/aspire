@@ -9,7 +9,7 @@ import {
   MAX_STEPS,
   runTool,
   SYSTEM,
-  TOOL_SPECS,
+  toolSpecs,
 } from "./shared";
 
 interface CompatConfig {
@@ -31,7 +31,7 @@ type Message =
   | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
 
-const tools = TOOL_SPECS.map((t) => ({
+const toolsFor = (ctx: Parameters<typeof toolSpecs>[0]) => toolSpecs(ctx).map((t) => ({
   type: "function" as const,
   function: {
     name: t.name,
@@ -68,7 +68,7 @@ function openAiCompatible(cfg: CompatConfig): Brain {
           body: JSON.stringify({
             model: cfg.model(),
             messages,
-            tools,
+            tools: toolsFor(run.ctx),
             temperature: 0.3,
             max_tokens: 1024,
           }),

@@ -4,10 +4,11 @@
 // "Where are you?" prompt. The shell (Assistant.tsx) owns the state; these only render it.
 
 import { SignOutButton } from "@clerk/nextjs";
-import { Brain, Cable, Check, ChevronRight, LocateFixed, LogOut, MapPin, Plus, Repeat, Settings, Sunrise, Trash2, type LucideIcon } from "lucide-react";
+import { Brain, Cable, Check, ChevronRight, Download, LocateFixed, LogOut, MapPin, Plus, Repeat, Settings, Sunrise, Trash2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { BotLinks } from "@/components/aspire/BotLinks";
+import { DesktopLink } from "@/components/aspire/DesktopLink";
 import { GmailConnect } from "@/components/aspire/GmailConnect";
 import type { DisplayPrefs, TextSize, UnitsPref } from "@/lib/display-prefs";
 import { applyActions } from "@/lib/device-store";
@@ -20,6 +21,9 @@ import { isAllowedWebhook } from "@/lib/webhooks";
 
 type T = (typeof UI)["en"];
 type Update = (fn: (d: DeviceContext) => DeviceContext) => void;
+
+/** Aspire Desktop releases (the helper the Desktop section pairs). */
+export const DESKTOP_DOWNLOAD_URL = "https://github.com/temuulenbuuveibaatar-glitch/aspire/releases";
 
 const setSetting = (update: Update, patch: NonNullable<DeviceContext["settings"]>) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
@@ -209,6 +213,14 @@ export function SettingsBody(p: {
           ))}
         </Choices>
       </Section>
+      <DesktopLink lang={p.lang} />
+      <p className="mt-3 text-small text-ink-muted">
+        <a href={DESKTOP_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className={cn(rowBtn, "w-auto px-5")}>
+          <Download className="size-5" aria-hidden />
+          {t.desktopDownload}
+        </a>
+        <span className="mt-1 block">{t.desktopDownloadHelp}</span>
+      </p>
       <div className="mt-6">
         <SignOutButton redirectUrl="/login">
           <button type="button" className={cn(rowBtn, "w-auto px-5")}>

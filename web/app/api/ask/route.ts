@@ -46,7 +46,13 @@ export async function POST(req: Request) {
     let gmail: Promise<string | null> | undefined;
     const gmailToken = () => (gmail ??= googleAccessToken(user.id));
     const device = cleanDevice(body?.device);
-    const result = await ask(text, lang, history, device, new Date(), { gmailToken, ...whereFrom(req.headers, body ?? {}, device) });
+    const result = await ask(text, lang, history, device, new Date(), {
+      gmailToken,
+      ...whereFrom(req.headers, body ?? {}, device),
+      // A direct, signed-in request: the only kind that may queue jobs on their paired computer.
+      userId: user.id,
+      source: "web",
+    });
     return Response.json({ lang, ...result });
   } catch (e) {
     if (e instanceof NoBrainConfigured) return Response.json({ lang, error: "brain_not_configured" }, { status: 503 });
