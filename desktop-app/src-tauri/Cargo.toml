@@ -1,6 +1,6 @@
 [package]
 name = "aspire-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Aspire Desktop: Aspire in a native window, a local AI brain, Hermes Agent and fast desktop actions"
 edition = "2021"
 publish = false

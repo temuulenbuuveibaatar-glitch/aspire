@@ -1,7 +1,7 @@
 {
   "name": "aspire-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Aspire Desktop: native Windows and macOS app for Aspire (Tauri 2, Rust)",
   "scripts": {
     "tauri": "tauri",
