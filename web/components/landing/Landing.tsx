@@ -145,7 +145,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
         {t.skip}
       </a>
 
-      <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-6 pt-[max(1rem,env(safe-area-inset-top))]">
+      <header className="relative z-10 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-6 pt-[max(1rem,env(safe-area-inset-top))]">
         <a href={`/?lang=${l}`} className="inline-flex min-h-12 items-center font-display text-wordmark text-ink uppercase no-underline">
           Aspire
         </a>
@@ -178,7 +178,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
         </div>
       </header>
 
-      <main id="main" tabIndex={-1} className="mx-auto max-w-6xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pb-16 outline-none sm:px-6">
+      <main id="main" tabIndex={-1} className="relative z-10 mx-auto max-w-6xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pb-16 outline-none sm:px-6">
         {/* 1. Hero */}
         <section aria-labelledby="hero-title" className="grid items-center gap-10 py-10 sm:py-16 md:grid-cols-[1.15fr_0.85fr]">
           <div>
@@ -331,7 +331,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
       </main>
 
       {/* 7. Footer */}
-      <footer className="border-t border-line">
+      <footer className="relative z-10 border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-8 pb-[max(2rem,env(safe-area-inset-bottom))] text-small text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <nav aria-label={t.legal} className="flex gap-2">
             <a href={`/privacy#${l}`} className="inline-flex min-h-11 items-center px-1 text-ink-muted underline hover:text-ink">
