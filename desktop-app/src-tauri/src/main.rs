@@ -23,26 +23,26 @@ const AUTOSTART_ARG: &str = "--autostart";
 
 /// Pages that may load inside the main window. Only Aspire itself gets Aspire's commands
 /// (capabilities/remote.json is limited to SITE); the other hosts are the sign-in pages Aspire's
-/// login needs (Clerk, Google, Apple, Cloudflare's bot check) and the players it embeds, which
-/// macOS also reports here for iframes. Every other page opens in the browser after Allow.
+/// login needs (Aspire's own Clerk instance, Google, Apple, Cloudflare's bot check) and the
+/// players it embeds, which macOS also reports here for iframes. Every other page opens in the
+/// browser after Allow (on macOS, which cannot tell a link from an iframe here, only links that
+/// open a new window, so the web app opens outside links with target="_blank").
 fn in_app(u: &Url) -> bool {
-    const HOSTS: [&str; 8] = [
+    // The Clerk hosts come from Aspire's publishable key; update them if the Clerk instance changes.
+    const HOSTS: [&str; 9] = [
         "aspire-mn.vercel.app",
+        "wealthy-mastiff-2480.clerk.accounts.dev",
+        "wealthy-mastiff-2480.accounts.dev",
         "accounts.google.com",
         "appleid.apple.com",
         "challenges.cloudflare.com",
         "www.youtube-nocookie.com",
         "www.youtube.com",
         "open.spotify.com",
-        "dedtuv.erdenet.mn",
     ];
     match u.scheme() {
         "about" | "blob" | "data" => true,
-        "https" => {
-            let h = u.host_str().unwrap_or("");
-            // Clerk's development instances live under accounts.dev (and clerk.accounts.dev).
-            HOSTS.contains(&h) || h.ends_with(".accounts.dev")
-        }
+        "https" => HOSTS.contains(&u.host_str().unwrap_or("")),
         _ => false,
     }
 }
@@ -170,6 +170,21 @@ fn set_lang(app: AppHandle, lang: String) -> Result<(), String> {
 }
 
 fn main() {
+    // WebView2 reads these from the environment; they could turn on remote debugging or load
+    // another browser build, which would let other programs read and drive Aspire's windows.
+    #[cfg(windows)]
+    for v in [
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
+        "WEBVIEW2_USER_DATA_FOLDER",
+        "WEBVIEW2_RELEASE_CHANNEL_PREFERENCE",
+        "WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER",
+    ] {
+        std::env::remove_var(v);
+    }
+    if std::env::args().any(|a| a.to_ascii_lowercase().contains("remote-debugging")) {
+        return;
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_opener::init())

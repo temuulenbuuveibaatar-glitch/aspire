@@ -1,12 +1,13 @@
 // The brain: one chat call that goes to the local Qwen2.5 1.5B (default), Claude or OpenAI,
 // whichever the person chose in Settings. API keys come from the keychain cache, never from
 // the page, and are never logged. Calls from the remote Aspire page (the main window) are
-// smaller and rate limited, so a bad script on the page cannot run up the person's API bill.
+// smaller, rate limited and, on a Claude or OpenAI key, capped per day, so a bad script on the
+// page cannot run up the person's API bill.
 use crate::local;
 use crate::state::{lock, Busy, Shared, CLAUDE_KEY, OPENAI_KEY};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 pub const CLAUDE_MODEL: &str = "claude-opus-5-5";
@@ -15,6 +16,8 @@ const MAX_CHARS: usize = 400_000;
 const REMOTE_MAX_CHARS: usize = 60_000;
 const REMOTE_MAX_TOKENS: u32 = 4096;
 const REMOTE_PER_MINUTE: u32 = 20;
+const REMOTE_CALLS_PER_DAY: u32 = 300;
+const REMOTE_CHARS_PER_DAY: u64 = 3_000_000;
 /// What the local model gets at most (its context is 16K tokens): system messages and the
 /// newest turns.
 const LOCAL_MAX_BYTES: usize = 40_000;
@@ -128,6 +131,20 @@ fn remote_slot(st: &Shared) -> Result<Busy<'_>, String> {
     Ok(busy)
 }
 
+/// The remote page on a Claude or OpenAI key: at most REMOTE_CALLS_PER_DAY calls and
+/// REMOTE_CHARS_PER_DAY characters a day (UTC), counted in settings.json across restarts.
+fn spend(st: &Shared, chars: usize) -> Result<(), String> {
+    let day = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() / 86_400).unwrap_or(0);
+    let mut s = st.settings();
+    let (calls, used) = if s.remote_spend.0 == day { (s.remote_spend.1, s.remote_spend.2) } else { (0, 0) };
+    let used = used + chars as u64;
+    if calls >= REMOTE_CALLS_PER_DAY || used > REMOTE_CHARS_PER_DAY {
+        return Err("The Aspire page has used today's allowance of your Claude or OpenAI key. It starts again at midnight UTC; the local model has no limit.".into());
+    }
+    s.remote_spend = (day, calls + 1, used);
+    st.save_settings(s)
+}
+
 /// One chat turn with the chosen brain; returns the reply text.
 #[tauri::command]
 pub async fn brain_chat(app: AppHandle, window: WebviewWindow, messages: Vec<Msg>) -> Result<String, String> {
@@ -137,6 +154,9 @@ pub async fn brain_chat(app: AppHandle, window: WebviewWindow, messages: Vec<Msg
     let _slot = if remote { Some(remote_slot(&st)?) } else { None };
     let max_tokens = remote.then_some(REMOTE_MAX_TOKENS);
     let s = st.settings();
+    if remote && s.provider != "local" {
+        spend(&st, messages.iter().map(|m| m.content.len()).sum())?;
+    }
     match s.provider.as_str() {
         "claude" => claude(&st, &messages, max_tokens.unwrap_or(16000)).await,
         "openai" => openai(&st, &s.openai_model, &messages, max_tokens).await,

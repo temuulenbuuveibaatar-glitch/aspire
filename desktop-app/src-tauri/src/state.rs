@@ -31,11 +31,13 @@ pub struct Settings {
     pub lang: String,
     /// A random tag for the device name when the computer has no usable name.
     pub machine_tag: String,
+    /// What the remote page spent today on a Claude or OpenAI key: (UTC day number, calls, characters).
+    pub remote_spend: (u64, u32, u64),
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { provider: "local".into(), openai_model: "gpt-5-mini".into(), device_name: None, lang: String::new(), machine_tag: String::new() }
+        Self { provider: "local".into(), openai_model: "gpt-5-mini".into(), device_name: None, lang: String::new(), machine_tag: String::new(), remote_spend: (0, 0, 0) }
     }
 }
 
@@ -64,15 +66,39 @@ pub struct Shared {
     pub llama_start: tokio::sync::Mutex<()>,
     pub pairing: Mutex<crate::desktop::PairState>,
     pub hermes_busy: AtomicBool,
-    /// Open Allow / Deny windows, by id (see confirm.rs).
+    /// Held while an Allow / Deny window is open, so only one is ever open (see confirm.rs).
+    pub prompt_gate: tokio::sync::Mutex<()>,
+    /// The open Allow / Deny window, by id (see confirm.rs).
     pub prompts: Mutex<HashMap<u32, crate::confirm::Prompt>>,
     pub next_prompt: AtomicU32,
     /// brain_chat from the remote page: one call at a time, a limited number per minute.
     pub chat_busy: AtomicBool,
     pub chat_rate: Mutex<(Instant, u32)>,
-    /// Open-a-page-or-app requests from the remote page: one Allow window at a time, limited per minute.
-    pub bridge_busy: AtomicBool,
-    pub bridge_rate: Mutex<(Instant, u32)>,
+    /// Open-a-page-or-app requests from the remote page: one at a time, limited per minute.
+    pub bridge: Slot,
+    /// Links and popups from any frame in the main window: a separate limit, so third-party
+    /// frames cannot use up the page's own.
+    pub popups: Slot,
+}
+
+/// One request at a time and a number per minute.
+#[derive(Default)]
+pub struct Slot {
+    busy: AtomicBool,
+    rate: Mutex<Option<(Instant, u32)>>,
+}
+
+impl Slot {
+    pub fn take(&self, per_minute: u32) -> Option<Busy<'_>> {
+        let mut rate = lock(&self.rate);
+        let (start, n) = (*rate).filter(|r| r.0.elapsed() < Duration::from_secs(60)).unwrap_or((Instant::now(), 0));
+        if n >= per_minute {
+            return None;
+        }
+        let busy = Busy::take(&self.busy)?;
+        *rate = Some((start, n + 1));
+        Some(busy)
+    }
 }
 
 /// Clears a busy flag when dropped, so an error or a panic never leaves it set.
@@ -123,12 +149,13 @@ impl Shared {
             llama_start: tokio::sync::Mutex::new(()),
             pairing: Mutex::default(),
             hermes_busy: AtomicBool::new(false),
+            prompt_gate: tokio::sync::Mutex::new(()),
             prompts: Mutex::default(),
             next_prompt: AtomicU32::new(1),
             chat_busy: AtomicBool::new(false),
             chat_rate: Mutex::new((Instant::now(), 0)),
-            bridge_busy: AtomicBool::new(false),
-            bridge_rate: Mutex::new((Instant::now(), 0)),
+            bridge: Slot::default(),
+            popups: Slot::default(),
         })
     }
 

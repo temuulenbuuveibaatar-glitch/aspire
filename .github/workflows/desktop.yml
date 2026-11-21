@@ -72,9 +72,15 @@ jobs:
         working-directory: desktop-app
         run: npm ci
 
+      # The build machine's folders are replaced in the paths compiled into the app (panic
+      # locations), so the binary does not show the runner's layout.
       - name: Build
         working-directory: desktop-app
-        run: node node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }} -- --locked
+        run: |
+          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+          if [ "$RUNNER_OS" = Windows ]; then cargo_home="$(cygpath -w "$cargo_home")"; fi
+          export RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=. --remap-path-prefix=$cargo_home=cargo"
+          node node_modules/@tauri-apps/cli/tauri.js build ${{ matrix.args }} -- --locked
 
       - name: Collect installers and SHA-256 sums
         run: |

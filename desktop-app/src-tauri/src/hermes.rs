@@ -1,11 +1,12 @@
 // Hermes Agent (Nous Research, MIT). Install runs the official installer script from a pinned
 // commit of github.com/NousResearch/hermes-agent, only after its SHA-256 matches the one in this
-// file, saved to a file and run with fixed arguments (never a shell string); the installer is
-// told to install that same commit. A task runs as `hermes chat -q <task> -Q` from the settings
+// file, saved to a new folder, checked again just before it runs and run with fixed arguments
+// (never a shell string); the installer is told to install that same commit. A task runs as `hermes chat -q <task> -Q` from the settings
 // window only, after the Allow window, with a time limit. Without --yolo, Hermes blocks the
 // commands it considers dangerous in this unattended mode. Hermes needs a model with at least
 // 64K context: Qwen2.5 1.5B has 32K, so tasks use the Claude or OpenAI key from the keychain,
 // passed to the child process as an environment variable only (never written to Hermes files).
+// Hermes and what it starts can read that key, and the Allow window says so.
 use crate::brain::CLAUDE_MODEL;
 use crate::confirm::confirm;
 use crate::desktop::{clean, fill, words};
@@ -112,20 +113,30 @@ async fn install(app: &AppHandle) -> Result<(), String> {
     if format!("{:x}", Sha256::digest(&script)) != want {
         return Err("The Hermes installer failed its SHA-256 check, so it was not run.".into());
     }
-    let dir = st.data_dir.join("hermes-installer");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = st.data_dir.join(format!("hermes-installer-{}", &crate::local::random_hex()[..16]));
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(file);
     std::fs::write(&path, &script).map_err(|e| e.to_string())?;
-    step(&st, "install", Some(format!("{file} {} (SHA-256 verified)", &HERMES_COMMIT[..12])));
+    let r = run_installer(app, &st, &path, want).await;
+    let _ = std::fs::remove_dir_all(&dir);
+    r?;
+    binary(app).map(|_| ()).ok_or_else(|| format!("The installer finished but the hermes command was not found. See {}.", st.data_dir.join("hermes-install.log").display()))
+}
+
+async fn run_installer(app: &AppHandle, st: &Shared, path: &Path, want: &str) -> Result<(), String> {
+    let file = INSTALLER.0;
+    #[cfg(windows)]
+    let _ = app;
+    step(st, "install", Some(format!("{file} {} (SHA-256 verified)", &HERMES_COMMIT[..12])));
 
     let log_path = st.data_dir.join("hermes-install.log");
     let log = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let log2 = log.try_clone().map_err(|e| e.to_string())?;
     #[cfg(windows)]
     let mut cmd = {
-        let mut c = tokio::process::Command::new("powershell.exe");
+        let mut c = tokio::process::Command::new(crate::local::sys32(r"WindowsPowerShell\v1.0\powershell.exe"));
         c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-            .arg(&path)
+            .arg(path)
             .args(["-Commit", HERMES_COMMIT, "-NonInteractive", "-SkipBrowser", "-SkipComputerUse"])
             .creation_flags(crate::local::CREATE_NO_WINDOW);
         c
@@ -133,13 +144,17 @@ async fn install(app: &AppHandle) -> Result<(), String> {
     #[cfg(not(windows))]
     let mut cmd = {
         let mut c = tokio::process::Command::new("/bin/bash");
-        c.arg(&path).args(["--commit", HERMES_COMMIT, "--non-interactive", "--skip-browser", "--skip-computer-use"]);
+        c.arg(path).args(["--commit", HERMES_COMMIT, "--non-interactive", "--skip-browser", "--skip-computer-use"]);
         if let Ok(home) = app.path().home_dir() {
             c.env("PATH", child_path(&home.join(".local").join("bin")));
         }
         c
     };
     cmd.stdin(Stdio::null()).stdout(Stdio::from(log)).stderr(Stdio::from(log2)).kill_on_drop(true);
+    // Checked again just before it runs, in case the file changed after the download.
+    if format!("{:x}", Sha256::digest(std::fs::read(path).map_err(|e| e.to_string())?)) != want {
+        return Err("The Hermes installer changed after its SHA-256 check, so it was not run.".into());
+    }
     let mut child = cmd.spawn().map_err(|e| format!("Could not start the Hermes installer: {e}"))?;
     let status = tokio::time::timeout(INSTALL_LIMIT, child.wait())
         .await
@@ -148,7 +163,7 @@ async fn install(app: &AppHandle) -> Result<(), String> {
     if !status.success() {
         return Err(format!("The Hermes installer stopped with an error. See {}.", log_path.display()));
     }
-    binary(app).map(|_| ()).ok_or_else(|| format!("The installer finished but the hermes command was not found. See {}.", log_path.display()))
+    Ok(())
 }
 
 #[tauri::command]
@@ -193,10 +208,15 @@ pub async fn hermes_run(app: AppHandle, task: String) -> Result<String, String> 
     let st = app.state::<Shared>();
     let bin = binary(&app).ok_or("Hermes Agent is not installed. Open Aspire Settings and choose Install.")?;
     let (provider, model, env, key) = pick(&st)?;
+    // A .cmd or .bat shim runs through cmd.exe, which reads these characters in arguments itself.
+    let shim = cfg!(windows) && bin.extension().is_some_and(|e| !e.eq_ignore_ascii_case("exe"));
+    if shim && task.contains(['\r', '\n', '%', '^', '&', '|', '<', '>', '"', '!']) {
+        return Err("With this Hermes install, a task cannot contain line breaks or these characters: % ^ & | < > \" !".into());
+    }
     let _busy = Busy::take(&st.hermes_busy).ok_or("Hermes Agent is already working on a task.")?;
     let w = words(&st.settings().lang);
-    if !confirm(&app, &fill(w.hermes, &[("task", task.as_str())]), Instant::now() + Duration::from_secs(300)).await {
-        return Err("The person did not allow it.".into());
+    if !confirm(&app, &fill(w.hermes, &[("task", task.as_str())]), Instant::now() + Duration::from_secs(300), true).await {
+        return Err("The person did not allow it, or another Allow window stayed open.".into());
     }
     let query = if task.starts_with('-') { format!("Task: {task}") } else { task };
     let mut cmd = tokio::process::Command::new(&bin);

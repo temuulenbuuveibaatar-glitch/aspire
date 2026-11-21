@@ -56,6 +56,24 @@ const NOT_INSTALLED: &str = "The local model is not downloaded yet. Open Aspire 
 #[cfg(windows)]
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// The Windows folder, from the system rather than the environment. Programs Aspire starts are
+/// named by full path: a bare name is looked up in Aspire's own (user-writable) folder first.
+#[cfg(windows)]
+pub fn windows_dir() -> PathBuf {
+    use std::os::windows::ffi::OsStringExt;
+    let mut buf = [0u16; 260];
+    let n = unsafe { windows_sys::Win32::System::SystemInformation::GetSystemWindowsDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+    if n == 0 || n >= buf.len() {
+        return PathBuf::from(r"C:\Windows");
+    }
+    PathBuf::from(std::ffi::OsString::from_wide(&buf[..n]))
+}
+
+#[cfg(windows)]
+pub fn sys32(p: &str) -> PathBuf {
+    windows_dir().join("System32").join(p)
+}
+
 pub struct Llama {
     child: Child,
     port: u16,
@@ -119,9 +137,9 @@ pub fn kill_stale(st: &Shared) {
     {
         use std::os::windows::process::CommandExt;
         let filter = format!("PID eq {pid}");
-        let out = Command::new("tasklist").args(["/FI", filter.as_str(), "/FO", "CSV", "/NH"]).creation_flags(CREATE_NO_WINDOW).output();
+        let out = Command::new(sys32("tasklist.exe")).args(["/FI", filter.as_str(), "/FO", "CSV", "/NH"]).creation_flags(CREATE_NO_WINDOW).output();
         if out.is_ok_and(|o| String::from_utf8_lossy(&o.stdout).to_lowercase().contains("\"llama-server.exe\"")) {
-            let _ = Command::new("taskkill").args(["/PID", pid.to_string().as_str(), "/F"]).creation_flags(CREATE_NO_WINDOW).status();
+            let _ = Command::new(sys32("taskkill.exe")).args(["/PID", pid.to_string().as_str(), "/F"]).creation_flags(CREATE_NO_WINDOW).status();
         }
     }
     #[cfg(unix)]

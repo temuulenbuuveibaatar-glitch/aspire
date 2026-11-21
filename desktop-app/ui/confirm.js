@@ -1,5 +1,6 @@
 // The Allow / Deny window. Deny has the focus, so Enter or Space typed into this window by
-// accident denies; Escape denies; Allow is enabled only after a short delay (Rust checks it too).
+// accident denies; Escape denies; Allow is enabled only after a short delay, counted again each
+// time the window gets the focus (Rust checks it too).
 "use strict";
 
 const { invoke } = window.__TAURI__.core;
@@ -19,7 +20,15 @@ async function start() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") answer(false);
   });
-  setTimeout(() => ($("allow").disabled = false), p.delayMs + 100);
+  let timer;
+  const hold = () => {
+    $("allow").disabled = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => ($("allow").disabled = false), p.delayMs + 100);
+  };
+  window.addEventListener("focus", hold);
+  window.addEventListener("blur", () => ($("allow").disabled = true));
+  hold();
 }
 
 start().catch(() => answer(false));

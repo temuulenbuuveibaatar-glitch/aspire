@@ -5,7 +5,7 @@
 // expires. Only five fixed kinds exist (open_app, open_url, type_text, save_file, fill_form);
 // nothing from the server is ever run as a command.
 use crate::confirm::confirm;
-use crate::state::{lock, Busy, Shared, DESKTOP_TOKEN, SITE};
+use crate::state::{lock, Shared, DESKTOP_TOKEN, SITE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -61,6 +61,7 @@ pub struct Words {
     type_text: &'static str,
     save_file: &'static str,
     fill_form: &'static str,
+    mail: &'static str,
     pub hermes: &'static str,
 }
 
@@ -69,55 +70,60 @@ const EN: Words = Words {
     allow: "Allow",
     deny: "Deny",
     open_app: "Open the app \"{app}\":\n{target}",
-    open_url: "Open this page in your browser:\n{url}",
+    open_url: "Open this page in your browser:\nSite: {host}\n\n{url}",
     type_text: "Type this text. After you allow it, click the window to type into within 3 seconds. [Enter] and [Tab] mark the keys that will be pressed:\n\n{text}",
-    save_file: "Save the file \"{name}\" ({kb} KB) in {dir}.",
+    save_file: "Save the file \"{name}\" ({kb} KB) in {dir}. It starts with:\n\n{text}",
     fill_form: "Fill a form. After you allow it, click its first field within 3 seconds; Aspire types each value and presses Tab between them:\n\n{fields}",
-    hermes: "Let Hermes Agent do this task on your computer? For up to 10 minutes it may run programs and change files. Commands Hermes considers dangerous are blocked.\n\nTask:\n{task}",
+    mail: "Open your mail app with a new email. Nothing is sent until you send it there.\nTo: {to}\nSubject: {subject}\n\n{body}",
+    hermes: "Let Hermes Agent do this task on your computer? For up to 10 minutes it may run programs and change files. Commands Hermes considers dangerous are blocked. Hermes and the programs it starts can read your Claude or OpenAI API key, so a task that reads web pages or files could be tricked into sending the key elsewhere.\n\nTask:\n{task}",
 };
 const MN: Words = Words {
     title: "Aspire таны компьютер дээр үүнийг хийх гэж байна",
     allow: "Зөвшөөрөх",
     deny: "Татгалзах",
     open_app: "\"{app}\" програмыг нээх:\n{target}",
-    open_url: "Энэ хуудсыг хөтөч дээр нээх:\n{url}",
+    open_url: "Энэ хуудсыг хөтөч дээр нээх:\nСайт: {host}\n\n{url}",
     type_text: "Энэ текстийг бичих. Зөвшөөрснөөс хойш 3 секундэд бичих цонхоо дарна уу. [Enter], [Tab] нь дарагдах товчийг заана:\n\n{text}",
-    save_file: "\"{name}\" файлыг ({kb} KB) {dir} хавтсанд хадгалах.",
+    save_file: "\"{name}\" файлыг ({kb} KB) {dir} хавтсанд хадгалах. Эхлэл нь:\n\n{text}",
     fill_form: "Маягт бөглөх. Зөвшөөрснөөс хойш 3 секундэд эхний талбарыг нь дарна уу. Aspire утга бүрийг бичээд хооронд нь Tab дарна:\n\n{fields}",
-    hermes: "Hermes Agent энэ ажлыг таны компьютер дээр хийх үү? Тэр 10 минут хүртэл програм ажиллуулж, файл өөрчилж болно. Hermes аюултай гэж үзсэн командууд хаагдана.\n\nДаалгавар:\n{task}",
+    mail: "Имэйлийн програмаа шинэ захидалтай нээх. Та тэндээс илгээх хүртэл юу ч илгээгдэхгүй.\nХэнд: {to}\nГарчиг: {subject}\n\n{body}",
+    hermes: "Hermes Agent энэ ажлыг таны компьютер дээр хийх үү? Тэр 10 минут хүртэл програм ажиллуулж, файл өөрчилж болно. Hermes аюултай гэж үзсэн командууд хаагдана. Hermes болон түүний ажиллуулсан програмууд таны Claude эсвэл OpenAI API түлхүүрийг уншиж чадна, тиймээс вэб хуудас эсвэл файл уншдаг ажлыг хууран мэхэлж түлхүүрийг өөр газар илгээлгэж болзошгүй.\n\nДаалгавар:\n{task}",
 };
 const ZH: Words = Words {
     title: "Aspire 想在你的电脑上执行以下操作",
     allow: "允许",
     deny: "拒绝",
     open_app: "打开应用“{app}”：\n{target}",
-    open_url: "在浏览器中打开此网页：\n{url}",
+    open_url: "在浏览器中打开此网页：\n网站：{host}\n\n{url}",
     type_text: "输入这段文字。允许后请在 3 秒内点击要输入的窗口。[Enter] 和 [Tab] 表示将按下的键：\n\n{text}",
-    save_file: "将文件“{name}”（{kb} KB）保存到 {dir}。",
+    save_file: "将文件“{name}”（{kb} KB）保存到 {dir}。开头内容：\n\n{text}",
     fill_form: "填写表单。允许后请在 3 秒内点击第一个输入框；Aspire 会逐项输入，并在每项之间按 Tab：\n\n{fields}",
-    hermes: "让 Hermes Agent 在你的电脑上执行此任务吗？在最多 10 分钟内，它可能运行程序和修改文件。Hermes 认为危险的命令会被阻止。\n\n任务：\n{task}",
+    mail: "在邮件应用中新建一封邮件。在你亲自发送之前，不会发送任何内容。\n收件人：{to}\n主题：{subject}\n\n{body}",
+    hermes: "让 Hermes Agent 在你的电脑上执行此任务吗？在最多 10 分钟内，它可能运行程序和修改文件。Hermes 认为危险的命令会被阻止。Hermes 及其启动的程序可以读取你的 Claude 或 OpenAI API 密钥，因此读取网页或文件的任务可能被诱导把密钥发送到别处。\n\n任务：\n{task}",
 };
 const RU: Words = Words {
     title: "Aspire хочет сделать это на вашем компьютере",
     allow: "Разрешить",
     deny: "Отклонить",
     open_app: "Открыть приложение «{app}»:\n{target}",
-    open_url: "Открыть эту страницу в браузере:\n{url}",
+    open_url: "Открыть эту страницу в браузере:\nСайт: {host}\n\n{url}",
     type_text: "Напечатать этот текст. После разрешения в течение 3 секунд щёлкните окно, куда печатать. [Enter] и [Tab] показывают клавиши, которые будут нажаты:\n\n{text}",
-    save_file: "Сохранить файл «{name}» ({kb} КБ) в {dir}.",
+    save_file: "Сохранить файл «{name}» ({kb} КБ) в {dir}. Начало файла:\n\n{text}",
     fill_form: "Заполнить форму. После разрешения в течение 3 секунд щёлкните первое поле; Aspire введёт каждое значение и нажмёт Tab между ними:\n\n{fields}",
-    hermes: "Разрешить Hermes Agent выполнить эту задачу на вашем компьютере? До 10 минут он может запускать программы и менять файлы. Команды, которые Hermes считает опасными, блокируются.\n\nЗадача:\n{task}",
+    mail: "Открыть почтовое приложение с новым письмом. Ничего не отправится, пока вы не отправите его там сами.\nКому: {to}\nТема: {subject}\n\n{body}",
+    hermes: "Разрешить Hermes Agent выполнить эту задачу на вашем компьютере? До 10 минут он может запускать программы и менять файлы. Команды, которые Hermes считает опасными, блокируются. Hermes и запущенные им программы могут прочитать ваш API-ключ Claude или OpenAI, поэтому задачу, которая читает веб-страницы или файлы, могут обманом заставить отправить ключ куда-то ещё.\n\nЗадача:\n{task}",
 };
 const DE: Words = Words {
     title: "Aspire möchte das auf deinem Computer tun",
     allow: "Erlauben",
     deny: "Ablehnen",
     open_app: "Die App „{app}“ öffnen:\n{target}",
-    open_url: "Diese Seite im Browser öffnen:\n{url}",
+    open_url: "Diese Seite im Browser öffnen:\nWebsite: {host}\n\n{url}",
     type_text: "Diesen Text tippen. Klicke nach dem Erlauben innerhalb von 3 Sekunden in das Zielfenster. [Enter] und [Tab] zeigen die Tasten, die gedrückt werden:\n\n{text}",
-    save_file: "Die Datei „{name}“ ({kb} KB) in {dir} speichern.",
+    save_file: "Die Datei „{name}“ ({kb} KB) in {dir} speichern. Sie beginnt so:\n\n{text}",
     fill_form: "Ein Formular ausfüllen. Klicke nach dem Erlauben innerhalb von 3 Sekunden in das erste Feld; Aspire tippt jeden Wert und drückt dazwischen Tab:\n\n{fields}",
-    hermes: "Soll Hermes Agent diese Aufgabe auf deinem Computer erledigen? Bis zu 10 Minuten lang kann er Programme starten und Dateien ändern. Befehle, die Hermes für gefährlich hält, werden blockiert.\n\nAufgabe:\n{task}",
+    mail: "Deine Mail-App mit einer neuen E-Mail öffnen. Gesendet wird nichts, bis du sie dort selbst sendest.\nAn: {to}\nBetreff: {subject}\n\n{body}",
+    hermes: "Soll Hermes Agent diese Aufgabe auf deinem Computer erledigen? Bis zu 10 Minuten lang kann er Programme starten und Dateien ändern. Befehle, die Hermes für gefährlich hält, werden blockiert. Hermes und die Programme, die er startet, können deinen Claude- oder OpenAI-API-Schlüssel lesen; eine Aufgabe, die Webseiten oder Dateien liest, könnte so dazu gebracht werden, den Schlüssel anderswohin zu senden.\n\nAufgabe:\n{task}",
 };
 
 pub fn words(lang: &str) -> &'static Words {
@@ -215,7 +221,50 @@ fn https_url(p: &Value) -> Result<tauri::Url, String> {
     if u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() || u.host_str().is_none() {
         return Err("Only https:// links can be opened.".into());
     }
+    // Public sites only: no IP addresses, localhost or local network names (routers, dev servers).
+    let h = u.host_str().unwrap_or("").trim_end_matches('.').to_ascii_lowercase();
+    let local = [".local", ".localhost", ".internal", ".lan", ".home.arpa"].iter().any(|x| h.ends_with(x));
+    if h.starts_with('[') || h.parse::<std::net::Ipv4Addr>().is_ok() || !h.contains('.') || local {
+        return Err("Aspire opens public websites only, not addresses on this computer or network.".into());
+    }
     Ok(u)
+}
+
+/// Decodes %XX escapes, to show a mail link the way the mail app reads it.
+fn unpercent(s: &str) -> String {
+    let b = s.as_bytes();
+    let hex = |i: usize| b.get(i).and_then(|&c| (c as char).to_digit(16));
+    let (mut out, mut i) = (Vec::new(), 0);
+    while i < b.len() {
+        match (b[i], hex(i + 1), hex(i + 2)) {
+            (b'%', Some(h), Some(l)) => {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+            }
+            (c, _, _) => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A mailto: link, shown decoded (recipient, subject, text) and opened only after Allow. Links
+/// that add more recipients or attachments are refused.
+fn mail(w: &Words, p: &Value) -> Result<(String, Action), String> {
+    let raw = s(p, "url");
+    let u = tauri::Url::parse(raw).ok().filter(|u| u.scheme() == "mailto" && raw.len() <= URL_MAX).ok_or("The mail link is not valid.")?;
+    let (mut subject, mut body) = (String::new(), String::new());
+    for (k, v) in u.query().unwrap_or("").split('&').filter(|x| !x.is_empty()).map(|x| x.split_once('=').unwrap_or((x, ""))) {
+        match unpercent(k).to_ascii_lowercase().as_str() {
+            "subject" => subject = clean(&unpercent(v)),
+            "body" => body = clean(&unpercent(v)),
+            _ => return Err("This mail link adds recipients or attachments, so Aspire does not open it.".into()),
+        }
+    }
+    let to = clean(&unpercent(u.path()));
+    Ok((fill(w.mail, &[("to", to.as_str()), ("subject", subject.as_str()), ("body", body.as_str())]), Action::OpenUrl(u)))
 }
 
 fn text(p: &Value) -> Result<String, String> {
@@ -253,7 +302,31 @@ fn file(p: &Value) -> Result<(String, String), String> {
     if content.len() > FILE_MAX {
         return Err("The file is larger than 200 KB.".into());
     }
-    Ok((name, content.to_string()))
+    let content = match name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).as_deref() {
+        Some("csv") => defuse(content, &[',', ';']),
+        Some("tsv") => defuse(content, &['\t']),
+        _ => content.to_string(),
+    };
+    Ok((name, content))
+}
+
+/// Spreadsheet apps run a cell that starts with = + - @ as a formula, so such a cell gets a
+/// leading ' (plain numbers like -5 stay as they are).
+fn defuse(content: &str, seps: &[char]) -> String {
+    let end = |c: char| seps.contains(&c) || c == '\n';
+    let mut out = String::with_capacity(content.len() + 16);
+    for piece in content.split_inclusive(end) {
+        let quoted = piece.starts_with('"');
+        let cell = &piece[quoted as usize..];
+        let value = cell.trim_end_matches(|c: char| end(c) || c == '\r' || c == '"');
+        if cell.starts_with(['=', '+', '-', '@']) && value.trim().parse::<f64>().is_err() {
+            out.push_str(if quoted { "\"'" } else { "'" });
+            out.push_str(cell);
+        } else {
+            out.push_str(piece);
+        }
+    }
+    out
 }
 
 fn fields(p: &Value) -> Result<Vec<(String, String)>, String> {
@@ -292,7 +365,7 @@ async fn prepare(app: &AppHandle, job: &Job) -> Result<(String, Action), String>
         }
         "open_url" => {
             let u = https_url(p)?;
-            (fill(w.open_url, &[("url", u.as_str())]), Action::OpenUrl(u))
+            (fill(w.open_url, &[("host", u.host_str().unwrap_or("")), ("url", u.as_str())]), Action::OpenUrl(u))
         }
         "type_text" => {
             let t = text(p)?;
@@ -302,7 +375,9 @@ async fn prepare(app: &AppHandle, job: &Job) -> Result<(String, Action), String>
             let (name, content) = file(p)?;
             let kb = content.len().div_ceil(1024).to_string();
             let dir = aspire_dir(app)?.display().to_string();
-            (fill(w.save_file, &[("name", name.as_str()), ("kb", kb.as_str()), ("dir", dir.as_str())]), Action::Save { name, content })
+            let start = preview(&clean(&content), 1500);
+            let vars = [("name", name.as_str()), ("kb", kb.as_str()), ("dir", dir.as_str()), ("text", start.as_str())];
+            (fill(w.save_file, &vars), Action::Save { name, content })
         }
         "fill_form" => {
             let f = fields(p)?;
@@ -388,15 +463,27 @@ fn best<T>(name: &str, items: impl Iterator<Item = (String, T)>) -> Option<(Stri
     pick.map(|(_, _, label, t)| (label, t))
 }
 
-/// Shells, terminals and script hosts are never opened from a job, whatever they are called.
+/// Shells, terminals, script hosts and interpreters are never opened, whatever they are called:
+/// checked on the name and on the program the shortcut or AppID really runs.
 fn is_shell(name: &str, target: &str) -> bool {
-    const ANY: [&str; 13] = [
-        "powershell", "pwsh", "terminal", "command prompt", "iterm", "script editor", "wscript", "cscript", "mshta", "osascript",
-        "git bash", "wezterm", "alacritty",
+    const ANY: [&str; 19] = [
+        "powershell", "pwsh", "terminal", "command prompt", "iterm", "script editor", "automator", "wscript", "cscript", "mshta",
+        "osascript", "git bash", "wezterm", "alacritty", "cmd", "wsl", "ubuntu", "debian", "python",
     ];
-    const EXACT: [&str; 9] = ["cmd", "bash", "zsh", "sh", "console", "kitty", "warp", "hyper", "ghostty"];
+    const EXACT: [&str; 10] = ["bash", "zsh", "sh", "console", "kitty", "warp", "hyper", "ghostty", "run", "node.js"];
+    const EXES: [&str; 22] = [
+        "cmd", "powershell", "powershell_ise", "pwsh", "wsl", "wslg", "bash", "sh", "wt", "windowsterminal", "openconsole", "conhost",
+        "wscript", "cscript", "mshta", "rundll32", "regsvr32", "msiexec", "node", "py", "pyw", "mintty",
+    ];
     let (n, t) = (name.to_lowercase(), target.to_lowercase());
-    ANY.iter().any(|x| n.contains(x) || t.contains(x)) || EXACT.contains(&n.as_str()) || t.ends_with("cmd.exe") || t.ends_with("\\cmd.lnk")
+    // The program file at the end of a path or an AppID ("{GUID}\System32\cmd.exe", "...!ubuntu").
+    let file = t.rsplit(['\\', '/', '!']).next().unwrap_or("");
+    let file = file.strip_suffix(".exe").unwrap_or(file);
+    ANY.iter().any(|x| n.contains(x) || t.contains(x))
+        || EXACT.contains(&n.as_str())
+        || EXES.contains(&file)
+        || file.starts_with("python")
+        || file.starts_with("ubuntu")
 }
 
 #[cfg(windows)]
@@ -414,7 +501,34 @@ fn collect_links(dir: &std::path::Path, depth: u8, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// (Name to show, exact target): a Start menu shortcut, or an installed app's AppID.
+/// The program a Start menu shortcut really runs. Refused when it is not an .exe or passes
+/// arguments, either of which can hide a shell command behind a harmless name. The path reaches
+/// the fixed query through an environment variable, never through the command text.
+#[cfg(windows)]
+async fn shortcut_target(label: &str, lnk: &std::path::Path) -> Result<String, String> {
+    let out = tokio::process::Command::new(crate::local::sys32(r"WindowsPowerShell\v1.0\powershell.exe"))
+        .env("ASPIRE_LNK", lnk)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:ASPIRE_LNK); @{t=$s.TargetPath;a=$s.Arguments}|ConvertTo-Json -Compress",
+        ])
+        .creation_flags(crate::local::CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    let v: Value = serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim_start_matches('\u{feff}').trim()).unwrap_or(Value::Null);
+    let (t, a) = (s(&v, "t"), s(&v, "a"));
+    let p = std::path::Path::new(t);
+    if !t.to_ascii_lowercase().ends_with(".exe") || !p.is_absolute() || !p.is_file() || !a.trim().is_empty() {
+        return Err(format!("The shortcut \"{label}\" runs more than a plain program, so Aspire does not open it."));
+    }
+    Ok(t.to_string())
+}
+
+/// (Name to show, exact target): the program of a Start menu shortcut, or an installed app's AppID.
 #[cfg(windows)]
 async fn find_app(name: &str) -> Result<(String, String), String> {
     // 1. Start menu shortcuts (all users and this user).
@@ -425,10 +539,11 @@ async fn find_app(name: &str) -> Result<(String, String), String> {
         }
     }
     if let Some((label, path)) = best(name, links.into_iter().filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_string(), p)))) {
-        return Ok((label, path.display().to_string()));
+        let target = shortcut_target(&label, &path).await?;
+        return Ok((label, target));
     }
     // 2. Installed apps (Notepad, Calculator, ...): a fixed PowerShell query with no input from the job.
-    let out = tokio::process::Command::new("powershell.exe")
+    let out = tokio::process::Command::new(crate::local::sys32(r"WindowsPowerShell\v1.0\powershell.exe"))
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -495,7 +610,7 @@ async fn launch(app: &AppHandle, target: &str) -> Result<(), String> {
     {
         if target.starts_with("shell:AppsFolder\\") {
             use std::os::windows::process::CommandExt;
-            std::process::Command::new("explorer.exe")
+            std::process::Command::new(crate::local::windows_dir().join("explorer.exe"))
                 .arg(target)
                 .creation_flags(crate::local::CREATE_NO_WINDOW)
                 .spawn()
@@ -654,7 +769,7 @@ async fn handle(app: &AppHandle, st: &Shared, token: &str, job: Job) {
     let (ok, outcome, message) = match prepare(app, &job).await {
         Err(e) => (false, "failed", e),
         Ok((text, action)) => {
-            let allowed = confirm(app, &text, deadline).await;
+            let allowed = confirm(app, &text, deadline, true).await;
             if Instant::now() >= deadline {
                 expired()
             } else if !allowed {
@@ -739,58 +854,52 @@ pub async fn poll_loop(app: AppHandle) {
 
 // ---------------------------------------------------------------------------------------------
 // Bridge: the Aspire page in the main window asks to open a page or an app
-// (capabilities/remote.json). Same checks, Allow / Deny window and executors as a job. One
-// prompt at a time and BRIDGE_PER_MINUTE a minute; extra requests are refused, never queued.
+// (capabilities/remote.json). Same checks, Allow / Deny window and executors as a job.
+// BRIDGE_PER_MINUTE a minute, one at a time, and refused (never queued) while any Allow window
+// is open. Links and popups from any frame (open_link) have a limit of their own.
 
 const BRIDGE_PER_MINUTE: u32 = 10;
 const BRIDGE_WAIT: Duration = Duration::from_secs(120);
 /// Everything the remote page may call (capabilities/remote.json).
 const REMOTE_COMMANDS: [&str; 6] = ["brain_status", "brain_chat", "pairing_status", "desktop_open_url", "desktop_open_app", "desktop_capabilities"];
 
-fn bridge_slot(st: &Shared) -> Option<Busy<'_>> {
-    let mut rate = lock(&st.bridge_rate);
-    if rate.0.elapsed() >= Duration::from_secs(60) {
-        *rate = (Instant::now(), 0);
-    }
-    if rate.1 >= BRIDGE_PER_MINUTE {
-        return None;
-    }
-    let busy = Busy::take(&st.bridge_busy)?;
-    rate.1 += 1;
-    Some(busy)
-}
-
-async fn bridge(app: &AppHandle, kind: &str, payload: Value) -> Value {
-    let reply = |ok: bool, message: String| json!({ "ok": ok, "message": message });
+async fn bridge(app: &AppHandle, popup: bool, kind: &str, payload: Value) -> Value {
+    let reply = |ok: bool, message: &str| json!({ "ok": ok, "message": message });
+    let busy = "Another Allow window is open, or there were too many requests. Try again in a minute.";
     let st = app.state::<Shared>();
     // Taken before resolving the app, so a flood never starts app searches either.
-    let Some(_slot) = bridge_slot(&st) else {
-        return reply(false, "Another request is waiting for an answer, or there were too many. Try again in a minute.".into());
+    let Some(_slot) = (if popup { &st.popups } else { &st.bridge }).take(BRIDGE_PER_MINUTE) else {
+        return reply(false, busy);
     };
+    if st.prompt_gate.try_lock().is_err() {
+        return reply(false, busy);
+    }
+    let w = words(&st.settings().lang);
     let job = Job { id: String::new(), kind: kind.into(), payload, expires_in_ms: None };
-    let (text, action) = match prepare(app, &job).await {
+    let prepared = if kind == "mailto" { mail(w, &job.payload) } else { prepare(app, &job).await };
+    let (text, action) = match prepared {
         Ok(x) => x,
-        Err(e) => return reply(false, e),
+        Err(e) => return reply(false, &e),
     };
-    if !confirm(app, &text, Instant::now() + BRIDGE_WAIT).await {
-        return reply(false, "The person did not allow it.".into());
+    if !confirm(app, &text, Instant::now() + BRIDGE_WAIT, false).await {
+        return reply(false, "The person did not allow it, or another Allow window was open.");
     }
     match run(app, action).await {
-        Ok(m) => reply(true, m),
-        Err(e) => reply(false, e),
+        Ok(m) => reply(true, &m),
+        Err(e) => reply(false, &e),
     }
 }
 
 /// Opens an https:// page in the person's browser after Allow. Returns {ok, message}.
 #[tauri::command]
 pub async fn desktop_open_url(app: AppHandle, url: String) -> Value {
-    bridge(&app, "open_url", json!({ "url": url })).await
+    bridge(&app, false, "open_url", json!({ "url": url })).await
 }
 
 /// Opens an installed app (found like a job's open_app) after Allow. Returns {ok, message}.
 #[tauri::command]
 pub async fn desktop_open_app(app: AppHandle, name: String) -> Value {
-    bridge(&app, "open_app", json!({ "app": name })).await
+    bridge(&app, false, "open_app", json!({ "app": name })).await
 }
 
 #[tauri::command]
@@ -798,23 +907,16 @@ pub fn desktop_capabilities(app: AppHandle) -> Value {
     json!({ "version": app.package_info().version.to_string(), "commands": REMOTE_COMMANDS })
 }
 
-/// A link the main window navigates to or opens outside Aspire: https pages after Allow, mail
-/// links straight to the mail app (nothing is sent without the person). Both count toward the
-/// bridge limit, so a page cannot flood prompts or mail windows.
+/// A link the main window navigates to or opens outside Aspire, from any frame: https pages in
+/// the browser and mail links in the mail app, each after Allow.
 pub fn open_link(app: &AppHandle, u: &tauri::Url) {
-    match u.scheme() {
-        "https" => {
-            let (app, url) = (app.clone(), u.to_string());
-            tauri::async_runtime::spawn(async move {
-                bridge(&app, "open_url", json!({ "url": url })).await;
-            });
-        }
-        "mailto" if u.as_str().len() <= URL_MAX => {
-            let st = app.state::<Shared>();
-            if bridge_slot(&st).is_some() {
-                let _ = app.opener().open_url(u.as_str(), None::<&str>);
-            }
-        }
-        _ => {}
-    }
+    let kind = match u.scheme() {
+        "https" => "open_url",
+        "mailto" => "mailto",
+        _ => return,
+    };
+    let (app, url) = (app.clone(), u.to_string());
+    tauri::async_runtime::spawn(async move {
+        bridge(&app, true, kind, json!({ "url": url })).await;
+    });
 }

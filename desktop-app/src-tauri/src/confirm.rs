@@ -1,7 +1,9 @@
 // The Allow / Deny window for desktop jobs and Hermes tasks. It is a small bundled page rather
 // than a native message box, so the whole text is always shown (it scrolls, nothing is cut),
 // Deny is the default button (Enter or Space while typing elsewhere denies), Allow works only
-// after ALLOW_DELAY, it stays on top, and an unanswered prompt is denied at its deadline.
+// after ALLOW_DELAY, counted again each time the window gets the focus, it stays on top, and an
+// unanswered prompt is denied at its deadline. Only one such window is ever open, whatever asked
+// for it (a job, the page, a link, Hermes), so a click can never land on a hidden one below.
 // The page can only read and answer its own prompt: the id comes from the window label.
 use crate::desktop::words;
 use crate::state::{lock, Shared};
@@ -23,8 +25,15 @@ fn id_of(w: &WebviewWindow) -> Option<u32> {
 }
 
 /// Shows `text` and waits: true on Allow; false on Deny, on closing the window or at `deadline`.
-pub async fn confirm(app: &AppHandle, text: &str, deadline: Instant) -> bool {
+/// While another Allow window is open: with `wait`, waits for it until `deadline`; without, false.
+pub async fn confirm(app: &AppHandle, text: &str, deadline: Instant, wait: bool) -> bool {
     let st = app.state::<Shared>();
+    let gate = if wait {
+        tokio::time::timeout(deadline.saturating_duration_since(Instant::now()), st.prompt_gate.lock()).await.ok()
+    } else {
+        st.prompt_gate.try_lock().ok()
+    };
+    let Some(_gate) = gate else { return false };
     let id = st.next_prompt.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = tokio::sync::oneshot::channel();
     lock(&st.prompts).insert(id, Prompt { text: text.to_string(), shown: Instant::now(), reply: tx });
@@ -43,11 +52,16 @@ pub async fn confirm(app: &AppHandle, text: &str, deadline: Instant) -> bool {
         return false;
     };
     let h = app.clone();
-    win.on_window_event(move |e| {
-        if let WindowEvent::Destroyed = e {
-            // Dropping the sender answers false.
-            lock(&h.state::<Shared>().prompts).remove(&id);
+    win.on_window_event(move |e| match e {
+        // Dropping the sender answers false.
+        WindowEvent::Destroyed => drop(lock(&h.state::<Shared>().prompts).remove(&id)),
+        // Allow waits ALLOW_DELAY again after every focus change (confirm.js shows it).
+        WindowEvent::Focused(true) => {
+            if let Some(p) = lock(&h.state::<Shared>().prompts).get_mut(&id) {
+                p.shown = Instant::now();
+            }
         }
+        _ => {}
     });
     let _ = win.set_focus();
     let _ = win.request_user_attention(Some(UserAttentionType::Critical));
