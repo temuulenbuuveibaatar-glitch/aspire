@@ -20,12 +20,14 @@ import {
   WandSparkles,
 } from "lucide-react";
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, type CSSProperties } from "react";
 import { HTML_LANG, isLang, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
 import { SITE_URL as ORIGIN } from "@/lib/site";
 import type { LandingWeather } from "@/lib/landing-weather";
 import { LANDING_TEXT, type LandingText } from "./LandingCopy";
 import { LandingSky } from "./LandingSky";
+import { Reveal } from "./Reveal";
+import "./landing-motion.css";
 
 const OG_LOCALE: Record<Lang, string> = { mn: "mn_MN", zh: "zh_CN", en: "en_US", ru: "ru_RU", de: "de_DE" };
 const FEATURE_ICONS = [Radio, Languages, WandSparkles, Sparkles, MessagesSquare, ShieldCheck];
@@ -126,12 +128,15 @@ const PRIMARY =
 const SECONDARY =
   "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-line-strong bg-surface-2 px-6 font-medium text-ink hover:bg-surface-3";
 const H2 = "text-greeting text-ink";
+/** Order in a staggered entrance or reveal (landing-motion.css reads --i). */
+const at = (i: number) => ({ "--i": i }) as CSSProperties;
 
 export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<LandingWeather | null> }) {
   const l = landingLang(lang);
   const t = LANDING_TEXT[l];
   return (
-    <div lang={HTML_LANG[l]} className="min-h-dvh overflow-x-clip text-ink">
+    <div lang={HTML_LANG[l]} data-landing className="lm min-h-dvh overflow-x-clip text-ink">
+      <Reveal />
       {/* The root layout renders <html lang="en">; set the document language for JS clients
           (screen readers, Google). The div lang above covers clients without JS. */}
       <script dangerouslySetInnerHTML={{ __html: `document.documentElement.lang=${JSON.stringify(HTML_LANG[l])}` }} />
@@ -187,14 +192,18 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
                 <SkyChip weather={weather} />
               </Suspense>
             )}
-            <p className="text-reply font-semibold text-accent">{t.eyebrow}</p>
+            <p className="lm-rise text-reply font-semibold text-accent" style={at(1)}>
+              {t.eyebrow}
+            </p>
             {/* The brand sits in the h1 so "Aspire" + keyword searches match title, h1 and body. */}
-            <h1 id="hero-title" className="mt-3 text-city text-ink">
+            <h1 id="hero-title" className="lm-rise mt-3 text-city text-ink" style={at(2)}>
               <span className="sr-only">Aspire</span>{" "}
               {t.title}
             </h1>
-            <p className="mt-5 max-w-[38rem] text-lead text-ink-muted">{t.lead}</p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <p className="lm-rise mt-5 max-w-[38rem] text-lead text-ink-muted" style={at(3)}>
+              {t.lead}
+            </p>
+            <div className="lm-rise mt-8 flex flex-wrap gap-3" style={at(4)}>
               <a href="/login" className={`${PRIMARY} no-underline`}>
                 {t.cta}
               </a>
@@ -208,14 +217,14 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
 
         {/* 2. What it does */}
         <section id="features" aria-labelledby="features-title" className="scroll-mt-6 py-10">
-          <h2 id="features-title" className={H2}>
+          <h2 id="features-title" className={H2} data-reveal>
             {t.featuresTitle}
           </h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {t.features.map((f, i) => {
               const Icon = FEATURE_ICONS[i];
               return (
-                <li key={f.title} className="v6-card p-5">
+                <li key={f.title} className="lm-card v6-card p-5" data-reveal style={at(i % 3)}>
                   <span className="inline-flex size-11 items-center justify-center rounded-full bg-surface-3 text-accent">
                     <Icon className="size-5" aria-hidden />
                   </span>
@@ -229,12 +238,12 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
 
         {/* 3. How it works */}
         <section id="how" aria-labelledby="how-title" className="scroll-mt-6 py-10">
-          <h2 id="how-title" className={H2}>
+          <h2 id="how-title" className={H2} data-reveal>
             {t.howTitle}
           </h2>
           <ul className="mt-6 grid gap-4 md:grid-cols-3">
             {t.steps.map((s, i) => (
-              <li key={s.title} className="v6-card flex gap-4 p-5">
+              <li key={s.title} className="lm-card v6-card flex gap-4 p-5" data-reveal style={at(i)}>
                 <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-body font-semibold text-on-accent">
                   {i + 1}
                 </span>
@@ -249,15 +258,15 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
 
         {/* 4. Cities */}
         <section id="cities" aria-labelledby="cities-title" className="scroll-mt-6 py-10">
-          <h2 id="cities-title" className={H2}>
+          <h2 id="cities-title" className={H2} data-reveal>
             {t.citiesTitle}
           </h2>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {[
               { Icon: MapPin, ...t.erdenet },
               { Icon: Globe, ...t.world },
-            ].map(({ Icon, title, body }) => (
-              <div key={title} className="v6-card flex gap-4 p-5">
+            ].map(({ Icon, title, body }, i) => (
+              <div key={title} className="lm-card v6-card flex gap-4 p-5" data-reveal style={at(i)}>
                 <Icon className="mt-0.5 size-6 shrink-0 text-accent" aria-hidden />
                 <div>
                   <h3 className="text-body font-semibold text-ink">{title}</h3>
@@ -270,7 +279,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
 
         {/* 5. Run it yourself: Aspire Desktop, own keys, own server. */}
         <section id="self-host" aria-labelledby="self-title" className="scroll-mt-6 py-10">
-          <h2 id="self-title" className={H2}>
+          <h2 id="self-title" className={H2} data-reveal>
             {t.selfTitle}
           </h2>
           <p className="mt-3 max-w-[44rem] text-body text-ink-muted">{t.selfLead}</p>
@@ -278,7 +287,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
             {t.self.map((s, i) => {
               const Icon = SELF_ICONS[i];
               return (
-                <li key={s.title} className="v6-card p-5">
+                <li key={s.title} className="lm-card v6-card p-5" data-reveal style={at(i)}>
                   <span className="inline-flex size-11 items-center justify-center rounded-full bg-surface-3 text-accent">
                     <Icon className="size-5" aria-hidden />
                   </span>
@@ -298,12 +307,12 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
 
         {/* 6. FAQ */}
         <section id="faq" aria-labelledby="faq-title" className="scroll-mt-6 py-10">
-          <h2 id="faq-title" className={H2}>
+          <h2 id="faq-title" className={H2} data-reveal>
             {t.faqTitle}
           </h2>
           <div className="mt-6 space-y-3">
             {t.faq.map((item, i) => (
-              <details key={item.q} className="group v6-card">
+              <details key={item.q} className="group v6-card" data-reveal style={at(i)}>
                 <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-body font-semibold text-ink [&::-webkit-details-marker]:hidden">
                   {item.q}
                   <ChevronDown className="size-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180 still:transition-none" aria-hidden />
@@ -355,7 +364,7 @@ async function SkyChip({ weather }: { weather: Promise<LandingWeather | null> })
   if (!w) return null;
   const t = Math.round(w.tempC);
   return (
-    <p className="v6-chip mb-4 w-fit gap-2 px-3 py-1 text-meta text-ink">
+    <p className="lm-rise v6-chip mb-4 w-fit gap-2 px-3 py-1 text-meta text-ink">
       <span aria-hidden className="size-1.5 rounded-full bg-accent" />
       <span>{w.place}</span>
       <span className="num">{`${t < 0 ? "−" : ""}${Math.abs(t)}°`}</span>
@@ -369,7 +378,7 @@ function HudMock({ t }: { t: LandingText }) {
   const m = t.mock;
   const skyline = [38, 62, 46, 78, 54, 30, 66, 42, 58, 34];
   return (
-    <figure className="mx-auto w-full max-w-[20rem]">
+    <figure className="lm-arrive mx-auto w-full max-w-[20rem]">
       <div role="img" aria-label={m.label} className="rounded-[2.5rem] border border-line-strong bg-surface p-2.5 shadow-lift">
         <div className="overflow-hidden rounded-[2rem] bg-bg">
           {/* "City photo": a gradient sky and a block skyline, no real image. */}
@@ -387,14 +396,16 @@ function HudMock({ t }: { t: LandingText }) {
             </div>
           </div>
           <div className="space-y-2.5 p-3">
-            <div className="flex items-center gap-3 rounded-[1rem] border border-line bg-surface px-3 py-2.5">
+            <div className="lm-step flex items-center gap-3 rounded-[1rem] border border-line bg-surface px-3 py-2.5" style={{ "--at": "1500ms" } as CSSProperties}>
               <span className="inline-flex size-9 items-center justify-center rounded-full bg-surface-3 text-accent">
                 <Bus className="size-4" />
               </span>
               <span className="flex-1 text-card text-ink">{m.bus}</span>{" "}
               <span className="font-mono text-value-sm text-sched">{m.mins}</span>
             </div>
-            <div className="ml-auto w-fit max-w-[85%] rounded-[1rem] rounded-br-sm bg-surface-2 px-3 py-2 text-copy text-ink">{m.ask}</div>
+            <div className="lm-step ml-auto w-fit max-w-[85%] rounded-[1rem] rounded-br-sm bg-surface-2 px-3 py-2 text-copy text-ink" style={{ "--at": "900ms" } as CSSProperties}>
+              {m.ask}
+            </div>
             <div className="flex justify-center pt-1">
               <span className="inline-flex size-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-accent">
                 <Mic className="size-5" />

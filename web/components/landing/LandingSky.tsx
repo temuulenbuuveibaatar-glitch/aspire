@@ -12,9 +12,10 @@ export function LandingSky({ weather }: { weather: Promise<LandingWeather | null
   if (!w) return null;
   return (
     <>
-      {/* maxDpr 0.5: a quarter of the pixels. A full-size canvas at 60 fps made the page stutter. */}
-      <Sky kind={w.sky.kind} intensity={w.sky.intensity} isDay={w.sky.isDay} windKph={w.sky.windKph} localHour={w.localHour} cloudCover={w.sky.cloudCover} className="z-0" maxDpr={0.5} />
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 bg-bg/45" />
+      {/* maxDpr 0.5: a quarter of the pixels (a full-size canvas at 60 fps made the page stutter). Desaturated
+          and dimmed so dusk and dawn stay in the brand's dark green range instead of bright pink and purple. */}
+      <Sky kind={w.sky.kind} intensity={w.sky.intensity} isDay={w.sky.isDay} windKph={w.sky.windKph} localHour={w.localHour} cloudCover={w.sky.cloudCover} className="z-0 saturate-[0.3] brightness-[0.8]" maxDpr={0.5} />
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 bg-bg/55" />
     </>
   );
 }
