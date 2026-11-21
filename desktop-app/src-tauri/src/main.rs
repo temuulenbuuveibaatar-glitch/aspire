@@ -17,14 +17,14 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
 
 const AUTOSTART_ARG: &str = "--autostart";
 
-/// Pages that may load inside the main window: Aspire itself, sign-in (Clerk, Google, Apple,
-/// Cloudflare's bot check) and the players Aspire embeds. Everything else opens in the browser.
-/// On macOS this check also sees iframes, hence the embed hosts.
+/// Pages that may load inside the main window. Only Aspire itself gets Aspire's commands
+/// (capabilities/remote.json is limited to SITE); the other hosts are the sign-in pages Aspire's
+/// login needs (Clerk, Google, Apple, Cloudflare's bot check) and the players it embeds, which
+/// macOS also reports here for iframes. Every other page opens in the browser after Allow.
 fn in_app(u: &Url) -> bool {
     const HOSTS: [&str; 8] = [
         "aspire-mn.vercel.app",
@@ -40,16 +40,10 @@ fn in_app(u: &Url) -> bool {
         "about" | "blob" | "data" => true,
         "https" => {
             let h = u.host_str().unwrap_or("");
-            HOSTS.contains(&h) || h.ends_with(".clerk.accounts.dev") || h.ends_with(".accounts.dev") || h.starts_with("clerk.")
+            // Clerk's development instances live under accounts.dev (and clerk.accounts.dev).
+            HOSTS.contains(&h) || h.ends_with(".accounts.dev")
         }
         _ => false,
-    }
-}
-
-/// Opens a link from the Aspire page in the person's browser (https and mail links only).
-fn open_outside(app: &AppHandle, u: &Url) {
-    if matches!(u.scheme(), "https" | "mailto") {
-        let _ = app.opener().open_url(u.as_str(), None::<&str>);
     }
 }
 
@@ -64,17 +58,18 @@ fn build_main(app: &AppHandle, visible: bool) -> tauri::Result<()> {
         .theme(Some(tauri::Theme::Dark))
         .background_color(tauri::webview::Color(7, 11, 18, 255))
         .visible(visible)
+        .devtools(cfg!(debug_assertions))
         .on_navigation(move |u| {
             let ok = in_app(u);
             // Windows reports only top-level navigations here, so a link the person followed;
             // macOS also reports iframes, which must not open browser tabs.
             if !ok && cfg!(windows) {
-                open_outside(&nav, u);
+                desktop::open_link(&nav, u);
             }
             ok
         })
         .on_new_window(move |u, _| {
-            open_outside(&popup, &u);
+            desktop::open_link(&popup, &u);
             NewWindowResponse::Deny
         });
     // WKWebView's default user agent has no Safari version, and Google refuses sign-in then.
@@ -104,6 +99,7 @@ fn open_settings(app: &AppHandle) {
         .inner_size(560.0, 780.0)
         .min_inner_size(400.0, 480.0)
         .theme(Some(tauri::Theme::Dark))
+        .devtools(cfg!(debug_assertions))
         .build();
 }
 
@@ -225,6 +221,9 @@ fn main() {
             desktop::pair,
             desktop::unpair,
             desktop::pairing_status,
+            desktop::desktop_open_url,
+            desktop::desktop_open_app,
+            desktop::desktop_capabilities,
         ])
         .build(tauri::generate_context!())
         .expect("failed to start Aspire")

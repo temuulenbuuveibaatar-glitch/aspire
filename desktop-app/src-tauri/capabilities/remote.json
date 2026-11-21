@@ -1,6 +1,6 @@
 {
   "identifier": "aspire-remote",
-  "description": "The Aspire web app in the main window: chat with the chosen brain (size and rate limited) and read the brain and pairing status. No Hermes, keychain, file, install or confirm commands.",
+  "description": "The Aspire web app in the main window: chat with the chosen brain (size and rate limited) read the brain and pairing status, and ask to open an https page or an installed app (each only after the person clicks Allow, one prompt at a time). No Hermes, keychain, file, install or confirm commands.",
   "windows": [
     "main"
   ],
@@ -13,6 +13,9 @@
   "permissions": [
     "allow-brain-status",
     "allow-brain-chat",
-    "allow-pairing-status"
+    "allow-pairing-status",
+    "allow-desktop-open-url",
+    "allow-desktop-open-app",
+    "allow-desktop-capabilities"
   ]
 }

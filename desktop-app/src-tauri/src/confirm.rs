@@ -36,6 +36,7 @@ pub async fn confirm(app: &AppHandle, text: &str, deadline: Instant) -> bool {
         .always_on_top(true)
         .focused(true)
         .theme(Some(tauri::Theme::Dark))
+        .devtools(cfg!(debug_assertions))
         .build();
     let Ok(win) = built else {
         lock(&st.prompts).remove(&id);

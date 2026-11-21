@@ -31,7 +31,11 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Securit
 tar = "0.4"
 flate2 = "1"
 
+# Release builds: no symbols or debug info, whole-program optimisation, no unwinding tables.
 [profile.release]
-lto = true
-codegen-units = 1
+opt-level = 3
+debug = false
 strip = true
+lto = "fat"
+codegen-units = 1
+panic = "abort"

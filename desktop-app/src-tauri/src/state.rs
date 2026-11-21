@@ -70,6 +70,9 @@ pub struct Shared {
     /// brain_chat from the remote page: one call at a time, a limited number per minute.
     pub chat_busy: AtomicBool,
     pub chat_rate: Mutex<(Instant, u32)>,
+    /// Open-a-page-or-app requests from the remote page: one Allow window at a time, limited per minute.
+    pub bridge_busy: AtomicBool,
+    pub bridge_rate: Mutex<(Instant, u32)>,
 }
 
 /// Clears a busy flag when dropped, so an error or a panic never leaves it set.
@@ -124,6 +127,8 @@ impl Shared {
             next_prompt: AtomicU32::new(1),
             chat_busy: AtomicBool::new(false),
             chat_rate: Mutex::new((Instant::now(), 0)),
+            bridge_busy: AtomicBool::new(false),
+            bridge_rate: Mutex::new((Instant::now(), 0)),
         })
     }
 

@@ -5,7 +5,7 @@
 // expires. Only five fixed kinds exist (open_app, open_url, type_text, save_file, fill_form);
 // nothing from the server is ever run as a command.
 use crate::confirm::confirm;
-use crate::state::{lock, Shared, DESKTOP_TOKEN, SITE};
+use crate::state::{lock, Busy, Shared, DESKTOP_TOKEN, SITE};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ use tauri_plugin_opener::OpenerExt;
 
 // The same limits as the server (web/lib/desktop.ts).
 const TEXT_MAX: usize = 2000;
+const URL_MAX: usize = 2048;
 const LABEL_MAX: usize = 100;
 const VALUE_MAX: usize = 500;
 const FILE_MAX: usize = 200 * 1024;
@@ -207,8 +208,11 @@ fn app_name(p: &Value) -> Result<String, String> {
 
 fn https_url(p: &Value) -> Result<tauri::Url, String> {
     let raw = s(p, "url").trim();
+    if raw.len() > URL_MAX {
+        return Err(format!("The link is longer than {URL_MAX} characters."));
+    }
     let u = tauri::Url::parse(raw).map_err(|_| "The link is not valid.".to_string())?;
-    if raw.len() > 2048 || u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() || u.host_str().is_none() {
+    if u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() || u.host_str().is_none() {
         return Err("Only https:// links can be opened.".into());
     }
     Ok(u)
@@ -730,5 +734,87 @@ pub async fn poll_loop(app: AppHandle) {
                 wait = Duration::from_secs(10);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bridge: the Aspire page in the main window asks to open a page or an app
+// (capabilities/remote.json). Same checks, Allow / Deny window and executors as a job. One
+// prompt at a time and BRIDGE_PER_MINUTE a minute; extra requests are refused, never queued.
+
+const BRIDGE_PER_MINUTE: u32 = 10;
+const BRIDGE_WAIT: Duration = Duration::from_secs(120);
+/// Everything the remote page may call (capabilities/remote.json).
+const REMOTE_COMMANDS: [&str; 6] = ["brain_status", "brain_chat", "pairing_status", "desktop_open_url", "desktop_open_app", "desktop_capabilities"];
+
+fn bridge_slot(st: &Shared) -> Option<Busy<'_>> {
+    let mut rate = lock(&st.bridge_rate);
+    if rate.0.elapsed() >= Duration::from_secs(60) {
+        *rate = (Instant::now(), 0);
+    }
+    if rate.1 >= BRIDGE_PER_MINUTE {
+        return None;
+    }
+    let busy = Busy::take(&st.bridge_busy)?;
+    rate.1 += 1;
+    Some(busy)
+}
+
+async fn bridge(app: &AppHandle, kind: &str, payload: Value) -> Value {
+    let reply = |ok: bool, message: String| json!({ "ok": ok, "message": message });
+    let st = app.state::<Shared>();
+    // Taken before resolving the app, so a flood never starts app searches either.
+    let Some(_slot) = bridge_slot(&st) else {
+        return reply(false, "Another request is waiting for an answer, or there were too many. Try again in a minute.".into());
+    };
+    let job = Job { id: String::new(), kind: kind.into(), payload, expires_in_ms: None };
+    let (text, action) = match prepare(app, &job).await {
+        Ok(x) => x,
+        Err(e) => return reply(false, e),
+    };
+    if !confirm(app, &text, Instant::now() + BRIDGE_WAIT).await {
+        return reply(false, "The person did not allow it.".into());
+    }
+    match run(app, action).await {
+        Ok(m) => reply(true, m),
+        Err(e) => reply(false, e),
+    }
+}
+
+/// Opens an https:// page in the person's browser after Allow. Returns {ok, message}.
+#[tauri::command]
+pub async fn desktop_open_url(app: AppHandle, url: String) -> Value {
+    bridge(&app, "open_url", json!({ "url": url })).await
+}
+
+/// Opens an installed app (found like a job's open_app) after Allow. Returns {ok, message}.
+#[tauri::command]
+pub async fn desktop_open_app(app: AppHandle, name: String) -> Value {
+    bridge(&app, "open_app", json!({ "app": name })).await
+}
+
+#[tauri::command]
+pub fn desktop_capabilities(app: AppHandle) -> Value {
+    json!({ "version": app.package_info().version.to_string(), "commands": REMOTE_COMMANDS })
+}
+
+/// A link the main window navigates to or opens outside Aspire: https pages after Allow, mail
+/// links straight to the mail app (nothing is sent without the person). Both count toward the
+/// bridge limit, so a page cannot flood prompts or mail windows.
+pub fn open_link(app: &AppHandle, u: &tauri::Url) {
+    match u.scheme() {
+        "https" => {
+            let (app, url) = (app.clone(), u.to_string());
+            tauri::async_runtime::spawn(async move {
+                bridge(&app, "open_url", json!({ "url": url })).await;
+            });
+        }
+        "mailto" if u.as_str().len() <= URL_MAX => {
+            let st = app.state::<Shared>();
+            if bridge_slot(&st).is_some() {
+                let _ = app.opener().open_url(u.as_str(), None::<&str>);
+            }
+        }
+        _ => {}
     }
 }

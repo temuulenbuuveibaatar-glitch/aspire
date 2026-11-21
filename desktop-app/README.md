@@ -2,7 +2,7 @@
 
 A small native app for Windows and macOS, built with Rust and [Tauri 2](https://v2.tauri.app).
 
-- Aspire (https://aspire-mn.vercel.app) opens in its own window. Sign in with the email code; Google or Apple sign-in may not work inside the app (Google limits sign-in in embedded windows). The window stays on Aspire and its sign-in pages; other links open in your browser. The app remembers the window size, has a tray (menu bar) icon with Show, Settings and Quit, and only one copy runs at a time. Closing the window keeps Aspire in the tray.
+- Aspire (https://aspire-mn.vercel.app) opens in its own window. Sign in with the email code; Google or Apple sign-in may not work inside the app (Google limits sign-in in embedded windows). The window stays on Aspire and its sign-in pages; other links open in your browser after you click Allow. The app remembers the window size, has a tray (menu bar) icon with Show, Settings and Quit, and only one copy runs at a time. Closing the window keeps Aspire in the tray.
 - **Brain.** By default a private local model, Qwen2.5 1.5B Instruct, runs on your computer through the official llama.cpp server. You can switch to Claude (`claude-opus-5-5`) or OpenAI with your own API key.
 - **Hermes Agent** (Nous Research, MIT licence) is installed with its official installer, pinned to one release.
 - **Desktop actions.** Link the app to your Aspire account and Aspire can open an app, open a link, type text, save a file or fill a form on your computer. Each action asks you first in an Allow / Deny window.
@@ -50,7 +50,16 @@ Downloads resume after an interruption: click the button again. A file whose siz
   - `save_file`: saves a text file (`.txt .md .csv .tsv .json .log .ics .vcf`) with a plain name in `~/Aspire` only. It never overwrites a file and is limited to 200 KB.
   - `fill_form`: types each value and presses Tab between them.
   The server can never run a command on your computer.
-- The Aspire page in the main window can only check the brain's status, chat with the brain you chose (at most one request at a time and 20 a minute, with smaller requests and answers) and check the link status. It cannot run Hermes, read keys, install anything or touch files.
+- The Aspire page in the main window can only check the brain's status, chat with the brain you chose (at most one request at a time and 20 a minute, with smaller requests and answers), check the link status, and ask to open a page or an app. It cannot run Hermes, read keys, install anything or touch files.
+- Opening a page or an app from the page (`desktop_open_url`, `desktop_open_app`) uses the same checks and Allow / Deny window as the `open_url` and `open_app` jobs above, and the window names exactly the link or the app it will open. Only one such window is open at a time, at most 10 a minute; extra requests are refused, not queued. Links to other sites open in your browser, also after Allow; mail links open your mail app, where nothing is sent until you send it.
+
+## Security
+
+- **No secrets ship in the app.** The installers contain no API keys, passwords or tokens. Your Claude and OpenAI keys and the device token live in the OS keychain on your computer; the keys Aspire itself uses stay on the Aspire server.
+- **Reverse engineering.** Release builds are compiled Rust with symbols and debug information stripped, whole-program (fat LTO) optimisation, one code unit and `panic = "abort"`, which makes the binary much harder to read. It is never impossible: anyone with the binary and enough time can study it. That is why nothing in the app is secret and every action is checked on your computer and asked of you first.
+- **No developer tools.** Release builds have no web inspector, so the right-click menu has no "Inspect", and they ship no source maps. The main window loads Aspire from https://aspire-mn.vercel.app; only the small Settings and Allow / Deny pages are bundled.
+- **The main window stays on Aspire.** It only shows Aspire, the sign-in pages Aspire's login needs (Clerk, Google, Apple, Cloudflare's bot check) and the players Aspire embeds. Only Aspire itself can use Aspire's commands. Any other page opens in your browser after you click Allow.
+- **Downloads.** llama-server and the model are checked against SHA-256 values pinned in the code, and llama-server runs only from Aspire's own data folder. The Hermes installer is checked the same way before it runs; Hermes then lives where its installer puts it (see above).
 
 ## Choosing Claude or OpenAI
 

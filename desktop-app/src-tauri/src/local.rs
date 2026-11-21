@@ -165,8 +165,11 @@ fn find(dir: &Path, name: &str, depth: u8) -> Option<PathBuf> {
     subdirs.iter().find_map(|d| find(d, name, depth - 1))
 }
 
+/// llama-server from the SHA-256-checked archive, only when it really lies inside Aspire's data
+/// folder (a link pointing out of it is refused).
 fn server_exe(st: &Shared) -> Option<PathBuf> {
-    find(&llama_dir(st), EXE, 2)
+    let exe = find(&llama_dir(st), EXE, 2)?;
+    fs::canonicalize(&exe).ok()?.starts_with(fs::canonicalize(&st.data_dir).ok()?).then_some(exe)
 }
 
 pub fn installed(st: &Shared) -> bool {
