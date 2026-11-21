@@ -15,7 +15,8 @@ describe("speech engine choice", () => {
     vi.stubEnv("SPEECH_URL", "");
     vi.stubEnv("SPEECH_PROVIDER", "");
     vi.stubEnv("GEMINI_API_KEY", "g");
-    const { speechEngine } = await import("@/lib/speech");
+    const { speechEngines } = await import("@/lib/speech");
+    const speechEngine = () => speechEngines()[0] ?? null;
     expect(speechEngine()).toBe("gemini");
     vi.stubEnv("SPEECH_URL", "https://voice.test");
     expect(speechEngine()).toBe("omnivoice");

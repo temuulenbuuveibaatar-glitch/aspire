@@ -10,8 +10,10 @@ export async function GET(req: Request) {
   const limited = rateLimit(req, "desktop-next", 120);
   if (limited) return limited;
   if (!supabaseConfigured()) return Response.json({ error: "linking_unavailable" }, { status: 503 });
+  // Read the header outside try: at build time this access ends prerendering, which must not be caught.
+  const token = bearerToken(req);
   try {
-    const device = await deviceFromToken(bearerToken(req));
+    const device = await deviceFromToken(token);
     if (!device) return Response.json({ error: "bad_token" }, { status: 401 });
     const busy = rateLimitKey(`desktop-next:${device.id}`, 40);
     if (busy) return busy;

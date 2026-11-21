@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { unstable_rethrow } from "next/navigation";
 
@@ -53,8 +54,21 @@ export function safeNext(next: string | null | undefined): string {
     const base = "http://same.invalid";
     const u = new URL(next, base);
     if (u.origin !== base) return "/";
-    return `${u.pathname}${u.search}${u.hash}`;
+    // Dot segments normalize away ("/..//evil" -> "//evil"), so check the result again.
+    const out = `${u.pathname}${u.search}${u.hash}`;
+    return out.startsWith("//") || out.startsWith("/\\") ? "/" : out;
   } catch {
     return "/";
   }
+}
+
+/**
+ * Key that signs the Slack OAuth state cookie: SLACK_STATE_SECRET, or else a key derived from
+ * CRON_SECRET, so the cron header secret is never itself used as a cookie-signing key. "" when
+ * neither is set, and checkOAuthState then rejects every state (fails closed).
+ */
+export function slackStateSecret(): string {
+  if (process.env.SLACK_STATE_SECRET) return process.env.SLACK_STATE_SECRET;
+  const cron = process.env.CRON_SECRET;
+  return cron ? createHmac("sha256", cron).update("aspire/slack-oauth-state").digest("base64url") : "";
 }

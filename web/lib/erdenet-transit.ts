@@ -11,7 +11,7 @@ import "server-only";
 import { ERDENET_CENTER, ERDENET_CREDIT, haversineKm, isErdenet } from "@/lib/geo";
 import { UA } from "@/lib/site";
 
-const BASE = "https://dedtuv.erdenet.mn/api/transit";
+const BASE = "https://dedtuv.erdenet.mn/api";
 export const CREDIT = ERDENET_CREDIT;
 export { isErdenet };
 
@@ -36,15 +36,15 @@ export const moving = (kph: number | null): kph is number => kph !== null && kph
 
 // ---- fetch + cache ------------------------------------------------------------------------------
 
-type Slot<T> = { at: number; failedAt: number; value?: T; pending?: Promise<T> };
+export type Slot<T> = { at: number; failedAt: number; value?: T; pending?: Promise<T> };
 const staticSlot: Slot<Static> = { at: 0, failedAt: 0 };
 const vehicleSlot: Slot<Vehicle[]> = { at: 0, failedAt: 0 };
 
 /**
  * Fresh value, else one shared upstream call; on failure the last value if younger than maxStale.
- * After a failure the feed is left alone for 10 s (polite to a struggling server).
+ * After a failure the feed is left alone for 10 s (polite to a struggling server). Shared with erdenet-city.
  */
-function cached<T>(slot: Slot<T>, ttl: number, maxStale: number, load: () => Promise<T>): Promise<T> {
+export function cached<T>(slot: Slot<T>, ttl: number, maxStale: number, load: () => Promise<T>): Promise<T> {
   const fallback = () => {
     if (slot.value !== undefined && Date.now() - slot.at < maxStale) return slot.value;
     throw new Error("erdenet feed unavailable");
@@ -52,25 +52,15 @@ function cached<T>(slot: Slot<T>, ttl: number, maxStale: number, load: () => Pro
   if (slot.value !== undefined && Date.now() - slot.at < ttl) return Promise.resolve(slot.value);
   if (Date.now() - slot.failedAt < 10_000) return Promise.resolve().then(fallback);
   slot.pending ??= load()
-    .then((v) => {
-      slot.value = v;
-      slot.at = Date.now();
-      return v;
-    })
-    .catch(() => {
-      slot.failedAt = Date.now();
-      return fallback();
-    })
+    .then((v) => ((slot.value = v), (slot.at = Date.now()), v))
+    .catch(() => ((slot.failedAt = Date.now()), fallback()))
     .finally(() => (slot.pending = undefined));
   return slot.pending;
 }
 
-async function feed(path: string): Promise<unknown> {
-  const res = await fetch(`${BASE}/${path}`, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
-    cache: "no-store",
-  });
+/** GET https://dedtuv.erdenet.mn/api/<path> as JSON (8 s limit, never cached by fetch). */
+export async function erdenetJson(path: string): Promise<unknown> {
+  const res = await fetch(`${BASE}/${path}`, { redirect: "error", headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(8000), cache: "no-store" });
   if (!res.ok) throw new Error(`erdenet ${path} ${res.status}`);
   return res.json();
 }
@@ -121,11 +111,11 @@ export function parseVehicles(raw: unknown, paths: Path[]): Vehicle[] {
   });
 }
 
-export const getStatic = (): Promise<Static> => cached(staticSlot, 6 * 3600_000, Infinity, async () => parseStatic(await feed("static")));
+export const getStatic = (): Promise<Static> => cached(staticSlot, 6 * 3600_000, Infinity, async () => parseStatic(await erdenetJson("transit/static")));
 
 export const getVehicles = (): Promise<Vehicle[]> =>
   cached(vehicleSlot, 10_000, 60_000, async () => {
-    const [raw, st] = await Promise.all([feed("vehicles"), getStatic()]);
+    const [raw, st] = await Promise.all([erdenetJson("transit/vehicles"), getStatic()]);
     return parseVehicles(raw, st.paths);
   });
 

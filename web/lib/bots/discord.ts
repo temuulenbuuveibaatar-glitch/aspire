@@ -27,6 +27,7 @@ export async function verifyDiscord(signatureHex: string, timestamp: string, raw
 
 async function discordFetch(url: string, method: "PATCH" | "POST", body: object): Promise<void> {
   const res = await fetch(url, {
+    redirect: "error",
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

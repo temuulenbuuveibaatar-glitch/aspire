@@ -1,11 +1,13 @@
 // Slack Events API: @Aspire mentions and direct messages, answered in a thread.
 // Slack wants a 200 within 3 s (and retries otherwise), so the answer is posted from after().
 import { after } from "next/server";
+import { readText, WEBHOOK_MAX_BYTES } from "@/lib/body";
 import { fallbackLine } from "@/lib/brain/shared";
 import { handleBotMessage, redeemLinkCode } from "@/lib/bots/core";
 import { cleanSlackText, getSlackToken, slackInstallStore, slackPost, verifySlack } from "@/lib/bots/slack";
 import { botText } from "@/lib/bots/text";
 import { detectTextLanguage } from "@/lib/lang";
+import { linkTryAllowed, rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
@@ -43,7 +45,7 @@ async function answer(teamId: string, ev: Required<Pick<SlackEvent, "user" | "ch
   if (link) {
     let linked = false;
     try {
-      linked = !!(await redeemLinkCode(link[1], { platform: "slack", platformUserId: ev.user, chatId: ev.channel, chatTitle: "", teamId }));
+      linked = linkTryAllowed("slack", ev.user, teamId) && !!(await redeemLinkCode(link[1], { platform: "slack", platformUserId: ev.user, chatId: ev.channel, chatTitle: "", teamId }));
     } catch (e) {
       log("link", e);
     }
@@ -62,7 +64,10 @@ async function answer(teamId: string, ev: Required<Pick<SlackEvent, "user" | "ch
 }
 
 export async function POST(req: Request) {
-  const raw = await req.text();
+  const limited = rateLimit(req, "bot-slack-events", 300);
+  if (limited) return limited;
+  const raw = await readText(req, WEBHOOK_MAX_BYTES);
+  if (raw === null) return Response.json({ error: "invalid_signature" }, { status: 401 });
   const ok = verifySlack(
     process.env.SLACK_SIGNING_SECRET ?? "",
     req.headers.get("x-slack-request-timestamp") ?? "",

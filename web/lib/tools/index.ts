@@ -1,10 +1,12 @@
 // The agent's toolbox. Add a tool here and every AI provider can use it.
+import { airQuality } from "./air";
 import { appTools } from "./apps";
 import { getCalendar } from "./calendar";
 import { cameraTools } from "./cameras";
 import { cityTools } from "./city";
 import { addToCalendar, call, sendMessage } from "./connect";
 import { desktopTools, desktopToolsFor } from "./desktop";
+import { jarvisTools } from "./jarvis";
 import { checkEmail } from "./email";
 import { deleteRoutine, listRoutines, saveProgress, saveRoutine, startLesson } from "./learning";
 import { cancelReminder, forget, listReminders, localTime, nextBus, remember, setReminder, tripPlanner } from "./local";
@@ -13,7 +15,7 @@ import { playMusic, playVideo } from "./media";
 import { newsTools } from "./news";
 import { taskTools } from "./tasks";
 import type { Tool, ToolContext } from "./types";
-import { airQuality, calculator, currency, encyclopedia, weather } from "./world";
+import { calculator, currency, encyclopedia, weather } from "./world";
 
 export type { Channel, ClientAction, DeviceContext, Lesson, Reminder, Routine, ToolContext } from "./types";
 export { desktopToolsFor } from "./desktop";
@@ -51,6 +53,7 @@ export const TOOLS: Tool[] = [
   ...taskTools,
   ...appTools,
   ...cameraTools,
+  ...jarvisTools,
 ];
 
 /**
@@ -91,6 +94,3 @@ export async function runTool(name: string, input: unknown, ctx: ToolContext, st
   steps.push({ tool: name, label: tool.label.en, ok });
   return typeof result === "string" ? result : JSON.stringify(result);
 }
-
-/** Labels for the UI, by tool name. */
-export const TOOL_LABELS = Object.fromEntries(ALL_TOOLS.map((t) => [t.name, t.label]));

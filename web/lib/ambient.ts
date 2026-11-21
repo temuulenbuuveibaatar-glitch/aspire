@@ -35,6 +35,7 @@ import {
 import { hourIn, validTimeZone } from "@/lib/tools/time";
 import { nearbyStops, resetOsmStops } from "@/lib/osm-stops";
 import { departuresNear } from "@/lib/transitous";
+import { type AirDetail, airDetail } from "@/lib/tools/air";
 import { openMeteoGeocode } from "@/lib/tools/world";
 
 // ---- location ---------------------------------------------------------------------------------
@@ -286,7 +287,7 @@ const UA_HEADERS = { "User-Agent": UA };
 const BG = { background: true } as const;
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: UA_HEADERS, signal: AbortSignal.timeout(8_000) });
+  const res = await fetch(url, { redirect: "error", headers: UA_HEADERS, signal: AbortSignal.timeout(8_000) });
   if (!res.ok) throw new Error(`${new URL(url).host} returned ${res.status}`);
   return (await res.json()) as T;
 }
@@ -438,24 +439,25 @@ async function weatherPart(p: LatLng): Promise<WeatherPart> {
   return openMeteoWeather(p);
 }
 
-async function airPart(p: LatLng): Promise<AmbientAir> {
+/** The air card's reading plus, when Open-Meteo has them, each pollutant, the dominant one and the next days. */
+export type AmbientAirDetail = AmbientAir & Partial<Pick<AirDetail, "pollutants" | "dominant" | "forecast">>;
+
+async function airPart(p: LatLng): Promise<AmbientAirDetail> {
+  // Open-Meteo (keyless) gives the detail either way, and the reading itself without a Google key.
+  const detail = airDetail(p.lat, p.lng).catch(() => null);
+  const extra = (d: AirDetail | null) => (d ? { pollutants: d.pollutants, dominant: d.dominant, forecast: d.forecast } : {});
   if (mapsConfigured()) {
     try {
       const a = await airQualityNow(p.lat, p.lng, BG);
       const aqi = Math.round(a.usAqi);
-      return { aqi, category: aqiCategory(aqi), pm25: a.pm2_5, source: "google", at: new Date().toISOString() };
+      return { aqi, category: aqiCategory(aqi), pm25: a.pm2_5, source: "google", at: new Date().toISOString(), ...extra(await detail) };
     } catch {
       // -> Open-Meteo
     }
   }
-  const d = await getJson<{ current?: { us_aqi?: number; pm2_5?: number } }>(
-    `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat}&longitude=${p.lng}&current=us_aqi,pm2_5`,
-  );
-  const raw = finite(d.current?.us_aqi);
-  if (raw === null || raw < 0) throw new Error("No air quality data here");
-  const aqi = Math.round(raw);
-  const pm = finite(d.current?.pm2_5);
-  return { aqi, category: aqiCategory(aqi), pm25: pm !== null && pm >= 0 ? pm : null, source: "open-meteo", at: new Date().toISOString() };
+  const d = await detail;
+  if (!d) throw new Error("No air quality data here");
+  return { aqi: d.aqi, category: aqiCategory(d.aqi), pm25: d.pollutants.pm25, source: "open-meteo", at: new Date().toISOString(), ...extra(d) };
 }
 
 // ---- slow-changing parts: small per-instance memo ----------------------------------------------
@@ -479,42 +481,29 @@ const cell10 = (p: LatLng) => `${round(p.lat, 1)},${round(p.lng, 1)}`;
 
 const stripTags = (h: string) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-/**
- * Free fallback photo (no key, no billing): a 1600 px landscape thumbnail of a Wikipedia article's lead
- * image within 10 km, Commons JPEGs only (no maps or diagrams), credited with its author and licence and
- * linked to its Commons file page. null when there is no such image or its credit is unknown; throws when
- * a request fails (so the failure is not memoised).
- */
-export async function wikiPhoto(p: LatLng): Promise<AmbientPhoto | null> {
-  type Page = { pageimage?: string; thumbnail?: { source?: string; width?: number; height?: number } };
-  const q = new URLSearchParams({
-    action: "query", format: "json", generator: "geosearch", ggscoord: `${p.lat}|${p.lng}`, ggsradius: "10000",
-    ggslimit: "20", prop: "pageimages", piprop: "thumbnail|name", pithumbsize: "1600", origin: "*",
-  });
-  const data = await getJson<{ query?: { pages?: Record<string, Page> } }>(`https://en.wikipedia.org/w/api.php?${q}`);
-  const best = Object.values(data.query?.pages ?? {})
-    .filter((pg) => {
-      const { source = "", width = 0, height = 0 } = pg.thumbnail ?? {};
-      return !!pg.pageimage && /^https:\/\/(upload|thumb)\.wikimedia\.org\/wikipedia\/commons\/.+\.jpe?g$/i.test(source) && width >= 1000 && height > 0 && width / height > 1 && width / height <= 2.2;
-    })
-    .sort((a, b) => Math.abs((a.thumbnail?.width ?? 0) - 1600) - Math.abs((b.thumbnail?.width ?? 0) - 1600))[0];
-  if (!best?.thumbnail?.source || !best.pageimage) return null;
-  type Info = { descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
-  const iq = new URLSearchParams({ action: "query", format: "json", origin: "*", prop: "imageinfo", iiprop: "extmetadata|url", titles: `File:${best.pageimage}` });
-  const meta = await getJson<{ query?: { pages?: Record<string, { imageinfo?: Info[] }> } }>(`https://commons.wikimedia.org/w/api.php?${iq}`);
-  const info = Object.values(meta.query?.pages ?? {})[0]?.imageinfo?.[0];
-  const field = (k: string) => { const v = info?.extmetadata?.[k]?.value; return typeof v === "string" ? stripTags(v) : ""; };
-  const artist = field("Artist").slice(0, 36), licence = field("LicenseShortName").slice(0, 20); // fits the 80-char credit
-  const uri = info?.descriptionurl && /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(best.pageimage)}`;
-  if (!artist || !licence) return null;
-  return { url: best.thumbnail.source, attribution: { name: `${artist} / ${licence} (Wikimedia Commons)`, uri } };
+/** The city photo to look for first, by the weather and the hour; the plain skyline is the fallback. */
+export type PhotoVariant = "night" | "winter";
+const VARIANTS: Record<PhotoVariant, { queries: string[]; title: RegExp }> = {
+  night: { queries: ["skyline night", "city night", "night panorama"], title: /night|nacht|dusk|evening/i },
+  winter: { queries: ["city winter", "winter panorama", "skyline snow"], title: /winter|snow/i },
+};
+/** A variant's title must also say it shows the city ("Erdenet city in winter", not "Winter Palace"). */
+const CITY_VIEW = /\b(?:skyline|panorama|cityscape|city|view|aerial|overview|downtown)\b/i;
+
+/** Night after dark; winter when it snows, sleets, hails or is -5 C or colder; else none. */
+export function photoVariant(sky: AmbientSky | null | undefined, tempC: number | null | undefined): PhotoVariant | null {
+  if (!sky || sky.known === false) return null;
+  if (!sky.isDay) return "night";
+  return sky.kind === "snow" || sky.kind === "sleet" || sky.kind === "hail" || (typeof tempC === "number" && tempC <= -5) ? "winter" : null;
 }
+
 /**
  * A WHOLE-CITY photo (skyline, panorama, city view) from Wikimedia Commons, searched by the city's
  * name: the first wide landscape JPEG whose title names the city, as a 1920 px thumbnail, credited
- * with author and licence. null when none; throws when a request fails (not memoised).
+ * with author and licence. With a variant, only photos whose title also says it ("Erdenet in
+ * winter", "Ulaanbaatar at night"). null when none; throws when a request fails (not memoised).
  */
-export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
+export async function cityPhoto(city: string, variant?: PhotoVariant): Promise<AmbientPhoto | null> {
   const name = city.split(",")[0].trim();
   if (!name) return null;
   type Info = { thumburl?: string; thumbwidth?: number; thumbheight?: number; descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
@@ -524,7 +513,8 @@ export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
   const wordRe = new RegExp(`(^|[^\\p{L}])${escaped}([^\\p{L}]|$)`, "iu");
   // Whole city only: a single building, hotel, monument or vehicle is not "the city".
   const notCity = /hotel|building|monument|statue|church|temple|monastery|mine|plant|factory|station|stadium|museum|mall|tower|bridge|car\b|volga|bus\b|portrait|interior|sign/i;
-  for (const words of ["skyline", "panorama", "cityscape", "aerial view", "city view"]) {
+  const want = variant ? VARIANTS[variant] : null;
+  for (const words of want?.queries ?? ["skyline", "panorama", "cityscape", "aerial view", "city view"]) {
     const q = new URLSearchParams({
       action: "query", format: "json", origin: "*", generator: "search", gsrnamespace: "6", gsrlimit: "10",
       gsrsearch: `${name} ${words} filetype:bitmap`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1920",
@@ -535,7 +525,7 @@ export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
       .find((pg) => {
         const i = pg.imageinfo?.[0];
         const w = i?.thumbwidth ?? 0, h = i?.thumbheight ?? 0;
-        return wordRe.test(pg.title ?? "") && !notCity.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") &&
+        return wordRe.test(pg.title ?? "") && !notCity.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") && (!want || (want.title.test(pg.title ?? "") && CITY_VIEW.test(pg.title ?? ""))) &&
           /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.3;
       });
     const info = hit?.imageinfo?.[0];
@@ -621,7 +611,7 @@ async function transitousPart(p: LatLng, now: Date, timeZone: string | null): Pr
     if (s.lines!.length < 4) s.lines!.push({ route: d.route, minutes: d.minutes, live: d.live });
     byStop.set(d.stop, s);
   }
-  const stops = [...byStop.values()].slice(0, 5);
+  const stops = [...byStop.values()].slice(0, 10);
   // The soonest departure at the three nearest stops.
   const near = new Set(stops.slice(0, 3).map((s) => s.name));
   const soon = deps.find((d) => near.has(d.stop));
@@ -642,13 +632,13 @@ export type OsmAmbientStop = AmbientStop & { kind: "stop"; source: "osm" };
 async function osmPart(p: LatLng, lang: Lang): Promise<OsmAmbientStop[]> {
   // Kept short: the whole snapshot (weather, air, photo) waits for it. A miss is not cached, so a
   // later refresh asks again (after osm-stops' short back-off).
-  const stops = await nearbyStops(p, { lang, max: 5, budgetMs: 6_000 });
+  const stops = await nearbyStops(p, { lang, max: 10, budgetMs: 6_000 });
   return stops.map((s) => ({ name: s.name, distanceM: s.distanceM, lat: s.lat, lng: s.lng, kind: "stop", source: "osm" }));
 }
 
 /** Erdenet: the nearest stations of the city's live feed with their next buses (no Google calls). */
 async function erdenetPart(p: LatLng, now: Date): Promise<{ stops: AmbientStop[]; nextBus: AmbientNextBus | null }> {
-  const stations = await nearestStations(p.lat, p.lng, 3);
+  const stations = await nearestStations(p.lat, p.lng, 6);
   // A vehicles outage still leaves the real stops, just without arrivals.
   const next = await Promise.all(stations.map((s) => arrivals(s.id).catch(() => [])));
   const stops = stations.map(
@@ -719,7 +709,7 @@ async function worldFor(p: LatLng): Promise<World> {
 const value = <T>(r: PromiseSettledResult<T>, fallback: T): T => (r.status === "fulfilled" ? r.value : fallback);
 
 /** Everything around the person in their language (all memoised; failures are not, and never throw). */
-async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date) {
+async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date, world: Promise<World>) {
   const p = loc.coords;
   const c = coarse(p);
   const google = mapsConfigured();
@@ -763,18 +753,25 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
     // Map pins only: no "nearest taxi" readout.
     taxis: value(taxisR, []),
     // The WHOLE city only (skyline / panorama / cityscape from Commons). No landmark or hotel photos (owner).
-    photo: english ? await photoFor(english).catch(() => null) : null,
+    photo: english ? await bestPhoto(english, await world) : null,
     nextBus: erd ? erd.nextBus : (gBus ?? open?.nextBus ?? null),
   };
 }
 
 /** The city photo, memoised a day; "no photo" is kept only an hour, so a new upload or a fixed name shows soon. */
-async function photoFor(name: string): Promise<AmbientPhoto | null> {
-  const key = `city:${name.toLowerCase()}`;
-  const got = await memo(key, DAY_MS, () => cityPhoto(name));
+async function photoFor(name: string, variant?: PhotoVariant): Promise<AmbientPhoto | null> {
+  const key = `city:${variant ?? ""}:${name.toLowerCase()}`;
+  const got = await memo(key, DAY_MS, () => cityPhoto(name, variant));
   const hit = memos.get(key);
   if (!got && hit) hit.ttl = HOUR_MS;
   return got;
+}
+
+/** The weather's variant (night, winter) when Commons has one, else the plain city photo; both asked at once. */
+async function bestPhoto(name: string, world: World): Promise<AmbientPhoto | null> {
+  const variant = photoVariant(world.weather?.sky, world.weather?.tempC);
+  const [v, plain] = await Promise.all([variant ? photoFor(name, variant).catch(() => null) : null, photoFor(name).catch(() => null)]);
+  return v ?? plain;
 }
 
 /** "Erdenet" + "MN" -> "Erdenet, Mongolia" (the country in the person's language). */
@@ -813,9 +810,10 @@ export async function getAmbient(loc: Located, lang: Lang, now: Date = new Date(
     };
   }
   const p = loc.coords;
+  const worldP = worldFor(coarse(p));
   const [world, local, address] = await Promise.all([
-    worldFor(coarse(p)),
-    localFor({ ...loc, coords: p }, lang, now),
+    worldP,
+    localFor({ ...loc, coords: p }, lang, now, worldP),
     // The exact street address only for a device position (never for an IP guess).
     loc.locatedBy === "device" ? streetAddress(p, lang) : null,
   ]);

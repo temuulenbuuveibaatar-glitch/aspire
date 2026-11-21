@@ -3,8 +3,10 @@
 // The main screen, v6 (docs/design/aspire-v6-spec.md, target docs/design/aspire-v6-reference.webp): the
 // top nav; the hero (the city photo with the live weather over it, temperature, hourly strip, "Open city
 // map"); four cards (Nearby transit, Live traffic with the live cameras, Air quality, Tomorrow's sunrise);
-// the news; and the agent panel on the right (orb, conversation, composer). Phones stack it all, with
-// the composer and a tab bar fixed at the bottom, so the agent is one tap away. Every figure carries its
+// and, on the right, the agent panel (orb, conversation, composer) with the city map and the news. The
+// page uses the whole width: up to 1800 px the right column has Agent / Map / News tabs; wider, the map
+// and the news get their own column beside the agent. Phones stack it all, with the composer and a tab
+// bar fixed at the bottom, so the agent is one tap away. Every figure carries its
 // source and age, unknown is said and never invented, and there is no taxi readout (taxis are map pins).
 //
 // Live data: /api/ambient every 3 min (lib/use-ambient), /api/city every 60 s (Erdenet traffic cameras,
@@ -14,13 +16,14 @@
 // Behaviour kept from v5: voice capture with silence detection (lib/use-voice.ts), per-message language
 // detection, /api/ask, /api/listen, /api/speak, the 401 guard, the Settings, Connections, Memory and
 // Where sheets, Gmail, Calendar and bot links, the daily briefing, reminders and the alarm banner, action,
-// task and media cards, the live map (a view on desktop, full screen on phones), the news, sign-out, and
-// the device store with cloud sync.
+// task and media cards, the live map (in the right column on desktop, full screen on phones), the news,
+// sign-out, and the device store with cloud sync. Inside Aspire Desktop an "open <app>" answer opens
+// straight away once the person allows it in the desktop's own dialog (lib/desktop-bridge).
 
-import { Bookmark, Fuel, LayoutDashboard, Map as MapIcon, MessageCircle, SquareParking } from "lucide-react";
+import { Bookmark, Fuel, LayoutDashboard, Map as MapIcon, MessageCircle, Newspaper, SquareParking } from "lucide-react";
 import { MotionConfig, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { isCard } from "@/components/aspire/ActionCard";
 import { useDailyBriefing } from "@/components/aspire/BriefingCard";
 import { CameraSheet } from "@/components/aspire/CameraSheet";
@@ -43,6 +46,7 @@ import { TrafficCard, trafficProvenance } from "@/components/v6/TrafficCard";
 import { departuresFromAmbient, OSM_STOPS_PROV, osmStops, TRANSITOUS_SOURCES, transitCredit, TransitCard, type Coverage } from "@/components/v6/TransitCard";
 import { fill, textFor } from "@/components/v6/text";
 import { AQI_ORDER, SKY_KINDS, type Ambient, type AmbientSky, type SkyKind } from "@/lib/ambient-types";
+import { desktopOpenAction, inDesktopApp } from "@/lib/desktop-bridge";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
 import { isImperial, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
 import type { CityData } from "@/lib/erdenet-city";
@@ -50,15 +54,17 @@ import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
 import { detectTextLanguage, HTML_LANG, isLang, type Lang } from "@/lib/lang";
 import { buildSuggestions } from "@/lib/suggestions";
-import type { CameraAction, Channel, ClientAction, Reminder, Title } from "@/lib/tools/types";
+import type { CameraAction, Channel, ClientAction, OpenAppAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
-import { devicePosition, roundedPosition, useAmbient, useCachedPhoto, usePoll } from "@/lib/use-ambient";
+import { devicePosition, forgetPhoto, heroPhoto, nearPhoto, roundedPosition, useAmbient, useCachedPhoto, usePoll } from "@/lib/use-ambient";
 import { useVoice } from "@/lib/use-voice";
 import { cn } from "@/lib/utils";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
 type Msg = ChatMessage;
 type SheetName = "settings" | "connections" | "memory" | "menu" | "where" | null;
+/** The desktop right column's tab (below WIDE; wider, all three show at once). */
+type Rail = "agent" | "map" | "news";
 
 const ERROR_HOLD_MS = 2400;
 const FLASH_MS = 2500;
@@ -73,6 +79,9 @@ const LANG_KEY = "aspire-lang";
 const WHERE_KEY = "aspire-where";
 const ENGINE: Record<string, string> = { elevenlabs: "ElevenLabs", azure: "Azure", gemini: "Gemini", omnivoice: "OmniVoice" };
 const GUARDED = /^\/api\/(ask|listen|speak|send|briefing|ambient|transit|city|cameras|calendar|news)$/;
+
+/** Desktop right-hand columns: under the nav (16 px padding, 61 px nav, 20 px gap), full height, kept in view. */
+const RAIL = "lg:sticky lg:top-5 lg:h-[calc(100dvh-117px)]";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const storeIn = (area: () => Storage) => ({
@@ -207,7 +216,7 @@ export default function Assistant() {
   const [alarm, setAlarm] = useState<Reminder | null>(null);
   const [sheet, setSheet] = useState<SheetName>(null);
   const [sheetWord, setSheetWord] = useState("");
-  const [view, setView] = useState<V6View>("overview");
+  const [rail, setRail] = useState<Rail>("agent");
   const [cityTab, setCityTab] = useState<CityTab | null>(null);
   /** Where the camera sheet is open (the place shown, or a find_cameras answer); null = closed. */
   const [cameraAt, setCameraAt] = useState<{ lat: number; lng: number } | null>(null);
@@ -224,6 +233,9 @@ export default function Assistant() {
 
   const [prefs, setPrefs] = useDisplayPrefs();
   const desktop = useMedia("(min-width: 1024px)");
+  // Wide screens: the map and the news get their own column (the grid's min-[1800px] matches this).
+  const wide = useMedia("(min-width: 1800px)");
+  const tabs = desktop && !wide;
   const now = useNow();
   const minute = now == null ? null : Math.floor(now / 60_000);
   const search = useSearch();
@@ -307,7 +319,11 @@ export default function Assistant() {
     update((d) => ({ ...d, settings: { ...d.settings, shareLocation: on } }));
     return true;
   };
-  const setCity = (city: string) => update((d) => ({ ...d, settings: { ...d.settings, city: city || undefined } }));
+  // Another place: the photo kept for the last one is dropped, so it never shows over the new one.
+  const setCity = (city: string) => {
+    forgetPhoto();
+    update((d) => ({ ...d, settings: { ...d.settings, city: city || undefined } }));
+  };
 
   const ambientOn = langReady && whereAsked !== null && (whereAsked || located);
   const {
@@ -427,6 +443,10 @@ export default function Assistant() {
       // find_cameras says the panel is open: open it (the reply keeps a button to open it again).
       const cam = actions.find((a): a is CameraAction => a.type === "cameras" && Number.isFinite(a.lat) && Number.isFinite(a.lng));
       if (cam) setCameraAt({ lat: cam.lat, lng: cam.lng });
+      // Aspire Desktop: "open YouTube" opens once the person allows it in the desktop's own dialog;
+      // the card stays as the way to open it again (and is the link in a normal browser).
+      const app = actions.find((a): a is OpenAppAction => a.type === "open_app");
+      if (app && inDesktopApp()) void desktopOpenAction(app);
       setMessages((m) => [...m, { id: uid(), role: "assistant", text: data.reply!, lang: l, steps: data.steps ?? [], cards, sources: data.sources ?? [] }]);
       await speak(data.reply, l);
     },
@@ -531,17 +551,15 @@ export default function Assistant() {
   // A JS "smooth" overrides the global reduced-motion CSS, so the OS setting is checked here too.
   const osReduced = useReducedMotion();
   const smooth = prefs.calm || osReduced ? "auto" : "smooth";
-  // Desktop: the City map view; phones: the map full screen.
+  // Desktop: the Map tab of the right column; phones and wide screens (map already beside): full screen.
   const openMap = () => {
-    if (desktop) {
-      setView("map");
-      window.scrollTo({ top: 0, behavior: smooth });
-    } else openFullMap();
+    if (tabs) setRail("map");
+    else openFullMap();
   };
   const onView = (v: V6View) => {
     if (v === "saved") openSheet("memory");
     else if (v === "map") openMap();
-    else setView("overview");
+    else setRail("agent");
   };
   // Scroll, then move focus to the conversation (not the input: that would raise the keyboard over it).
   const toAgent = () => {
@@ -676,9 +694,11 @@ export default function Assistant() {
   };
   const pill = orbState !== "idle" ? word : flash;
 
-  // The city photo: this snapshot's, else the last good one on this device (before the first snapshot, then only for the same place).
+  // The city photo: this snapshot's, else the last good one on this device unless the snapshot is known
+  // to be far from where it was kept. A snapshot without a photo never blanks the one on screen.
   const cached = useCachedPhoto();
-  const photo = ambient ? (ambient.photo ?? (cached && cached.place === ambient.place ? cached : null)) : cached;
+  const photo = heroPhoto(ambient, cached);
+  const keptPhoto = nearPhoto(ambient, cached);
   // An IP guess is said to be one, and the place picker lets the person fix it.
   const approx = ambient?.locatedBy === "network";
   const place = ambient?.place ? (approx ? `${ambient.place}, ${t.hud.approx}` : ambient.place) : (settings.city ?? null);
@@ -732,7 +752,10 @@ export default function Assistant() {
     setConditionsNote(text);
   }, [ambient, lang]);
 
-  const map = (full: boolean) => (
+  // Only once the screen language is known, so the first request is not wasted on the "en" default.
+  const news = langReady ? <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 8 : 3} /> : null;
+
+  const map = (full: boolean, className?: string) => (
     <LiveMap
       center={coords}
       lang={lang}
@@ -741,7 +764,7 @@ export default function Assistant() {
       erdenet={erdenet}
       fullscreen={full}
       onClose={full ? closeFullMap : undefined}
-      className={full ? undefined : "h-[calc(100dvh-140px)] min-h-[420px] rounded-[var(--radius-xl)]"}
+      className={full ? undefined : cn("rounded-[var(--radius-xl)]", className)}
     />
   );
 
@@ -779,11 +802,12 @@ export default function Assistant() {
   );
 
   // Live traffic as its own band (load, busiest roads, cameras, parking, fuel), then the reference row:
-  // Nearby transit, Air quality, Tomorrow's sunrise.
+  // Nearby transit, Air quality, Tomorrow's sunrise. Columns follow the left column's width (<main> is
+  // the container), not the viewport's, so they hold whatever the right column takes.
   const cards = (
-    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-5 @min-[560px]:grid-cols-2 @min-[820px]:grid-cols-3">
       <TrafficCard
-        className="sm:col-span-2 xl:col-span-3"
+        className="@min-[560px]:col-span-2 @min-[820px]:col-span-3"
         lang={lang}
         now={now}
         city={ambient?.place}
@@ -850,8 +874,8 @@ export default function Assistant() {
       lang={lang}
       expanded={agentWide}
       onExpand={desktop ? () => setAgentWide((x) => !x) : undefined}
-      // Under the nav (16 px padding, 61 px nav, 20 px gap), so the composer is in view on first paint.
-      className="lg:sticky lg:top-5 lg:h-[calc(100dvh-117px)]"
+      // Desktop: fills the right column under its tabs; hidden (kept mounted) while Map or News is shown.
+      className={cn("lg:min-h-0 lg:flex-1", tabs && rail !== "agent" && "hidden")}
       orb={
         <div className="flex flex-col items-center gap-2">
           <button id="aspire-core" type="button" onClick={onCore} aria-label={coreLabel} className="press grid place-items-center rounded-full">
@@ -925,11 +949,12 @@ export default function Assistant() {
           {t.skipToConversation}
         </a>
 
-        {/* Under the full-screen map: inert, and on phones not rendered at all (no hidden canvas loops). */}
-        <div inert={covered} hidden={mapFull && !desktop} className="mx-auto w-full max-w-[1440px] pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-[max(16px,env(safe-area-inset-top))] pb-[calc(var(--dock-h,200px)+16px)] md:px-6 lg:pb-6">
+        {/* Under the full-screen map: inert, and on phones not rendered at all (no hidden canvas loops). The
+            whole width is used: no side margins beyond the gutters. */}
+        <div inert={covered} hidden={mapFull && !desktop} className="w-full pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-[max(16px,env(safe-area-inset-top))] pb-[calc(var(--dock-h,200px)+16px)] md:px-6 lg:pb-6">
           <TopNav
             lang={lang}
-            view={view}
+            view={tabs && rail === "map" ? "map" : "overview"}
             onView={onView}
             onSearch={() => openSheet("where")}
             onSettings={() => openSheet("menu")}
@@ -937,37 +962,75 @@ export default function Assistant() {
             mac={mac}
           />
 
-          <div className={cn("mt-5 grid gap-5", agentWide ? "lg:grid-cols-[minmax(0,1fr)_520px]" : "lg:grid-cols-[minmax(0,1fr)_360px]")}>
-            <main className="flex min-w-0 flex-col gap-5">
-              {view === "map" && desktop ? (
-                <section aria-label={v6.cityMap}>{!mapFull && map(false)}</section>
-              ) : (
-                <>
-                  <HeroCard
-                    lang={lang}
-                    place={place}
-                    sky={sky}
-                    weather={w}
-                    photo={photo}
-                    timeZone={timeZone}
-                    now={now}
-                    coords={coords}
-                    imperial={imperial}
-                    prov={weatherProv}
-                    state={loading}
-                    effects={prefs.skyEffects && !mapFull}
-                    onOpenMap={openMap}
-                    onPlace={() => openSheet("where")}
-                  />
-                  {cards}
-                </>
-              )}
-              {/* Only once the screen language is known, so the first request is not wasted on the "en" default. */}
-              {langReady && <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 5 : 3} />}
+          <div
+            style={{ "--agent-w": agentWide ? "clamp(480px,40vw,760px)" : "clamp(360px,28vw,520px)" } as CSSProperties}
+            className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_var(--agent-w)] min-[1800px]:grid-cols-[minmax(0,1fr)_clamp(380px,22vw,600px)_var(--agent-w)]"
+          >
+            <main className="@container flex min-w-0 flex-col gap-5">
+              <HeroCard
+                lang={lang}
+                place={place}
+                sky={sky}
+                weather={w}
+                photo={photo}
+                fallback={keptPhoto}
+                onPhotoError={forgetPhoto}
+                timeZone={timeZone}
+                now={now}
+                coords={coords}
+                imperial={imperial}
+                prov={weatherProv}
+                state={loading}
+                effects={prefs.skyEffects && !mapFull}
+                onOpenMap={openMap}
+                onPlace={() => openSheet("where")}
+              />
+              {cards}
+              {/* Phones: the news under the cards (desktop: in the right column). */}
+              {!desktop && news}
             </main>
+            {/* Wide screens: the map over the news, in their own column. */}
+            {desktop && wide && (
+              <section aria-label={v6.cityMap} className={cn("flex min-w-0 flex-col gap-5", RAIL)}>
+                {!mapFull && map(false, "h-[clamp(320px,52dvh,560px)] shrink-0")}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{news}</div>
+              </section>
+            )}
             {/* Phones: a scroll to the agent's end stops above the dock, so the newest reply shows. */}
-            <div id="aspire-agent" className="min-w-0 scroll-mt-4 scroll-mb-[calc(var(--dock-h,220px)+8px)] lg:scroll-mb-0">
+            <div id="aspire-agent" className={cn("min-w-0 scroll-mt-4 scroll-mb-[calc(var(--dock-h,220px)+8px)] lg:flex lg:scroll-mb-0 lg:flex-col lg:gap-3", RAIL)}>
+              {tabs && (
+                <div role="group" aria-label={v6.rail} className="grid shrink-0 grid-cols-3 gap-1 rounded-[var(--radius-md)] bg-surface-2 p-1">
+                  {(
+                    [
+                      ["agent", t.hud.agent, MessageCircle],
+                      ["map", v6.tabMap, MapIcon],
+                      ["news", v6.news, Newspaper],
+                    ] as const
+                  ).map(([id, label, Icon]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={rail === id}
+                      onClick={() => setRail(id)}
+                      onPointerEnter={id === "map" ? () => void prefetchMap() : undefined}
+                      className={cn(
+                        "press flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-[var(--radius-sm)] px-2 text-copy",
+                        rail === id ? "bg-surface-3 text-ink shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-ink-muted hover:text-ink",
+                      )}
+                    >
+                      <Icon aria-hidden className="size-4 shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {agent}
+              {tabs && rail === "map" && !mapFull && (
+                <section aria-label={v6.cityMap} className="flex min-h-0 flex-1 flex-col">
+                  {map(false, "min-h-[320px] flex-1")}
+                </section>
+              )}
+              {tabs && rail === "news" && <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{news}</div>}
             </div>
           </div>
 
@@ -1060,6 +1123,7 @@ export default function Assistant() {
             onCity={(c) => {
               if (!c) return;
               // A city picked here is the place the person wants to see: it takes over from the GPS.
+              forgetPhoto();
               update((d) => ({ ...d, settings: { ...d.settings, city: c, shareLocation: false } }));
               answerWhere();
               closeSheet();

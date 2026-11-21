@@ -8,8 +8,16 @@ const WINDOW_MS = 60_000;
 const hits = new Map<string, number[]>();
 let lastSweep = 0;
 
-function clientIp(req: Request): string {
-  return req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+/** Most keys kept at once; past this the oldest go first, so rotating keys cannot grow memory. */
+const MAX_KEYS = 50_000;
+
+// x-real-ip / x-forwarded-for are trusted only where a proxy sets them: on Vercel, or when
+// TRUST_PROXY=1 (self-hosted behind nginx, Caddy and the like). Anywhere else a client could pick
+// a fresh "IP" per request, so all direct clients share one bucket; the per-user and per-account
+// limits are the real guard. Capped at 64 characters so a forged header cannot grow the keys.
+export function clientIp(req: Request): string {
+  if (!process.env.VERCEL && process.env.TRUST_PROXY !== "1") return "direct";
+  return (req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown").slice(0, 64);
 }
 
 function sweep(now: number): void {
@@ -29,10 +37,21 @@ export function rateLimitKey(key: string, perMinute: number): Response | null {
   }
   recent.push(now);
   hits.set(key, recent);
+  if (hits.size > MAX_KEYS) hits.delete(hits.keys().next().value as string);
   return null;
 }
 
 /** Returns a 429 response when this IP is over `perMinute` in `bucket`, otherwise null. */
 export function rateLimit(req: Request, bucket: string, perMinute: number): Response | null {
   return rateLimitKey(`${bucket}:${clientIp(req)}`, perMinute);
+}
+
+/** Link-code tries per chat account per minute: a cheap extra brake. Codes are 10 characters
+ * (about 49.5 bits) and live 10 minutes, so guessing fails even across many accounts. */
+export const LINK_TRIES_PER_MIN = 3;
+
+/** True when this chat account (Telegram, Discord or Slack user) may try another link code. The bot
+ * webhooks all come from the platform's servers, so this is keyed by the chat user, not the IP. */
+export function linkTryAllowed(platform: string, platformUserId: string, teamId = ""): boolean {
+  return rateLimitKey(`link-try:${platform}:${teamId}:${platformUserId}`, LINK_TRIES_PER_MIN) === null;
 }

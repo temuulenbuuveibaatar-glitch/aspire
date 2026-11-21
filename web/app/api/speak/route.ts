@@ -2,7 +2,7 @@ import { isLang } from "@/lib/lang";
 import { SpeechOffline, synthesize } from "@/lib/speech";
 
 import { requireUser, signedOut } from "@/lib/auth";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
@@ -12,6 +12,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const user = await requireUser();
   if (!user) return signedOut();
+  const perUser = rateLimitKey(`speak-user:${user.id}`, 20); // one account cannot rotate IPs to run up the bill
+  if (perUser) return perUser;
 
   const body = (await req.json().catch(() => null)) as { text?: unknown; lang?: unknown; voice?: unknown } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 600) : "";

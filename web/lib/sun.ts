@@ -6,8 +6,7 @@
 const RAD = Math.PI / 180;
 const DEG = 180 / Math.PI;
 
-export const SKY_PHASES = ["midnight", "night", "dawn", "sunrise", "day", "afternoon", "golden", "sunset", "dusk", "evening"] as const;
-export type SkyPhase = (typeof SKY_PHASES)[number];
+export type SkyPhase = "midnight" | "night" | "dawn" | "sunrise" | "day" | "afternoon" | "golden" | "sunset" | "dusk" | "evening";
 
 export interface Sun {
   phase: SkyPhase;
@@ -55,30 +54,14 @@ export function phaseFromSun(altDeg: number, haDeg: number): SkyPhase {
   return haDeg < 30 ? "day" : "afternoon";
 }
 
-/** A representative sun per phase, for the demo override (?time=sunset). */
-const TYPICAL: Record<SkyPhase, [alt: number, ha: number]> = {
-  midnight: [-40, 180], night: [-25, -120], dawn: [-7, -95], sunrise: [4, -80], day: [40, -15],
-  afternoon: [25, 50], golden: [7, 75], sunset: [0, 85], dusk: [-7, 95], evening: [-25, 120],
-};
-
-/** Trust boundary: `?time=` from the address bar. Anything else is no override. */
-export function phaseParam(search: string): SkyPhase | null {
-  const v = new URLSearchParams(search).get("time")?.toLowerCase();
-  return (SKY_PHASES as readonly string[]).includes(v ?? "") ? (v as SkyPhase) : null;
-}
-
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /**
- * The sun for the backdrop. Order of truth: a demo override, the real sun at `coords` (needs `at`),
+ * The sun for the backdrop. Order of truth: the real sun at `coords` (needs `at`),
  * else a stand-in sun from the place's local hour (0..23, taken at half past) that rises at about
  * 06:00 and sets at about 18:00, nudged to agree with the weather's day/night flag.
  */
-export function skySun({ at, coords, hour, isDay, override }: { at?: Date | null; coords?: { lat: number; lng: number } | null; hour?: number | null; isDay?: boolean; override?: SkyPhase | null }): Sun {
-  if (override) {
-    const [altDeg, haDeg] = TYPICAL[override];
-    return { phase: override, altDeg, haDeg };
-  }
+export function skySun({ at, coords, hour, isDay }: { at?: Date | null; coords?: { lat: number; lng: number } | null; hour?: number | null; isDay?: boolean }): Sun {
   if (at && coords && finite(coords.lat) && finite(coords.lng) && Math.abs(coords.lat) <= 90 && Math.abs(coords.lng) <= 180) {
     const { altDeg, haDeg } = sunPosition(at, coords.lat, coords.lng);
     return { phase: phaseFromSun(altDeg, haDeg), altDeg, haDeg };

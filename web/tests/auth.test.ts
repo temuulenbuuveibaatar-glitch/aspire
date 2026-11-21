@@ -98,7 +98,7 @@ describe("safeNext", () => {
 
   it("ignores absolute and protocol-relative next (open redirect)", async () => {
     const { safeNext } = await actual();
-    for (const next of ["https://evil.test", "//evil.test", "/\\evil.test", "javascript:alert(1)", "evil.test", "/\tevil", "/%0a//evil.test"]) {
+    for (const next of ["https://evil.test", "//evil.test", "/\\evil.test", "javascript:alert(1)", "evil.test", "/\tevil", "/%0a//evil.test", "/..//evil.test", "/.//evil.test", "/a/..//evil.test", "/%2e//evil.test", "/a/../\\evil.test"]) {
       const out = safeNext(next);
       expect(out.startsWith("/"), next).toBe(true);
       expect(out.startsWith("//"), next).toBe(false);
@@ -107,6 +107,11 @@ describe("safeNext", () => {
     expect(safeNext("https://evil.test")).toBe("/");
     expect(safeNext("//evil.test")).toBe("/");
     expect(safeNext("/\\evil.test")).toBe("/");
+    // Dot segments normalize to "//evil.test" after the first checks (pentest finding).
+    expect(safeNext("/..//evil.test")).toBe("/");
+    expect(safeNext("/.//evil.test")).toBe("/");
+    expect(safeNext("/a/..//evil.test")).toBe("/");
+    expect(safeNext("/%2e//evil.test")).toBe("/");
   });
 });
 

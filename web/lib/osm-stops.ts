@@ -90,6 +90,7 @@ export function noteMirror(url: string, res: Response): void {
 
 async function ask(url: string, query: string, ms: number): Promise<RawStop[]> {
   const res = await fetch(url, {
+    redirect: "error",
     method: "POST",
     headers: { "User-Agent": UA, Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ data: query }).toString(),

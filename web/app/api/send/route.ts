@@ -2,7 +2,7 @@ import { requireUser, signedOut } from "@/lib/auth";
 import { telegramTargets } from "@/lib/bots/links";
 import { sendTelegram } from "@/lib/bots/telegram";
 import { supabaseConfigured } from "@/lib/cloud";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
 export const maxDuration = 30;
@@ -12,7 +12,7 @@ export const maxDuration = 30;
 // one of the person's linked chats (GET /api/link/targets lists them). Discord/Slack go to the
 // channel webhook the person saved in Connections; we store nothing and never log the
 // message text or the webhook URL (the URL itself is a secret that allows posting).
-// Requires a session (401 otherwise). TODO: rate limit per user instead of per IP.
+// Requires a session (401 otherwise). Limited per IP and per user.
 
 const MAX_TEXT = 2000;
 
@@ -21,6 +21,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const user = await requireUser();
   if (!user) return signedOut();
+  const perUser = rateLimitKey(`send-user:${user.id}`, 30); // one account cannot rotate IPs to run up the bill
+  if (perUser) return perUser;
 
   const body = (await req.json().catch(() => null)) as {
     channel?: unknown;

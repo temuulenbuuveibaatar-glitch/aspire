@@ -1,11 +1,13 @@
 // Slack slash command /aspire: "link <code>" or a question. Questions are acked at
 // once with "Thinking…" and answered through response_url from after().
 import { after } from "next/server";
+import { readText, WEBHOOK_MAX_BYTES } from "@/lib/body";
 import { fallbackLine } from "@/lib/brain/shared";
 import { handleBotMessage, redeemLinkCode } from "@/lib/bots/core";
 import { slackRespond, verifySlack } from "@/lib/bots/slack";
 import { botText } from "@/lib/bots/text";
 import { detectTextLanguage } from "@/lib/lang";
+import { linkTryAllowed, rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
@@ -15,7 +17,10 @@ const log = (what: string, e: unknown) =>
 const ephemeral = (text: string) => Response.json({ response_type: "ephemeral", text });
 
 export async function POST(req: Request) {
-  const raw = await req.text();
+  const limited = rateLimit(req, "bot-slack-commands", 300);
+  if (limited) return limited;
+  const raw = await readText(req, WEBHOOK_MAX_BYTES);
+  if (raw === null) return Response.json({ error: "invalid_signature" }, { status: 401 });
   const ok = verifySlack(
     process.env.SLACK_SIGNING_SECRET ?? "",
     req.headers.get("x-slack-request-timestamp") ?? "",
@@ -37,6 +42,7 @@ export async function POST(req: Request) {
   const link = /^link(?:\s+(\S+))?$/i.exec(text);
   if (link) {
     if (!link[1]) return ephemeral(t.linkUsage);
+    if (!linkTryAllowed("slack", userId, form.get("team_id") ?? "")) return ephemeral(t.linkUnavailable);
     const user = await redeemLinkCode(link[1], {
       platform: "slack",
       platformUserId: userId,

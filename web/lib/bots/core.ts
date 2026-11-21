@@ -64,7 +64,7 @@ export async function loadLinkedUser(platform: BotPlatform, platformUserId: stri
   }
 }
 
-/** Redeem a 6-digit code from Settings, Connections. Null = invalid/expired code or linking unavailable. */
+/** Redeem a one-time code from Settings, Connections. Null = invalid/expired code or linking unavailable. */
 export async function redeemLinkCode(code: string, link: LinkTarget): Promise<LinkedUser | null> {
   if (!supabaseConfigured()) return null;
   return redeemCode(code, link);

@@ -12,7 +12,7 @@ const PLUS_CODE = /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/i
 const clean = (s: unknown, max = 120) => (typeof s === "string" ? s.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, max) : "");
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(6_000) });
+  const res = await fetch(url, { redirect: "error", headers, signal: AbortSignal.timeout(6_000) });
   if (!res.ok) throw new Error(`${new URL(url).host} returned ${res.status}`);
   return res.json();
 }

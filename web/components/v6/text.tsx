@@ -73,7 +73,6 @@ export interface V6Text {
   city: string;
   parking: string;
   fuel: string;
-  camCredit: string;
   newTab: string;
   free: string;
   of: string;
@@ -87,7 +86,6 @@ export interface V6Text {
   noCity: string;
   agentRole: string;
   expand: string;
-  collapse: string;
   sources: string;
   tagline: string;
   weather: string;
@@ -98,6 +96,9 @@ export interface V6Text {
   tabMap: string;
   tabSaved: string;
   tabBar: string;
+  /** Desktop side panel tabs: the agent, the map, the news. */
+  rail: string;
+  news: string;
   kinds: Record<SkyKind, string>;
 }
 
@@ -121,13 +122,13 @@ export const V6: Record<Lang, V6Text> = {
     noAir: "No air quality data here yet.",
     sunset: "Sunset", daylight: "Daylight", longer: "+{n} min vs today", shorter: "{n} min shorter than today", same: "Same as today",
     noSunrise: "The sun does not rise or set tomorrow here.", autoScene: "Auto scene", autoWhy: "The photo and weather layers follow the real sky and local time.",
-    city: "City live", parking: "Parking", fuel: "Fuel", camCredit: "Live cameras by {credit}", newTab: "Opens {host} in a new tab",
+    city: "City live", parking: "Parking", fuel: "Fuel", newTab: "Opens {host} in a new tab",
     free: "{n} free", of: "of {n}", approx: "approx.", fuelUnknown: "status unknown",
     fuelStatus: { selling: "selling", sold_out: "sold out" }, community: "drivers' reports", notAnswering: "The city feed is not answering right now.", diesel: "Diesel", gas: "Gas",
     noCity: "No live city data for {city} yet.",
-    agentRole: "Your city agent", expand: "Expand", collapse: "Collapse", sources: "Sources",
+    agentRole: "Your city agent", expand: "Expand", sources: "Sources",
     tagline: "Your city. In the moment.", weather: "Weather", hourly: "Hourly", timeUnknown: "time unknown", noaaFormula: "NOAA formula", fuelSelling: "on sale at {n}",
-    tabMap: "Map", tabSaved: "Saved", tabBar: "Quick tabs",
+    tabMap: "Map", tabSaved: "Saved", tabBar: "Quick tabs", rail: "Side panel", news: "News",
     kinds: { clear: "Clear", partly: "Partly cloudy", cloudy: "Cloudy", fog: "Fog", drizzle: "Drizzle", rain: "Rain", storm: "Thunderstorm", snow: "Snow", sleet: "Sleet", hail: "Hail" },
   },
   mn: {
@@ -149,13 +150,13 @@ export const V6: Record<Lang, V6Text> = {
     noAir: "Энд агаарын чанарын мэдээлэл одоогоор алга.",
     sunset: "Нар жаргах", daylight: "Өдрийн урт", longer: "Өнөөдрөөс +{n} мин", shorter: "Өнөөдрөөс {n} мин богино", same: "Өнөөдөртэй адил",
     noSunrise: "Маргааш энд нар мандахгүй, жаргахгүй.", autoScene: "Автомат дүр зураг", autoWhy: "Зураг болон цаг агаарын давхарга бодит тэнгэр, орон нутгийн цагийг дагана.",
-    city: "Хотын шууд мэдээ", parking: "Зогсоол", fuel: "Шатахуун", camCredit: "Шууд камер: {credit}", newTab: "{host} хуудсыг шинэ цонхонд нээнэ",
+    city: "Хотын шууд мэдээ", parking: "Зогсоол", fuel: "Шатахуун", newTab: "{host} хуудсыг шинэ цонхонд нээнэ",
     free: "{n} сул", of: "/ {n}", approx: "ойролцоогоор", fuelUnknown: "төлөв тодорхойгүй",
     fuelStatus: { selling: "зарагдаж байна", sold_out: "дууссан" }, community: "жолооч нарын мэдээллээр", notAnswering: "Хотын мэдээллийн эх сурвалж одоогоор хариу өгөхгүй байна.", diesel: "Дизель", gas: "Хий",
     noCity: "{city}: хотын шууд мэдээлэл одоогоор алга.",
-    agentRole: "Таны хотын туслах", expand: "Томруулах", collapse: "Жижигрүүлэх", sources: "Эх сурвалж",
+    agentRole: "Таны хотын туслах", expand: "Томруулах", sources: "Эх сурвалж",
     tagline: "Таны хот. Яг одоо.", weather: "Цаг агаар", hourly: "Цагаар", timeUnknown: "цаг тодорхойгүй", noaaFormula: "NOAA томьёо", fuelSelling: "{n} станцад зарагдаж байна",
-    tabMap: "Газрын зураг", tabSaved: "Хадгалсан", tabBar: "Доод цэс",
+    tabMap: "Газрын зураг", tabSaved: "Хадгалсан", tabBar: "Доод цэс", rail: "Хажуугийн самбар", news: "Мэдээ",
     kinds: { clear: "Цэлмэг", partly: "Багавтар үүлтэй", cloudy: "Үүлэрхэг", fog: "Манан", drizzle: "Шиврээ бороо", rain: "Бороо", storm: "Аянга цахилгаантай", snow: "Цас", sleet: "Нойтон цас", hail: "Мөндөр" },
   },
   zh: {
@@ -177,13 +178,13 @@ export const V6: Record<Lang, V6Text> = {
     noAir: "此处暂无空气质量数据。",
     sunset: "日落", daylight: "白昼", longer: "比今天长 {n} 分钟", shorter: "比今天短 {n} 分钟", same: "与今天相同",
     noSunrise: "明天此地太阳不升也不落。", autoScene: "自动场景", autoWhy: "照片和天气图层跟随真实天空与当地时间。",
-    city: "城市实况", parking: "停车", fuel: "加油", camCredit: "实时摄像头来自 {credit}", newTab: "在新标签页打开 {host}",
+    city: "城市实况", parking: "停车", fuel: "加油", newTab: "在新标签页打开 {host}",
     free: "空位 {n}", of: "共 {n}", approx: "约", fuelUnknown: "状态未知",
     fuelStatus: { selling: "在售", sold_out: "售罄" }, community: "司机反馈", notAnswering: "城市数据源暂时没有响应。", diesel: "柴油", gas: "燃气",
     noCity: "{city} 暂无城市实时数据。",
-    agentRole: "你的城市助手", expand: "展开", collapse: "收起", sources: "来源",
+    agentRole: "你的城市助手", expand: "展开", sources: "来源",
     tagline: "你的城市，此时此刻。", weather: "天气", hourly: "逐小时", timeUnknown: "时间未知", noaaFormula: "NOAA 公式", fuelSelling: "{n} 个站有售",
-    tabMap: "地图", tabSaved: "收藏", tabBar: "快捷标签",
+    tabMap: "地图", tabSaved: "收藏", tabBar: "快捷标签", rail: "侧边栏", news: "新闻",
     kinds: { clear: "晴", partly: "多云间晴", cloudy: "多云", fog: "雾", drizzle: "毛毛雨", rain: "雨", storm: "雷暴", snow: "雪", sleet: "雨夹雪", hail: "冰雹" },
   },
   ru: {
@@ -205,13 +206,13 @@ export const V6: Record<Lang, V6Text> = {
     noAir: "Данных о качестве воздуха здесь пока нет.",
     sunset: "Закат", daylight: "Световой день", longer: "+{n} мин к сегодняшнему", shorter: "На {n} мин короче, чем сегодня", same: "Как сегодня",
     noSunrise: "Завтра солнце здесь не восходит и не заходит.", autoScene: "Автосцена", autoWhy: "Фото и слои погоды следуют реальному небу и местному времени.",
-    city: "Город онлайн", parking: "Парковки", fuel: "Топливо", camCredit: "Камеры онлайн: {credit}", newTab: "Откроет {host} в новой вкладке",
+    city: "Город онлайн", parking: "Парковки", fuel: "Топливо", newTab: "Откроет {host} в новой вкладке",
     free: "свободно {n}", of: "из {n}", approx: "прибл.", fuelUnknown: "статус неизвестен",
     fuelStatus: { selling: "в продаже", sold_out: "нет в наличии" }, community: "по сообщениям водителей", notAnswering: "Городской источник данных сейчас не отвечает.", diesel: "Дизель", gas: "Газ",
     noCity: "Онлайн-данных по городу {city} пока нет.",
-    agentRole: "Ваш городской помощник", expand: "Развернуть", collapse: "Свернуть", sources: "Источники",
+    agentRole: "Ваш городской помощник", expand: "Развернуть", sources: "Источники",
     tagline: "Ваш город. Прямо сейчас.", weather: "Погода", hourly: "По часам", timeUnknown: "время неизвестно", noaaFormula: "формула NOAA", fuelSelling: "в продаже на АЗС: {n}",
-    tabMap: "Карта", tabSaved: "Избранное", tabBar: "Нижнее меню",
+    tabMap: "Карта", tabSaved: "Избранное", tabBar: "Нижнее меню", rail: "Боковая панель", news: "Новости",
     kinds: { clear: "Ясно", partly: "Переменная облачность", cloudy: "Облачно", fog: "Туман", drizzle: "Морось", rain: "Дождь", storm: "Гроза", snow: "Снег", sleet: "Мокрый снег", hail: "Град" },
   },
   de: {
@@ -233,13 +234,13 @@ export const V6: Record<Lang, V6Text> = {
     noAir: "Hier gibt es noch keine Daten zur Luftqualität.",
     sunset: "Sonnenuntergang", daylight: "Tageslicht", longer: "+{n} Min. gegenüber heute", shorter: "{n} Min. kürzer als heute", same: "Wie heute",
     noSunrise: "Morgen geht die Sonne hier weder auf noch unter.", autoScene: "Automatische Szene", autoWhy: "Foto und Wetterebenen folgen dem echten Himmel und der Ortszeit.",
-    city: "Stadt live", parking: "Parken", fuel: "Tanken", camCredit: "Live-Kameras von {credit}", newTab: "Öffnet {host} in einem neuen Tab",
+    city: "Stadt live", parking: "Parken", fuel: "Tanken", newTab: "Öffnet {host} in einem neuen Tab",
     free: "{n} frei", of: "von {n}", approx: "ca.", fuelUnknown: "Status unbekannt",
     fuelStatus: { selling: "verfügbar", sold_out: "ausverkauft" }, community: "laut Fahrern", notAnswering: "Die Stadtdaten antworten gerade nicht.", diesel: "Diesel", gas: "Gas",
     noCity: "Noch keine Live-Stadtdaten für {city}.",
-    agentRole: "Dein Stadtassistent", expand: "Vergrößern", collapse: "Verkleinern", sources: "Quellen",
+    agentRole: "Dein Stadtassistent", expand: "Vergrößern", sources: "Quellen",
     tagline: "Deine Stadt. Im Moment.", weather: "Wetter", hourly: "Stündlich", timeUnknown: "Zeit unbekannt", noaaFormula: "NOAA-Formel", fuelSelling: "an {n} {n|one:Tankstelle|other:Tankstellen} verfügbar",
-    tabMap: "Karte", tabSaved: "Gespeichert", tabBar: "Schnellleiste",
+    tabMap: "Karte", tabSaved: "Gespeichert", tabBar: "Schnellleiste", rail: "Seitenleiste", news: "Nachrichten",
     kinds: { clear: "Klar", partly: "Teils bewölkt", cloudy: "Bewölkt", fog: "Nebel", drizzle: "Niesel", rain: "Regen", storm: "Gewitter", snow: "Schnee", sleet: "Schneeregen", hail: "Hagel" },
   },
 };

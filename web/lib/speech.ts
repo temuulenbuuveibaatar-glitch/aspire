@@ -51,10 +51,6 @@ export function speechEngines(): Engine[] {
   return order.filter((e) => configured[e]());
 }
 
-export function speechEngine(): Engine | null {
-  return speechEngines()[0] ?? null;
-}
-
 async function firstWorking<T>(what: string, run: Partial<Record<Engine, () => Promise<T>>>): Promise<T> {
   let lastError: unknown = new SpeechOffline();
   for (const engine of speechEngines()) {
@@ -132,6 +128,7 @@ function elevenSpeak(text: string, lang: Lang, voice: VoiceStyle): Promise<Audio
   const model = elevenModel();
   return cachedAudio(`eleven:${id}:${model}:${lang}:${text}`, async () => {
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(id)}?output_format=mp3_44100_128`, {
+      redirect: "error",
       method: "POST",
       headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY ?? "", "Content-Type": "application/json", Accept: "audio/mpeg" },
       // language_code is refused by the multilingual_v2 model; the others use it to read short text right.
@@ -267,6 +264,7 @@ function azureFetch(audio: Blob, locales: string[]): Promise<Response> {
   form.append("audio", audio, `speech.${ext}`);
   form.append("definition", JSON.stringify({ locales, profanityFilterMode: "None" }));
   return fetch(azureSttUrl(), {
+    redirect: "error",
     method: "POST",
     headers: { "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "" },
     body: form,
@@ -317,6 +315,7 @@ function azureSpeak(text: string, lang: Lang, voice: VoiceStyle, format: AudioFo
       ? `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`
       : `${process.env.AZURE_SPEECH_ENDPOINT!.replace(/\/$/, "")}/tts/cognitiveservices/v1`;
     const res = await fetch(url, {
+      redirect: "error",
       method: "POST",
       headers: {
         "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY ?? "",
@@ -377,6 +376,7 @@ interface InteractionResponse {
 
 async function interact(body: unknown, timeoutMs: number): Promise<InteractionResponse> {
   const res = await fetch(INTERACTIONS, {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" },
     body: JSON.stringify(body),

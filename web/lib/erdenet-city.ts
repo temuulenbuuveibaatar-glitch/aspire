@@ -8,6 +8,7 @@
 // so it reads as "unknown", not "sold out".
 import "server-only";
 import { ERDENET_CREDIT, haversineKm, isErdenet, type LatLng } from "@/lib/geo";
+import { cached, erdenetJson as json, type Slot } from "@/lib/erdenet-transit";
 import { UA } from "@/lib/site";
 
 const BASE = "https://dedtuv.erdenet.mn/api";
@@ -53,35 +54,11 @@ export function cityAt(lat: number, lng: number): "erdenet" | "ulaanbaatar" | nu
 
 // ---- fetch + cache ------------------------------------------------------------------------------
 
-type Slot<T> = { at: number; failedAt: number; value?: T; pending?: Promise<T> };
 const slots = { traffic: { at: 0, failedAt: 0 }, parking: { at: 0, failedAt: 0 }, fuel: { at: 0, failedAt: 0 } } as {
   traffic: Slot<Camera[]>;
   parking: Slot<Parking>;
   fuel: Slot<Station[]>;
 };
-
-/** Fresh value, else one shared upstream call; on failure the last value while younger than maxStale. 10 s pause after a failure. */
-function cached<T>(slot: Slot<T>, ttl: number, maxStale: number, load: () => Promise<T>): Promise<T> {
-  const fallback = () => {
-    if (slot.value !== undefined && Date.now() - slot.at < maxStale) return slot.value;
-    throw new Error("erdenet city feed unavailable");
-  };
-  if (slot.value !== undefined && Date.now() - slot.at < ttl) return Promise.resolve(slot.value);
-  if (Date.now() - slot.failedAt < 10_000) return Promise.resolve().then(fallback);
-  slot.pending ??= load()
-    .then((v) => ((slot.value = v), (slot.at = Date.now()), v))
-    .catch(() => ((slot.failedAt = Date.now()), fallback()))
-    .finally(() => (slot.pending = undefined));
-  return slot.pending;
-}
-
-const HEADERS = { "User-Agent": UA, Accept: "application/json" };
-
-async function json(path: string): Promise<unknown> {
-  const res = await fetch(`${BASE}/${path}`, { headers: HEADERS, signal: AbortSignal.timeout(8000), cache: "no-store" });
-  if (!res.ok) throw new Error(`erdenet ${path} ${res.status}`);
-  return res.json();
-}
 
 const MAX_SSE = 256 * 1024;
 
@@ -91,7 +68,7 @@ async function firstEvent(): Promise<unknown> {
   const timer = setTimeout(() => ctl.abort(), 8000);
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const res = await fetch(`${BASE}/parking/stream`, { headers: { ...HEADERS, Accept: "text/event-stream" }, signal: ctl.signal, cache: "no-store" });
+    const res = await fetch(`${BASE}/parking/stream`, { redirect: "error", headers: { "User-Agent": UA, Accept: "text/event-stream" }, signal: ctl.signal, cache: "no-store" });
     if (!res.ok || !res.body) throw new Error(`erdenet parking ${res.status}`);
     reader = res.body.getReader();
     const dec = new TextDecoder();

@@ -10,6 +10,7 @@ async function discordApi<T>(path: string, body: object): Promise<T> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
   const res = await fetch(`${DISCORD_API}${path}`, {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bot ${token}` },
     body: JSON.stringify(body),

@@ -4,6 +4,7 @@ import type { Lang } from "@/lib/lang";
 
 type Pair = { title: string; body: string };
 type Qa = { q: string; a: string };
+type Plan = { name: string; points: string[] };
 
 export type LandingText = {
   skip: string;
@@ -22,6 +23,20 @@ export type LandingText = {
   citiesTitle: string;
   erdenet: Pair;
   world: Pair;
+  // Pricing. Prices are not in the copy: Landing.tsx fills `{price}` in `after` from its PRICES table.
+  pricingTitle: string;
+  pricingLead: string;
+  hackathon: string;
+  hackathonBody: string;
+  freePrice: string;
+  freeNow: string;
+  after: string;
+  plans: [Plan, Plan, Plan];
+  own: Plan & { price: string; cta: string };
+  selfTitle: string;
+  selfLead: string;
+  self: [Pair, Pair, Pair];
+  download: string;
   faqTitle: string;
   faq: [Qa, Qa, Qa];
   privacy: string;
@@ -51,7 +66,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     },
     featuresTitle: "What it does",
     features: [
-      { title: "Know your city right now", body: "Live buses, traffic and air quality on one screen, with live street cameras in Erdenet, London, Singapore, Hong Kong, California and New Zealand, and YouTube live streams near you." },
+      { title: "Know your city right now", body: "Live buses, traffic, weather, air quality and local news on one screen, with live street cameras in Erdenet, London, Singapore, Hong Kong, California and New Zealand, and YouTube live streams near you." },
       { title: "Talk in your own language", body: "Speak Mongolian, Chinese, English, Russian or German. It answers in the language you used." },
       { title: "Hand off the busywork", body: "Ask for code, a form, a message or a calendar event, or say \"open Spotify\". With Aspire Desktop it can open apps, type and save files on your computer after you allow it. It says \"On it, sir\" and drafts it for you to check." },
       { title: "It learns how you live", body: "It remembers your stops, routines and preferences, so answers get shorter and closer to what you need." },
@@ -76,9 +91,38 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Every other city",
       body: "Weather, air quality, maps, news, and public transit where open data exists. Coverage depends on what each city publishes.",
     },
+    pricingTitle: "Pricing",
+    pricingLead: "Cloud plans run on our accounts with Claude, Azure Speech, ElevenLabs and Supabase. Bring your own keys and Aspire stays free.",
+    hackathon: "Free during the Orkhon Hackathon",
+    hackathonBody: "Every cloud plan costs nothing while the hackathon runs. The prices show what Pro and Ultra will cost after it.",
+    freePrice: "Free",
+    freeNow: "Free now",
+    after: "{price} a month after the hackathon",
+    plans: [
+      { name: "Free", points: ["20 questions a day", "Standard voice"] },
+      { name: "Pro", points: ["1,500 questions a month", "2 hours of ElevenLabs voice a month", "Desktop actions with Aspire Desktop"] },
+      { name: "Ultra", points: ["5,000 questions a month", "8 hours of ElevenLabs voice a month", "Desktop actions with Aspire Desktop", "Priority access"] },
+    ],
+    own: {
+      name: "Self-hosted or own keys",
+      price: "Free forever",
+      points: ["Your own Claude or OpenAI key", "Your own Azure or AWS for voice and hosting", "Local Qwen2.5 1.5B model in Aspire Desktop", "The server on your own machine"],
+      cta: "Run it yourself",
+    },
+    selfTitle: "Run it yourself",
+    selfLead: "Aspire does not need our servers. With your own keys, a local model or your own machine, it costs nothing.",
+    self: [
+      {
+        title: "Aspire Desktop for Windows and macOS",
+        body: "Pair it with your account and Aspire can open websites and apps on your computer, each time only after you allow it. It includes a local Qwen2.5 1.5B model that runs on your computer.",
+      },
+      { title: "Your own keys", body: "Add your own Claude or OpenAI key, and your own Azure or AWS account for speech. You pay those providers directly." },
+      { title: "Your own server", body: "Run the Aspire server on your own computer or cloud account, with a local model if you like." },
+    ],
+    download: "Download Aspire Desktop",
     faqTitle: "Questions",
     faq: [
-      { q: "Is it free?", a: "Free during the Orkhon Hackathon." },
+      { q: "Is it free?", a: "Free during the Orkhon Hackathon. After it, the Free plan stays free, and running Aspire with your own keys is free forever." },
       {
         q: "What happens to my data?",
         a: "Your memory, reminders and settings are stored on your device. To answer you, your question goes to our servers and to the AI and speech services named in the privacy policy (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). A copy goes to the cloud only when you link a chat app or your computer. Your account is handled by Clerk. The privacy policy has the details.",
@@ -113,7 +157,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     },
     featuresTitle: "Юу хийдэг вэ",
     features: [
-      { title: "Хотоо яг одоо мэд", body: "Автобус, замын хөдөлгөөн, агаарын чанар нэг дэлгэцэнд. Эрдэнэт, Лондон, Сингапур, Хонконг, Калифорниа, Шинэ Зеландын гудамжны шууд камер, таны ойролцоох YouTube шууд дамжуулалт." },
+      { title: "Хотоо яг одоо мэд", body: "Автобус, замын хөдөлгөөн, цаг агаар, агаарын чанар, орон нутгийн мэдээ нэг дэлгэцэнд. Эрдэнэт, Лондон, Сингапур, Хонконг, Калифорниа, Шинэ Зеландын гудамжны шууд камер, таны ойролцоох YouTube шууд дамжуулалт." },
       { title: "Өөрийн хэлээр ярь", body: "Монгол, хятад, англи, орос, герман хэлээр ярь. Таны ярьсан хэлээр хариулна." },
       { title: "Ажлаа даатга", body: "Код, маягт, мессеж эсвэл хуанлийн үйл явдал хүс, эсвэл «Spotify нээ» гэж хэл. Aspire Desktop-оор таны зөвшөөрлөөр компьютер дээр апп нээж, бичиж, файл хадгална. «Одоо хийнэ, ноёнтон» гээд таныг шалгахаар бэлтгэж өгнө." },
       { title: "Таныг ойлгож сурна", body: "Таны буудал, өдөр тутмын хэмнэл, сонголтыг санаж, хариулт улам товч, оновчтой болно." },
@@ -138,9 +182,38 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Бусад бүх хот",
       body: "Цаг агаар, агаарын чанар, газрын зураг, мэдээ, нээлттэй өгөгдөл байгаа газар нийтийн тээвэр. Хамрах хүрээ нь хот бүрийн нийтэлдэг өгөгдлөөс хамаарна.",
     },
+    pricingTitle: "Үнэ",
+    pricingLead: "Үүлэн багцууд манай Claude, Azure Speech, ElevenLabs, Supabase бүртгэлээр ажиллана. Өөрийн түлхүүрээ ашиглавал Aspire үнэгүй хэвээр.",
+    hackathon: "Орхон Хакатоны үеэр үнэгүй",
+    hackathonBody: "Хакатон үргэлжлэх хугацаанд бүх үүлэн багц үнэгүй. Доорх үнэ нь Pro, Ultra багцын хакатоны дараах үнэ.",
+    freePrice: "Үнэгүй",
+    freeNow: "Одоо үнэгүй",
+    after: "Хакатоны дараа сард {price}",
+    plans: [
+      { name: "Үнэгүй", points: ["Өдөрт 20 асуулт", "Энгийн дуу хоолой"] },
+      { name: "Pro", points: ["Сард 1,500 асуулт", "Сард 2 цаг ElevenLabs дуу хоолой", "Aspire Desktop-оор компьютер дээрх үйлдэл"] },
+      { name: "Ultra", points: ["Сард 5,000 асуулт", "Сард 8 цаг ElevenLabs дуу хоолой", "Aspire Desktop-оор компьютер дээрх үйлдэл", "Тэргүүн ээлжийн хандалт"] },
+    ],
+    own: {
+      name: "Өөрийн сервер, өөрийн түлхүүр",
+      price: "Үүрд үнэгүй",
+      points: ["Өөрийн Claude эсвэл OpenAI түлхүүр", "Дуу хоолой, байршуулалтад өөрийн Azure эсвэл AWS", "Aspire Desktop дахь локал Qwen2.5 1.5B загвар", "Өөрийн компьютер дээрх сервер"],
+      cta: "Өөрөө ажиллуулах",
+    },
+    selfTitle: "Өөрөө ажиллуул",
+    selfLead: "Aspire манай серверээс хамааралгүй ажиллаж чадна. Өөрийн түлхүүр, локал загвар эсвэл өөрийн компьютерээ ашиглавал үнэгүй.",
+    self: [
+      {
+        title: "Windows, macOS-д зориулсан Aspire Desktop",
+        body: "Бүртгэлтэйгээ холбоход Aspire таны компьютер дээр вэб сайт, апп нээж чадна, гэхдээ үргэлж таны зөвшөөрлөөр. Таны компьютер дээр ажилладаг локал Qwen2.5 1.5B загвартай.",
+      },
+      { title: "Өөрийн түлхүүр", body: "Өөрийн Claude эсвэл OpenAI түлхүүр, яриандаа өөрийн Azure эсвэл AWS бүртгэлийг нэм. Төлбөрөө тэдгээр үйлчилгээ үзүүлэгчид шууд төлнө." },
+      { title: "Өөрийн сервер", body: "Aspire серверийг өөрийн компьютер эсвэл үүлэн бүртгэл дээрээ, хүсвэл локал загвартай ажиллуул." },
+    ],
+    download: "Aspire Desktop татах",
     faqTitle: "Түгээмэл асуулт",
     faq: [
-      { q: "Үнэгүй юу?", a: "Орхон Хакатоны үеэр үнэгүй." },
+      { q: "Үнэгүй юу?", a: "Орхон Хакатоны үеэр үнэгүй. Дараа нь ч үнэгүй багц үнэгүй хэвээр, өөрийн түлхүүрээр ажиллуулах нь үүрд үнэгүй." },
       {
         q: "Миний мэдээлэлд юу тохиолдох вэ?",
         a: "Санах ой, сануулга, тохиргоо тань төхөөрөмж дээр хадгалагдана. Хариулахын тулд асуултыг тань манай сервер болон нууцлалын бодлогод нэрлэсэн хиймэл оюун, ярианы үйлчилгээ (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs) рүү илгээнэ. Чат апп эсвэл компьютераа холбосон үед л хуулбар нь үүлэнд хадгалагдана. Таны бүртгэлийг Clerk хариуцна. Дэлгэрэнгүйг нууцлалын бодлогоос уншина уу.",
@@ -175,7 +248,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     },
     featuresTitle: "它能做什么",
     features: [
-      { title: "随时掌握城市动态", body: "实时公交、交通和空气质量一屏尽览，还有额尔登特、伦敦、新加坡、香港、加州和新西兰的实时街道摄像头，以及您附近的 YouTube 直播。" },
+      { title: "随时掌握城市动态", body: "实时公交、交通、天气、空气质量和本地新闻一屏尽览，还有额尔登特、伦敦、新加坡、香港、加州和新西兰的实时街道摄像头，以及您附近的 YouTube 直播。" },
       { title: "用你自己的语言说话", body: "说蒙古语、中文、英语、俄语或德语，它会用你说的语言回答。" },
       { title: "把琐事交给它", body: "让它写代码、填表、写消息或添加日程，或者说“打开 Spotify”。配合 Aspire Desktop，经你允许后它还能在电脑上打开应用、输入文字和保存文件。它会说“马上办，先生”，并起草好供你确认。" },
       { title: "越用越懂你", body: "它会记住你常用的车站、作息和偏好，回答越来越简洁贴切。" },
@@ -200,9 +273,38 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "其他所有城市",
       body: "天气、空气质量、地图、新闻，以及有开放数据地区的公共交通。覆盖范围取决于各城市公开的数据。",
     },
+    pricingTitle: "价格",
+    pricingLead: "云端方案使用我们的 Claude、Azure Speech、ElevenLabs 和 Supabase 账户运行。使用你自己的密钥，Aspire 一直免费。",
+    hackathon: "鄂尔浑黑客马拉松期间免费",
+    hackathonBody: "黑客马拉松期间，所有云端方案均免费。下方价格是 Pro 和 Ultra 在活动结束后的价格。",
+    freePrice: "免费",
+    freeNow: "现在免费",
+    after: "黑客马拉松结束后每月 {price}",
+    plans: [
+      { name: "免费版", points: ["每天 20 个问题", "标准语音"] },
+      { name: "Pro", points: ["每月 1500 个问题", "每月 2 小时 ElevenLabs 语音", "通过 Aspire Desktop 执行电脑操作"] },
+      { name: "Ultra", points: ["每月 5000 个问题", "每月 8 小时 ElevenLabs 语音", "通过 Aspire Desktop 执行电脑操作", "优先使用"] },
+    ],
+    own: {
+      name: "自托管或自带密钥",
+      price: "永久免费",
+      points: ["你自己的 Claude 或 OpenAI 密钥", "用你自己的 Azure 或 AWS 提供语音和托管", "Aspire Desktop 内置本地 Qwen2.5 1.5B 模型", "在你自己的电脑上运行服务器"],
+      cta: "自行运行",
+    },
+    selfTitle: "自行运行",
+    selfLead: "Aspire 不一定要用我们的服务器。使用你自己的密钥、本地模型或你自己的电脑，完全免费。",
+    self: [
+      {
+        title: "Aspire Desktop，支持 Windows 和 macOS",
+        body: "与你的账户配对后，Aspire 可以在你的电脑上打开网站和应用，每次都要先经你允许。它内置一个在你电脑上运行的本地 Qwen2.5 1.5B 模型。",
+      },
+      { title: "自带密钥", body: "添加你自己的 Claude 或 OpenAI 密钥，以及用于语音的 Azure 或 AWS 账户。费用直接付给这些服务商。" },
+      { title: "自己的服务器", body: "在你自己的电脑或云账户上运行 Aspire 服务器，也可以搭配本地模型。" },
+    ],
+    download: "下载 Aspire Desktop",
     faqTitle: "常见问题",
     faq: [
-      { q: "免费吗？", a: "鄂尔浑黑客马拉松期间免费。" },
+      { q: "免费吗？", a: "鄂尔浑黑客马拉松期间免费。活动结束后，免费版仍然免费，用你自己的密钥运行 Aspire 永久免费。" },
       {
         q: "我的数据会怎样？",
         a: "你的记忆、提醒和设置保存在你的设备上。为了回答你，你的提问会发送到我们的服务器以及隐私政策中列出的 AI 和语音服务（Anthropic、DeepSeek、Google、Microsoft、ElevenLabs）。只有绑定聊天应用或你的电脑后，才会在云端保存一份副本。你的账户由 Clerk 管理。详情请阅读隐私政策。",
@@ -237,7 +339,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     },
     featuresTitle: "Что он умеет",
     features: [
-      { title: "Город как на ладони", body: "Автобусы, пробки и качество воздуха на одном экране, а ещё уличные камеры онлайн в Эрдэнэте, Лондоне, Сингапуре, Гонконге, Калифорнии и Новой Зеландии и прямые трансляции YouTube рядом с вами." },
+      { title: "Город как на ладони", body: "Автобусы, пробки, погода, качество воздуха и местные новости на одном экране, а ещё уличные камеры онлайн в Эрдэнэте, Лондоне, Сингапуре, Гонконге, Калифорнии и Новой Зеландии и прямые трансляции YouTube рядом с вами." },
       { title: "Говорите на своём языке", body: "Монгольский, китайский, английский, русский или немецкий. Ответ придёт на языке вашего вопроса." },
       { title: "Поручите рутину", body: "Попросите код, форму, сообщение или событие в календаре, или скажите «открой Spotify». С Aspire Desktop он с вашего разрешения откроет приложения, наберёт текст и сохранит файлы на компьютере. Он ответит «Уже делаю, сэр» и подготовит черновик для проверки." },
       { title: "Он узнаёт вас", body: "Запоминает ваши остановки, распорядок и предпочтения, и ответы становятся короче и точнее." },
@@ -262,9 +364,38 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Все остальные города",
       body: "Погода, качество воздуха, карты, новости и общественный транспорт там, где есть открытые данные. Охват зависит от того, что публикует каждый город.",
     },
+    pricingTitle: "Цены",
+    pricingLead: "Облачные тарифы работают на наших аккаунтах Claude, Azure Speech, ElevenLabs и Supabase. Со своими ключами Aspire остаётся бесплатным.",
+    hackathon: "Бесплатно на время Орхон Хакатона",
+    hackathonBody: "Пока идёт хакатон, все облачные тарифы бесплатны. Цены показывают, сколько Pro и Ultra будут стоить после него.",
+    freePrice: "Бесплатно",
+    freeNow: "Сейчас бесплатно",
+    after: "{price} в месяц после хакатона",
+    plans: [
+      { name: "Бесплатный", points: ["20 вопросов в день", "Стандартный голос"] },
+      { name: "Pro", points: ["1 500 вопросов в месяц", "2 часа голоса ElevenLabs в месяц", "Действия на компьютере через Aspire Desktop"] },
+      { name: "Ultra", points: ["5 000 вопросов в месяц", "8 часов голоса ElevenLabs в месяц", "Действия на компьютере через Aspire Desktop", "Приоритетный доступ"] },
+    ],
+    own: {
+      name: "Свой сервер или свои ключи",
+      price: "Бесплатно навсегда",
+      points: ["Свой ключ Claude или OpenAI", "Свой Azure или AWS для голоса и хостинга", "Локальная модель Qwen2.5 1.5B в Aspire Desktop", "Сервер на вашем собственном компьютере"],
+      cta: "Запустить у себя",
+    },
+    selfTitle: "Запустите у себя",
+    selfLead: "Aspire может работать без наших серверов. Со своими ключами, локальной моделью или на своём компьютере это ничего не стоит.",
+    self: [
+      {
+        title: "Aspire Desktop для Windows и macOS",
+        body: "Свяжите его со своей учётной записью, и Aspire сможет открывать сайты и приложения на вашем компьютере, каждый раз только с вашего разрешения. В него встроена локальная модель Qwen2.5 1.5B, которая работает на вашем компьютере.",
+      },
+      { title: "Свои ключи", body: "Добавьте свой ключ Claude или OpenAI и свой аккаунт Azure или AWS для речи. Вы платите этим сервисам напрямую." },
+      { title: "Свой сервер", body: "Запустите сервер Aspire на своём компьютере или в своём облаке, при желании с локальной моделью." },
+    ],
+    download: "Скачать Aspire Desktop",
     faqTitle: "Вопросы",
     faq: [
-      { q: "Это бесплатно?", a: "Бесплатно на время Орхон Хакатона." },
+      { q: "Это бесплатно?", a: "Бесплатно на время Орхон Хакатона. После него бесплатный тариф останется бесплатным, а Aspire со своими ключами бесплатен навсегда." },
       {
         q: "Что происходит с моими данными?",
         a: "Память, напоминания и настройки хранятся на вашем устройстве. Для ответа ваш вопрос отправляется на наши серверы и в сервисы ИИ и речи, перечисленные в политике конфиденциальности (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). Копия попадает в облако, только если вы подключили мессенджер или компьютер. Учётной записью занимается Clerk. Подробнее в политике конфиденциальности.",
@@ -299,7 +430,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     },
     featuresTitle: "Was es kann",
     features: [
-      { title: "Deine Stadt im Blick", body: "Busse, Verkehr und Luftqualität live auf einem Bildschirm, dazu Live-Straßenkameras in Erdenet, London, Singapur, Hongkong, Kalifornien und Neuseeland und YouTube-Livestreams in Ihrer Nähe." },
+      { title: "Deine Stadt im Blick", body: "Busse, Verkehr, Wetter, Luftqualität und lokale Nachrichten live auf einem Bildschirm, dazu Live-Straßenkameras in Erdenet, London, Singapur, Hongkong, Kalifornien und Neuseeland und YouTube-Livestreams in deiner Nähe." },
       { title: "Sprich deine Sprache", body: "Mongolisch, Chinesisch, Englisch, Russisch oder Deutsch. Die Antwort kommt in der Sprache deiner Frage." },
       { title: "Gib Routinearbeit ab", body: "Bitte um Code, ein Formular, eine Nachricht oder einen Termin, oder sag „öffne Spotify“. Mit Aspire Desktop öffnet es nach deiner Freigabe Apps, tippt Text und speichert Dateien auf deinem Computer. Es antwortet „Wird erledigt, Sir“ und bereitet alles zur Prüfung vor." },
       { title: "Lernt dich kennen", body: "Es merkt sich deine Haltestellen, Gewohnheiten und Vorlieben, damit Antworten kürzer und passender werden." },
@@ -324,9 +455,38 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Jede andere Stadt",
       body: "Wetter, Luftqualität, Karten, Nachrichten und Nahverkehr, wo offene Daten existieren. Die Abdeckung hängt davon ab, was jede Stadt veröffentlicht.",
     },
+    pricingTitle: "Preise",
+    pricingLead: "Die Cloud-Tarife laufen über unsere Konten bei Claude, Azure Speech, ElevenLabs und Supabase. Mit eigenen Schlüsseln bleibt Aspire kostenlos.",
+    hackathon: "Kostenlos während des Orkhon Hackathons",
+    hackathonBody: "Solange der Hackathon läuft, kosten alle Cloud-Tarife nichts. Die Preise zeigen, was Pro und Ultra danach kosten.",
+    freePrice: "Kostenlos",
+    freeNow: "Jetzt kostenlos",
+    after: "{price} pro Monat nach dem Hackathon",
+    plans: [
+      { name: "Kostenlos", points: ["20 Fragen pro Tag", "Standardstimme"] },
+      { name: "Pro", points: ["1.500 Fragen pro Monat", "2 Stunden ElevenLabs-Stimme pro Monat", "Aktionen am Computer mit Aspire Desktop"] },
+      { name: "Ultra", points: ["5.000 Fragen pro Monat", "8 Stunden ElevenLabs-Stimme pro Monat", "Aktionen am Computer mit Aspire Desktop", "Vorrangiger Zugang"] },
+    ],
+    own: {
+      name: "Selbst gehostet oder eigene Schlüssel",
+      price: "Für immer kostenlos",
+      points: ["Dein eigener Claude- oder OpenAI-Schlüssel", "Dein eigenes Azure oder AWS für Stimme und Hosting", "Lokales Qwen2.5-1.5B-Modell in Aspire Desktop", "Der Server auf deinem eigenen Rechner"],
+      cta: "Selbst betreiben",
+    },
+    selfTitle: "Selbst betreiben",
+    selfLead: "Aspire braucht unsere Server nicht. Mit eigenen Schlüsseln, einem lokalen Modell oder deinem eigenen Rechner kostet es nichts.",
+    self: [
+      {
+        title: "Aspire Desktop für Windows und macOS",
+        body: "Verbinde es mit deinem Konto, dann kann Aspire Websites und Apps auf deinem Computer öffnen, jedes Mal erst nach deiner Freigabe. Es enthält ein lokales Qwen2.5-1.5B-Modell, das auf deinem Computer läuft.",
+      },
+      { title: "Eigene Schlüssel", body: "Trag deinen eigenen Claude- oder OpenAI-Schlüssel und dein Azure- oder AWS-Konto für Sprache ein. Du bezahlst diese Anbieter direkt." },
+      { title: "Eigener Server", body: "Betreib den Aspire-Server auf deinem eigenen Rechner oder in deinem Cloud-Konto, auf Wunsch mit lokalem Modell." },
+    ],
+    download: "Aspire Desktop herunterladen",
     faqTitle: "Fragen",
     faq: [
-      { q: "Ist es kostenlos?", a: "Kostenlos während des Orkhon Hackathons." },
+      { q: "Ist es kostenlos?", a: "Kostenlos während des Orkhon Hackathons. Danach bleibt der kostenlose Tarif kostenlos, und Aspire mit eigenen Schlüsseln ist für immer kostenlos." },
       {
         q: "Was passiert mit meinen Daten?",
         a: "Gedächtnis, Erinnerungen und Einstellungen liegen auf deinem Gerät. Für die Antwort geht deine Frage an unsere Server und an die KI- und Sprachdienste aus der Datenschutzerklärung (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). Eine Kopie landet nur in der Cloud, wenn du eine Chat-App oder deinen Computer verbindest. Dein Konto verwaltet Clerk. Details stehen in der Datenschutzerklärung.",

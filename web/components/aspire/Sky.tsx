@@ -65,11 +65,6 @@ const GRID: Record<SkyPhase, Phase> = {
   day: "day", afternoon: "day", golden: "golden", sunset: "golden", dusk: "dusk",
 };
 
-/** Top and horizon colours of a sky. */
-export function skyColors(kind: SkyKind, phase: SkyPhase): [top: string, horizon: string] {
-  return GRADIENTS[skyFamily(kind)][GRID[phase] ?? "day"];
-}
-
 /* ---- colour helpers ---- */
 
 function hexRgb(hex: string): [number, number, number] {

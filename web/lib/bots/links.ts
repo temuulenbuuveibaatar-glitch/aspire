@@ -1,14 +1,14 @@
 // Linking a chat account (Telegram, Discord, Slack) to an Aspire user with a one-time code.
-// Server only. A code is 6 digits, works once, for 10 minutes; a new code replaces the user's
-// older ones. One row per (platform, chat, user): a Telegram group a linked user runs /link in
-// becomes a send target. The first link of a user is their primary chat (reminders go there).
-import { randomInt } from "node:crypto";
+// Server only. A code is 10 characters (the desktop code alphabet, about 49.5 bits: guessing stays
+// hopeless across many chat accounts and server instances), works once, for 10 minutes; a new code
+// replaces the user's older ones. One row per (platform, chat, user): a Telegram group a linked
+// user runs /link in becomes a send target. The first link of a user is their primary chat (reminders go there).
 import { deleteCloudData } from "@/lib/cloud";
+import { DESKTOP_CODE_RE as CODE_RE, newDesktopCode, normalizeDesktopCode } from "@/lib/desktop";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { BotPlatform, LinkTarget } from "./core";
 
 export const CODE_TTL_MS = 10 * 60_000;
-const CODE_RE = /^\d{6}$/;
 
 export interface BotLink {
   id: number;
@@ -50,7 +50,7 @@ function fail(what: string, error: { code?: string } | null): never {
   throw new Error(`links ${what} failed (${error?.code ?? "unknown"})`);
 }
 
-/** A fresh 6-digit code for this user (older codes of theirs stop working). */
+/** A fresh one-time code for this user (older codes of theirs stop working). */
 export async function createLinkCode(userId: string, now = new Date()): Promise<string> {
   const db = supabaseAdmin();
   // Housekeeping: this user's old codes and anyone's expired ones.
@@ -58,7 +58,7 @@ export async function createLinkCode(userId: string, now = new Date()): Promise<
   await db.from("link_codes").delete().lt("expires_at", now.toISOString());
   const expires_at = new Date(now.getTime() + CODE_TTL_MS).toISOString();
   for (let attempt = 0; attempt < 8; attempt++) {
-    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const code = newDesktopCode();
     const { error } = await db.from("link_codes").insert({ code, user_id: userId, expires_at });
     if (!error) return code;
     if (error.code !== "23505") fail("code", error); // 23505 = someone else holds this code: try another
@@ -71,7 +71,7 @@ export async function createLinkCode(userId: string, now = new Date()): Promise<
  * Null when the code is unknown or expired.
  */
 export async function redeemLinkCode(code: string, link: LinkTarget, now = new Date()): Promise<{ userId: string } | null> {
-  const clean = code.trim();
+  const clean = normalizeDesktopCode(code);
   if (!CODE_RE.test(clean) || !link.platformUserId || !link.chatId) return null;
   const db = supabaseAdmin();
   const { data, error } = await db.from("link_codes").delete().eq("code", clean).select("user_id, expires_at");

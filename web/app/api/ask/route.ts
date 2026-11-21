@@ -2,7 +2,7 @@ import { ask, NoBrainConfigured, type Turn } from "@/lib/brain";
 import { detectTextLanguage, isLang, type Lang } from "@/lib/lang";
 import { requireUser, signedOut } from "@/lib/auth";
 import { googleAccessToken } from "@/lib/google-token";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
 import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
 import { whereFrom } from "@/lib/where";
@@ -20,6 +20,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const user = await requireUser();
   if (!user) return signedOut();
+  const perUser = rateLimitKey(`ask-user:${user.id}`, 20); // one account cannot rotate IPs to run up the bill
+  if (perUser) return perUser;
 
   const body = (await req.json().catch(() => null)) as {
     text?: unknown;

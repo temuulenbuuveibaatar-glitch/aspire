@@ -92,6 +92,7 @@ interface SlackResult {
 
 export async function slackApi<T extends SlackResult>(token: string, method: string, body: object): Promise<T> {
   const res = await fetch(`https://slack.com/api/${method}`, {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -120,6 +121,7 @@ export async function slackPost(token: string, channel: string, text: string, th
 export async function slackRespond(responseUrl: string, body: object): Promise<void> {
   if (!/^https:\/\/hooks\.slack\.com\//.test(responseUrl)) throw new Error("Slack response_url is not a Slack URL");
   const res = await fetch(responseUrl, {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

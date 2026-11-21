@@ -23,6 +23,10 @@ interface HeroCardProps {
   sky: AmbientSky;
   weather: AmbientWeather | null;
   photo: AmbientPhoto | null | undefined;
+  /** Shown when `photo` fails to load (the photo kept on this device). */
+  fallback?: AmbientPhoto | null;
+  /** A photo URL that failed to load (so a broken kept photo is dropped, not shown again next open). */
+  onPhotoError?: (url: string) => void;
   timeZone: string | null;
   /** Epoch ms from the parent's clock; null before the client has read it (no clock is drawn then). */
   now: number | null;
@@ -47,13 +51,17 @@ export function placeClock(now: number, timeZone: string | null, lang: Lang): { 
   return { time: make({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d), date: make({ weekday: "short", day: "numeric", month: "short" }).format(d), zone };
 }
 
-export function HeroCard({ lang, place, sky, weather, photo, timeZone, now, coords, imperial = false, prov, state = "ready", effects = true, onOpenMap, onPlace }: HeroCardProps) {
+export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoError, timeZone, now, coords, imperial = false, prov, state = "ready", effects = true, onOpenMap, onPlace }: HeroCardProps) {
   const t = textFor(lang);
-  const [failed, setFailed] = useState<string | null>(null);
-  const url = httpsUrl(photo?.url);
-  const shown = url && url !== failed ? url : null;
-  const creditName = String(photo?.attribution?.name ?? "").trim().slice(0, 80);
-  const creditUri = httpsUrl(photo?.attribution?.uri);
+  // URLs that failed to load: the next candidate shows instead, never a blank hero while one is left.
+  const [failed, setFailed] = useState<string[]>([]);
+  const pick = [photo, fallback].find((p) => {
+    const u = httpsUrl(p?.url);
+    return !!u && !failed.includes(u);
+  });
+  const shown = httpsUrl(pick?.url);
+  const creditName = String(pick?.attribution?.name ?? "").trim().slice(0, 80);
+  const creditUri = httpsUrl(pick?.attribution?.uri);
   const google = !!shown && GOOGLE_HOST.test(new URL(shown).hostname);
   const [city, ...rest] = (place ?? "").split(",").map((s) => s.trim());
   const today = weather?.days?.[0];
@@ -72,7 +80,19 @@ export function HeroCard({ lang, place, sky, weather, photo, timeZone, now, coor
       <div aria-hidden className="absolute inset-0 -z-10">
         {shown && (
           // eslint-disable-next-line @next/next/no-img-element -- remote per-place photo
-          <img key={shown} src={shown} alt="" decoding="async" fetchPriority="high" referrerPolicy="no-referrer" onError={() => setFailed(shown)} className="v6-photo absolute inset-0 h-full w-full object-cover" />
+          <img
+            key={shown}
+            src={shown}
+            alt=""
+            decoding="async"
+            fetchPriority="high"
+            referrerPolicy="no-referrer"
+            onError={() => {
+              setFailed((f) => [...f, shown]);
+              onPhotoError?.(shown);
+            }}
+            className="v6-photo absolute inset-0 h-full w-full object-cover"
+          />
         )}
         {/* No photo: the sky itself fills the card (a still clear sky when no weather backs it). */}
         {(synced || !shown) && (

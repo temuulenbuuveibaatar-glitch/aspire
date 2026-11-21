@@ -2,7 +2,7 @@ import { requireUser, signedOut } from "@/lib/auth";
 import { makeBriefing } from "@/lib/briefing";
 import { googleAccessToken } from "@/lib/google-token";
 import { isLang, type Lang } from "@/lib/lang";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import type { Reminder, Title } from "@/lib/tools/types";
 import { whereFrom } from "@/lib/where";
 
@@ -16,6 +16,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const user = await requireUser();
   if (!user) return signedOut();
+  const perUser = rateLimitKey(`briefing-user:${user.id}`, 6); // one account cannot rotate IPs to run up the bill
+  if (perUser) return perUser;
 
   const body = (await req.json().catch(() => null)) as {
     lang?: unknown;

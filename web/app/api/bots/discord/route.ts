@@ -2,11 +2,13 @@
 // Discord needs an answer within 3 s, so commands are deferred (type 5) and the
 // real reply is written into the original message from after().
 import { after } from "next/server";
+import { readText, WEBHOOK_MAX_BYTES } from "@/lib/body";
 import { fallbackLine } from "@/lib/brain/shared";
 import { handleBotMessage, redeemLinkCode } from "@/lib/bots/core";
 import { discordReply, EPHEMERAL, verifyDiscord } from "@/lib/bots/discord";
 import { botText, langFromLocale } from "@/lib/bots/text";
 import { detectTextLanguage } from "@/lib/lang";
+import { linkTryAllowed, rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
@@ -46,7 +48,10 @@ const log = (what: string, e: unknown) =>
   console.error(`[bot:discord] ${what} failed:`, e instanceof Error ? e.message.slice(0, 200) : "unknown");
 
 export async function POST(req: Request) {
-  const raw = await req.text();
+  const limited = rateLimit(req, "bot-discord", 300);
+  if (limited) return limited;
+  const raw = await readText(req, WEBHOOK_MAX_BYTES);
+  if (raw === null) return new Response("invalid request signature", { status: 401 });
   const publicKey = process.env.DISCORD_PUBLIC_KEY ?? "";
   const ok =
     !!publicKey &&
@@ -96,7 +101,7 @@ export async function POST(req: Request) {
     after(async () => {
       let linked = false;
       try {
-        linked = !!(await redeemLinkCode(code, {
+        linked = linkTryAllowed("discord", userId) && !!(await redeemLinkCode(code, {
           platform: "discord",
           platformUserId: userId,
           chatId,

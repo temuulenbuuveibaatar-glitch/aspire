@@ -1,9 +1,13 @@
 // "Add to Slack": send the person to Slack's consent screen with a signed state cookie.
+import { slackStateSecret } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { newOAuthState, SLACK_SCOPES, SLACK_STATE_COOKIE, siteUrl } from "@/lib/bots/slack";
 
 export async function GET(req: Request) {
+  const limited = rateLimit(req, "slack-install", 10);
+  if (limited) return limited;
   const clientId = process.env.SLACK_CLIENT_ID;
-  const secret = process.env.CRON_SECRET;
+  const secret = slackStateSecret();
   if (!clientId || !secret) return Response.json({ error: "slack_not_configured" }, { status: 503 });
 
   const { state, cookie } = newOAuthState(secret);

@@ -26,6 +26,7 @@ export const MAX_MAIL = 10;
 
 async function gmail<T>(url: string, accessToken: string): Promise<T> {
   const res = await fetch(url, {
+    redirect: "error",
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(10_000),
     cache: "no-store",

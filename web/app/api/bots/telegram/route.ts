@@ -1,12 +1,14 @@
 // Telegram webhook. Answers 200 at once and does the work in after(), so a slow
 // answer never makes Telegram re-deliver the update (and duplicates are dropped).
 import { after } from "next/server";
+import { readText, WEBHOOK_MAX_BYTES } from "@/lib/body";
 import { fallbackLine, forSpeech } from "@/lib/brain/shared";
 import { handleBotMessage, redeemLinkCode } from "@/lib/bots/core";
 import { recentIds, safeEqual } from "@/lib/bots/secure";
 import { downloadTelegramFile, sendChatAction, sendTelegram, sendTelegramVoice } from "@/lib/bots/telegram";
 import { botText, langFromLocale } from "@/lib/bots/text";
 import { chooseSpokenLanguage, type Lang } from "@/lib/lang";
+import { linkTryAllowed } from "@/lib/rate-limit";
 import { synthesize, transcribe } from "@/lib/speech";
 
 export const maxDuration = 60;
@@ -95,6 +97,7 @@ async function work(msg: TgMessage, p: Plan): Promise<void> {
       case "linkUsage":
         return await sendTelegram(chatId, t().linkUsage, replyTo);
       case "link": {
+        if (!linkTryAllowed("telegram", userId)) return await sendTelegram(chatId, t().linkUnavailable, replyTo);
         const user = await redeemLinkCode(p.code, {
           platform: "telegram",
           platformUserId: userId,
@@ -139,7 +142,13 @@ export async function POST(req: Request) {
   const given = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
   if (!secret || !safeEqual(given, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const update = (await req.json().catch(() => null)) as TgUpdate | null;
+  const raw = await readText(req, WEBHOOK_MAX_BYTES);
+  let update: TgUpdate | null = null;
+  try {
+    update = raw ? (JSON.parse(raw) as TgUpdate) : null;
+  } catch {
+    // Not JSON: answered like an empty update below.
+  }
   if (!update || typeof update.update_id !== "number") return Response.json({ ok: true });
   if (!updates.firstTime(update.update_id)) return Response.json({ ok: true }); // re-delivery
 

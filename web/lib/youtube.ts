@@ -33,6 +33,7 @@ export async function searchVideos(q: string, lang: Lang = "en"): Promise<Video[
   let res: Response;
   try {
     res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, {
+      redirect: "error",
       headers: { "X-Goog-Api-Key": key },
       signal: AbortSignal.timeout(10_000),
     });

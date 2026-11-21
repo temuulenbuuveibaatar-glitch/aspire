@@ -1,4 +1,4 @@
-// POST { consent: true } -> { code, expiresAt }: a one-time 6-digit code (10 minutes) to link a
+// POST { consent: true } -> { code, expiresAt }: a one-time 10-character code (10 minutes) to link a
 // Telegram/Discord/Slack chat. Ticking the consent box (cloud sync for the bot) is required.
 import { linkingUser, readJson, serverError } from "@/lib/bots/guard";
 import { CODE_TTL_MS, createLinkCode } from "@/lib/bots/links";

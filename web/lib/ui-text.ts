@@ -54,20 +54,12 @@ export interface HudText {
 export const UI: Record<
   Lang,
   {
-    idle: string;
-    listening: string;
-    thinking: string;
-    speaking: string;
     repeat: string;
-    type: string;
-    send: string;
-    placeholder: string;
     voiceOffline: string;
     brainOffline: string;
     noMic: string;
     notHeard: string;
     error: string;
-    you: string;
     consent: string;
     privacy: string;
     terms: string;
@@ -114,7 +106,6 @@ export const UI: Record<
     save: string;
     invalidLink: string;
     alwaysOn: string;
-    mic: string;
     stop: string;
     newChat: string;
     menu: string;
@@ -123,7 +114,6 @@ export const UI: Record<
     continueGoogle: string;
     emailLabel: string;
     codeLabel: string;
-    verify: string;
     codeSent: string;
     signOut: string;
     /** Memory sheet, Learning list: the lesson level and one readable progress line. */
@@ -191,20 +181,12 @@ export const UI: Record<
   }
 > = {
   mn: {
-    idle: "Дараад ярина уу",
-    listening: "Сонсож байна…",
-    thinking: "Бодож байна…",
-    speaking: "Ярьж байна…",
     repeat: "Дахин сонсох",
-    type: "Бичих",
-    send: "Илгээх",
-    placeholder: "Асуултаа бичнэ үү…",
     voiceOffline: "Дуу хоолойн систем одоогоор унтраалттай байна. Хариултыг дэлгэцнээс уншина уу.",
     brainOffline: "Туслах одоогоор холбогдоогүй байна.",
     noMic: "Микрофон ашиглах зөвшөөрөл өгнө үү.",
     notHeard: "Сонсогдсонгүй. Дахин дараад ярина уу.",
     error: "Алдаа гарлаа. Дахин оролдоно уу.",
-    you: "Та",
     consent: "Таны дуу хоолойг зөвхөн асуултад хариулахад ашиглана. Хувийн мэдээллээ бүү хэлээрэй. Товчийг дарснаар та нөхцөлийг зөвшөөрч байна.",
     privacy: "Нууцлал",
     terms: "Нөхцөл",
@@ -250,7 +232,6 @@ export const UI: Record<
     save: "Хадгалах",
     invalidLink: "Энэ холбоос буруу байна",
     alwaysOn: "SMS, дуудлага, имэйл ноорог үргэлж ажиллана — таны утасны апп нээгдэнэ.",
-    mic: "Микрофон",
     stop: "Зогсоох",
     newChat: "Шинэ яриа",
     menu: "Цэс",
@@ -259,7 +240,6 @@ export const UI: Record<
     continueGoogle: "Google-ээр үргэлжлүүлэх",
     emailLabel: "Имэйл хаяг",
     codeLabel: "6 оронтой код",
-    verify: "Баталгаажуулах",
     codeSent: "Таны имэйл рүү нэвтрэх код илгээлээ.",
     signOut: "Гарах",
     lessonLevel: { beginner: "Анхан", intermediate: "Дунд", advanced: "Ахисан" },
@@ -322,20 +302,12 @@ export const UI: Record<
     hud: { status: "{m} эх сурвалжаас {n} нь хариу өгч байна", agent: "Асуух", approx: "ойролцоо", kinds: {"clear": "Цэлмэг", "partly": "Багавтар үүлтэй", "cloudy": "Үүлэрхэг", "fog": "Манан", "drizzle": "Шиврээ бороо", "rain": "Бороо", "storm": "Аадар", "snow": "Цас", "sleet": "Нойтон цас", "hail": "Мөндөр"}, feels: "Мэдрэгдэх {t}", today: "Өнөөдөр", whereTitle: "Та хаана байна вэ?", whereWhy: "Жарвис таны утасны нарийн байршлаар яг байгаа газрын цаг агаар, зураг, агаар, замын хөдөлгөөн, автобусыг харуулна. Байршлыг зөвхөн тухайн хүсэлтэд ашиглаж, хэзээ ч хадгалахгүй.", allow: "Нарийн байршлаа ашиглах", setCity: "Хотоо сонгох", notNow: "Одоо биш", myCity: "Миний хот", cityPlaceholder: "жишээ нь Эрдэнэт", cityHelp: "GPS унтраалттай эсвэл ажиллахгүй үед ашиглана.", voiceVia: "Дуу: {name}", noLocation: "Байршил тодорхойгүй", denied: "Байршил ашиглахыг зөвшөөрсөнгүй. Хотоо сонгоно уу." },
   },
   zh: {
-    idle: "按下说话",
-    listening: "正在听…",
-    thinking: "正在想…",
-    speaking: "正在说…",
     repeat: "再听一次",
-    type: "打字",
-    send: "发送",
-    placeholder: "请输入您的问题…",
     voiceOffline: "语音系统暂时离线，请看屏幕上的回答。",
     brainOffline: "助手暂时未连接。",
     noMic: "请允许使用麦克风。",
     notHeard: "没听清，请再按一次说话。",
     error: "出错了，请再试一次。",
-    you: "您",
     consent: "您的声音只用于回答问题。请不要说出个人信息。按下按钮即表示您同意使用条款。",
     privacy: "隐私",
     terms: "条款",
@@ -381,7 +353,6 @@ export const UI: Record<
     save: "保存",
     invalidLink: "链接无效",
     alwaysOn: "短信、电话和邮件草稿随时可用，会打开您手机上的应用。",
-    mic: "麦克风",
     stop: "停止",
     newChat: "新对话",
     menu: "菜单",
@@ -390,7 +361,6 @@ export const UI: Record<
     continueGoogle: "使用 Google 继续",
     emailLabel: "邮箱地址",
     codeLabel: "6 位验证码",
-    verify: "验证",
     codeSent: "登录验证码已发送到您的邮箱。",
     signOut: "退出登录",
     lessonLevel: { beginner: "入门", intermediate: "中级", advanced: "高级" },
@@ -453,20 +423,12 @@ export const UI: Record<
     hud: { status: "{m} 个数据源中有 {n} 个在线", agent: "提问", approx: "大致", kinds: {"clear": "晴", "partly": "少云", "cloudy": "多云", "fog": "雾", "drizzle": "毛毛雨", "rain": "雨", "storm": "雷雨", "snow": "雪", "sleet": "雨夹雪", "hail": "冰雹"}, feels: "体感 {t}", today: "今天", whereTitle: "您在哪里？", whereWhy: "贾维斯会用手机的精确位置，显示您真正所在之处的天气、照片、空气、路况和公交。位置只用于每次请求，从不保存。", allow: "使用我的精确位置", setCity: "设置我的城市", notNow: "以后再说", myCity: "我的城市", cityPlaceholder: "例如 额尔登特", cityHelp: "在 GPS 关闭或不可用时使用。", voiceVia: "语音：{name}", noLocation: "位置未知", denied: "未获准使用位置。请设置您的城市。" },
   },
   en: {
-    idle: "Press and speak",
-    listening: "Listening…",
-    thinking: "Thinking…",
-    speaking: "Speaking…",
     repeat: "Hear again",
-    type: "Type",
-    send: "Send",
-    placeholder: "Type your question…",
     voiceOffline: "The voice engine is offline right now. Please read the answer on screen.",
     brainOffline: "The assistant is not connected yet.",
     noMic: "Please allow the microphone.",
     notHeard: "I didn't hear anything. Press and speak again.",
     error: "Something went wrong. Please try again.",
-    you: "You",
     consent: "Your voice is only used to answer your question. Please don't share personal details. By pressing the button you agree to the terms.",
     privacy: "Privacy",
     terms: "Terms",
@@ -512,7 +474,6 @@ export const UI: Record<
     save: "Save",
     invalidLink: "That link doesn't look right",
     alwaysOn: "SMS, calls and email drafts always work — they open your phone's own apps.",
-    mic: "Microphone",
     stop: "Stop",
     newChat: "New chat",
     menu: "Menu",
@@ -521,7 +482,6 @@ export const UI: Record<
     continueGoogle: "Continue with Google",
     emailLabel: "Email address",
     codeLabel: "6-digit code",
-    verify: "Verify",
     codeSent: "We sent a sign-in code to your email.",
     signOut: "Sign out",
     lessonLevel: { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" },
@@ -584,20 +544,12 @@ export const UI: Record<
     hud: { status: "{n} of {m} sources answering", agent: "Ask", approx: "approx.", kinds: {"clear": "Clear", "partly": "Partly cloudy", "cloudy": "Cloudy", "fog": "Fog", "drizzle": "Drizzle", "rain": "Rain", "storm": "Thunderstorm", "snow": "Snow", "sleet": "Sleet", "hail": "Hail"}, feels: "Feels like {t}", today: "Today", whereTitle: "Where are you?", whereWhy: "Jarvis uses your phone's precise location for the weather, photo, air, traffic and buses where you really are. It is used only for each request and never stored.", allow: "Use my precise location", setCity: "Set my city", notNow: "Not now", myCity: "My city", cityPlaceholder: "e.g. Erdenet", cityHelp: "Used when GPS is off or not available.", voiceVia: "Voice: {name}", noLocation: "Location unknown", denied: "Location access was refused. Set your city instead." },
   },
   ru: {
-    idle: "Нажмите и говорите",
-    listening: "Слушаю…",
-    thinking: "Думаю…",
-    speaking: "Говорю…",
     repeat: "Повторить",
-    type: "Написать",
-    send: "Отправить",
-    placeholder: "Напишите вопрос…",
     voiceOffline: "Голосовая система сейчас недоступна. Ответ на экране.",
     brainOffline: "Помощник пока не подключён.",
     noMic: "Разрешите доступ к микрофону.",
     notHeard: "Не расслышал. Нажмите и скажите ещё раз.",
     error: "Произошла ошибка. Попробуйте ещё раз.",
-    you: "Вы",
     consent: "Ваш голос используется только для ответа. Не называйте личные данные. Нажимая кнопку, вы соглашаетесь с условиями.",
     privacy: "Конфиденциальность",
     terms: "Условия",
@@ -643,7 +595,6 @@ export const UI: Record<
     save: "Сохранить",
     invalidLink: "Неверная ссылка",
     alwaysOn: "SMS, звонки и черновики писем работают всегда — открываются приложения телефона.",
-    mic: "Микрофон",
     stop: "Стоп",
     newChat: "Новый разговор",
     menu: "Меню",
@@ -652,7 +603,6 @@ export const UI: Record<
     continueGoogle: "Продолжить с Google",
     emailLabel: "Адрес эл. почты",
     codeLabel: "6-значный код",
-    verify: "Подтвердить",
     codeSent: "Мы отправили код для входа на вашу почту.",
     signOut: "Выйти",
     lessonLevel: { beginner: "Начальный", intermediate: "Средний", advanced: "Продвинутый" },
@@ -715,20 +665,12 @@ export const UI: Record<
     hud: { status: "Отвечают {n} из {m} источников", agent: "Спросить", approx: "примерно", kinds: {"clear": "Ясно", "partly": "Переменная облачность", "cloudy": "Облачно", "fog": "Туман", "drizzle": "Морось", "rain": "Дождь", "storm": "Гроза", "snow": "Снег", "sleet": "Мокрый снег", "hail": "Град"}, feels: "Ощущается как {t}", today: "Сегодня", whereTitle: "Где вы?", whereWhy: "Джарвис использует точное местоположение телефона, чтобы показывать погоду, фото, воздух, пробки и автобусы там, где вы на самом деле. Оно нужно только для каждого запроса и никогда не сохраняется.", allow: "Использовать точное местоположение", setCity: "Указать мой город", notNow: "Не сейчас", myCity: "Мой город", cityPlaceholder: "например, Эрдэнэт", cityHelp: "Используется, когда GPS выключен или недоступен.", voiceVia: "Голос: {name}", noLocation: "Местоположение неизвестно", denied: "Доступ к местоположению запрещён. Укажите ваш город." },
   },
   de: {
-    idle: "Drücken und sprechen",
-    listening: "Ich höre zu…",
-    thinking: "Ich denke nach…",
-    speaking: "Ich spreche…",
     repeat: "Nochmal hören",
-    type: "Tippen",
-    send: "Senden",
-    placeholder: "Ihre Frage eingeben…",
     voiceOffline: "Die Sprachausgabe ist gerade offline. Die Antwort steht auf dem Bildschirm.",
     brainOffline: "Der Assistent ist noch nicht verbunden.",
     noMic: "Bitte erlauben Sie das Mikrofon.",
     notHeard: "Ich habe nichts gehört. Bitte drücken und noch einmal sprechen.",
     error: "Etwas ist schiefgelaufen. Bitte noch einmal versuchen.",
-    you: "Sie",
     consent: "Ihre Stimme wird nur für die Antwort verwendet. Bitte nennen Sie keine persönlichen Daten. Mit dem Drücken stimmen Sie den Bedingungen zu.",
     privacy: "Datenschutz",
     terms: "Bedingungen",
@@ -774,7 +716,6 @@ export const UI: Record<
     save: "Speichern",
     invalidLink: "Dieser Link ist ungültig",
     alwaysOn: "SMS, Anrufe und E-Mail-Entwürfe gehen immer – sie öffnen die Apps Ihres Telefons.",
-    mic: "Mikrofon",
     stop: "Stopp",
     newChat: "Neuer Chat",
     menu: "Menü",
@@ -783,7 +724,6 @@ export const UI: Record<
     continueGoogle: "Weiter mit Google",
     emailLabel: "E-Mail-Adresse",
     codeLabel: "6-stelliger Code",
-    verify: "Bestätigen",
     codeSent: "Wir haben Ihnen einen Anmeldecode per E-Mail geschickt.",
     signOut: "Abmelden",
     lessonLevel: { beginner: "Anfänger", intermediate: "Mittelstufe", advanced: "Fortgeschritten" },

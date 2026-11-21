@@ -87,6 +87,9 @@ export const DESKTOP_CODE_RE = /^[A-HJKMNP-Z2-9]{10}$/;
 /** A typed code in canonical form: upper case, no spaces or dashes ("abcde-fghjk" -> "ABCDEFGHJK"). */
 export const normalizeDesktopCode = (v: unknown): string =>
   typeof v === "string" ? v.slice(0, 64).toUpperCase().replace(/[\s-]+/g, "") : "";
+/** A random code in this alphabet (also used for chat link codes, lib/bots/links.ts). */
+export const newDesktopCode = (): string =>
+  Array.from({ length: DESKTOP_CODE_LENGTH }, () => DESKTOP_CODE_ALPHABET[randomInt(DESKTOP_CODE_ALPHABET.length)]).join("");
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -199,7 +202,7 @@ export async function createDesktopCode(userId: string, now = new Date()): Promi
   await db.from("desktop_codes").delete().lt("expires_at", now.toISOString());
   const expires_at = new Date(now.getTime() + DESKTOP_CODE_TTL_MS).toISOString();
   for (let attempt = 0; attempt < 8; attempt++) {
-    const code = Array.from({ length: DESKTOP_CODE_LENGTH }, () => DESKTOP_CODE_ALPHABET[randomInt(DESKTOP_CODE_ALPHABET.length)]).join("");
+    const code = newDesktopCode();
     const { error } = await db.from("desktop_codes").insert({ code_hash: sha256(code), user_id: userId, expires_at });
     if (!error) return code;
     if (error.code !== "23505") fail("code", error);

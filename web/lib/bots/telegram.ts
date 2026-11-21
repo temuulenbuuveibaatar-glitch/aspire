@@ -23,7 +23,7 @@ interface TgResponse<T> {
 }
 
 async function call<T>(method: string, init: RequestInit): Promise<T> {
-  const res = await fetch(apiUrl(method), { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(() => {
+  const res = await fetch(apiUrl(method), { redirect: "error", ...init, signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(() => {
     throw new TelegramError(`Telegram ${method}: network error`);
   });
   const data = (await res.json().catch(() => null)) as TgResponse<T> | null;
@@ -77,6 +77,7 @@ export async function downloadTelegramFile(fileId: string): Promise<Blob> {
   if (!file.file_path) throw new TelegramError("Telegram getFile: no file path");
   if ((file.file_size ?? 0) > MAX_FILE_BYTES) throw new TelegramError("Telegram file too large");
   const res = await fetch(`https://api.telegram.org/file/bot${token()}/${file.file_path}`, {
+    redirect: "error",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   }).catch(() => {
     throw new TelegramError("Telegram file download: network error");

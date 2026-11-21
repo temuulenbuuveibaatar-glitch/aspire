@@ -26,6 +26,7 @@ async function call(contents: Content[], note: string, declarations: ReturnType<
   if (searchSupported) tools.push({ googleSearch: {} });
 
   const res = await fetch(ENDPOINT(MODEL), {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" },
     body: JSON.stringify({

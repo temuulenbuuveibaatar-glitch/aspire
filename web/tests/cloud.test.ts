@@ -34,13 +34,18 @@ describe("link codes", () => {
     const { createLinkCode, redeemLinkCode } = await import("@/lib/bots/links");
     const t0 = new Date("2026-11-20T10:00:00Z");
     const code = await createLinkCode("user_A", t0);
-    expect(code).toMatch(/^\d{6}$/);
+    expect(code).toMatch(/^[A-HJKMNP-Z2-9]{10}$/); // ~49.5 bits: no 6-digit brute force
     expect(await redeemLinkCode(code, tg(), new Date(t0.getTime() + 60_000))).toEqual({ userId: "user_A" });
     expect(await redeemLinkCode(code, tg(), new Date(t0.getTime() + 61_000))).toBeNull(); // used
 
     const late = await createLinkCode("user_A", t0);
     expect(await redeemLinkCode(late, tg("200"), new Date(t0.getTime() + 11 * 60_000))).toBeNull(); // expired
     expect(await redeemLinkCode("12ab56", tg())).toBeNull();
+    expect(await redeemLinkCode("123456", tg())).toBeNull(); // the old 6-digit format is gone
+    // Typed codes are forgiving: lower case and a dash still work.
+    const typed = await createLinkCode("user_A", t0);
+    const loose = `${typed.slice(0, 5)}-${typed.slice(5)}`.toLowerCase();
+    expect(await redeemLinkCode(loose, tg("300"), new Date(t0.getTime() + 60_000))).toEqual({ userId: "user_A" });
   });
 
   it("a new code replaces the user's older ones", async () => {
@@ -81,7 +86,7 @@ describe("link codes", () => {
     const ok = await POST(req("POST", { consent: true }));
     expect(ok.status).toBe(200);
     const body = (await ok.json()) as { code: string; expiresAt: string };
-    expect(body.code).toMatch(/^\d{6}$/);
+    expect(body.code).toMatch(/^[A-HJKMNP-Z2-9]{10}$/);
     expect(Date.parse(body.expiresAt) - Date.now()).toBeGreaterThan(9 * 60_000);
     signedIn = null;
     expect((await POST(req("POST", { consent: true }))).status).toBe(401);

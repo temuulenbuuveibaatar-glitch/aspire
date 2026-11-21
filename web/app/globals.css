@@ -20,7 +20,6 @@
   --color-surface-3: #24332e; /* chips, inputs */
   --color-panel: #121c19; /* v4 alias of surface */
   --color-panel-2: #1a2622;
-  --color-panel-3: #24332e;
 
   /* Text (ink-muted 8:1 on surface, ink-faint at least 5.5:1 on surface-2) */
   --color-ink: #eef3f0;
@@ -59,10 +58,6 @@
   --color-white: #eef3f0;
   --color-black: #0b1311;
 
-  /* Legacy aliases (v2 names still used by untouched files) */
-  --color-cyan: #a8e6c4; /* = accent */
-  --color-glass: rgb(18 28 25 / 0.9);
-
   /* Radii (v6: 12, 20, 28) */
   --radius-sm: 12px;
   --radius-md: 16px;
@@ -86,8 +81,6 @@
   --font-weight-book: 450;
 
   /* Type scale (rem, so the A / A+ / A++ control scales everything). Floor is 16px. */
-  --text-xs: 1rem; /* raised to the 16px floor for untouched files */
-  --text-xs--line-height: 1.4;
   --text-sm: 1rem; /* raised to the 16px floor for untouched files */
   --text-sm--line-height: 1.45;
 
@@ -325,8 +318,7 @@
 @layer components {
   /* The only text surface. Solid enough (0.88) to keep 12.5:1 over a white snow sky.
      No backdrop-filter: blurring a moving canvas recomposites every frame. */
-  .panel,
-  .glass {
+  .panel {
     background-color: rgb(18 28 25 / 0.9);
     border: 1px solid var(--color-line);
     box-shadow: var(--shadow-panel);
@@ -336,10 +328,6 @@
   .panel-2 {
     background-color: var(--color-panel-2);
     border: 1px solid var(--color-line);
-  }
-  .panel-3 {
-    background-color: var(--color-panel-3);
-    border: 1px solid var(--color-line-strong);
   }
 
   /* Every pressable thing answers the press immediately (individual `scale`
@@ -518,7 +506,7 @@
       0 0 0 7px rgb(11 19 17 / 0.9);
   }
   /* On accent and success fills the accent ring vanishes; use ink instead. */
-  :where(.bg-accent, .bg-success, .on-accent, [data-on-accent], .skip-link):focus-visible {
+  :where(.bg-accent, .bg-success, [data-on-accent], .skip-link):focus-visible {
     outline-color: var(--color-ink);
   }
   /* A .hud's clip-path would cut an outside ring: draw it inside. */
@@ -575,8 +563,7 @@
 @layer components {
   /* Reduced transparency or Calm mode: opaque panels, stronger edges, no glow. */
   @media (prefers-reduced-transparency: reduce) {
-    .panel,
-    .glass {
+    .panel {
       background-color: var(--color-panel);
       border-color: var(--color-line-strong);
       box-shadow: none;
@@ -591,7 +578,7 @@
       background-color: var(--color-panel);
     }
   }
-  :root[data-calm="true"] :is(.panel, .glass) {
+  :root[data-calm="true"] .panel {
     background-color: var(--color-panel);
     border-color: var(--color-line-strong);
     box-shadow: none;
@@ -626,7 +613,6 @@
 
   @media (prefers-contrast: more) {
     .panel,
-    .glass,
     .hud {
       background-color: var(--color-panel);
     }
@@ -647,8 +633,6 @@
   @media (forced-colors: active) {
     .panel,
     .panel-2,
-    .panel-3,
-    .glass,
     .hud,
     .v6-card,
     .v6-chip {

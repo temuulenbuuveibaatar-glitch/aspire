@@ -10,7 +10,7 @@ import { str, type Tool, type ToolContext, type WeatherCardDay } from "./types";
 const UA_HEADERS = { "User-Agent": UA };
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: UA_HEADERS, signal: AbortSignal.timeout(10_000) });
+  const res = await fetch(url, { redirect: "error", headers: UA_HEADERS, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`${new URL(url).host} returned ${res.status}`);
   return (await res.json()) as T;
 }

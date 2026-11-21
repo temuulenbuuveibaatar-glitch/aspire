@@ -166,6 +166,7 @@ export async function latestNews(query: NewsQuery = {}): Promise<Headline[]> {
     let res: Response;
     try {
       res = await fetch(`https://newsdata.io/api/1/latest?apikey=${encodeURIComponent(key)}&${cacheKey}`, {
+        redirect: "error",
         headers: { "User-Agent": UA, Accept: "application/json" },
         signal: AbortSignal.timeout(8_000),
         cache: "no-store",

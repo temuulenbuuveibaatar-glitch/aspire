@@ -26,6 +26,7 @@ interface GEvent {
 
 async function calendar<T>(url: string, accessToken: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
+    redirect: "error",
     method: body ? "POST" : "GET",
     headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,

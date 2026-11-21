@@ -2,7 +2,6 @@ import "server-only";
 // Google Maps Platform client (server only: the key comes from GOOGLE_MAPS_API_KEY and is
 // sent only in the X-Goog-Api-Key header, never in URLs, logs or error messages).
 // APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby, photo media), Weather API, Air Quality API.
-import type { AmbientPhoto } from "@/lib/ambient-types";
 import { googleLanguage, haversineKm, type LatLng } from "@/lib/geo";
 import type { Lang } from "@/lib/lang";
 import { validTimeZone } from "@/lib/tools/time";
@@ -65,6 +64,7 @@ async function google<T>(url: string, opts: { body?: unknown; fieldMask?: string
   let res: Response;
   try {
     res = await fetch(url, {
+      redirect: "error",
       method: opts.body !== undefined ? "POST" : "GET",
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -681,7 +681,7 @@ export async function openMeteoHourly(lat: number, lng: number): Promise<OpenMet
     res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}` +
         `&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=${FORECAST_HOURS + 1}&timeformat=unixtime&timezone=GMT`,
-      { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) },
+      { redirect: "error", headers: { "User-Agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) },
     );
   } catch {
     throw new MapsError("Open-Meteo is unreachable");
@@ -821,35 +821,3 @@ export async function nearbyTaxis(near: LatLng, lang: Lang = "en", opts: CallOpt
   return out;
 }
 
-const PHOTO_NAME = /^places\/[\w-]{1,300}\/photos\/[\w-]{1,1000}$/;
-const PHOTO_HOST = /^https:\/\/[a-z0-9.-]+\.(?:googleusercontent\.com|ggpht\.com|google\.com|googleapis\.com)\//i;
-
-/**
- * A scenic photo for a text query near a position: Places searchText (photos only), then the
- * photo media endpoint with skipHttpRedirect, which returns a public photoUri without our key.
- * Prefers a landscape photo. The author credit must be shown with it.
- */
-export async function placePhoto(query: string, near: LatLng, opts: CallOpts = {}): Promise<AmbientPhoto | null> {
-  type GPhoto = { name?: string; widthPx?: number; heightPx?: number; authorAttributions?: Array<{ displayName?: string; uri?: string }> };
-  const data = await google<{ places?: Array<{ googleMapsUri?: string; photos?: GPhoto[] }> }>(PLACES_URL, {
-    body: { textQuery: query, pageSize: 5, locationBias: circle(near, 20_000) },
-    fieldMask: "places.photos,places.googleMapsUri",
-    background: opts.background,
-  });
-  const photos = (data.places ?? []).flatMap((p) => (p.photos ?? []).filter((ph) => PHOTO_NAME.test(ph.name ?? "")).map((ph) => ({ ph, place: p.googleMapsUri })));
-  const pick = photos.find(({ ph }) => (ph.widthPx ?? 0) > (ph.heightPx ?? 0)) ?? photos[0];
-  if (!pick) return null;
-  const media = await google<{ photoUri?: string }>(`https://places.googleapis.com/v1/${pick.ph.name}/media?maxWidthPx=1600&skipHttpRedirect=true`, {
-    background: opts.background,
-  });
-  if (typeof media.photoUri !== "string" || !PHOTO_HOST.test(media.photoUri)) return null;
-  const author = pick.ph.authorAttributions?.[0];
-  const authorUri = author?.uri?.startsWith("//") ? `https:${author.uri}` : author?.uri;
-  const uri = authorUri && GOOGLE_MAPS_LINK.test(authorUri) ? authorUri : pick.place && GOOGLE_MAPS_LINK.test(pick.place) ? pick.place : "https://www.google.com/maps";
-  const name =
-    (author?.displayName ?? "")
-      .replace(/[\u0000-\u001f<>]/g, "")
-      .trim()
-      .slice(0, 80) || "Google Maps";
-  return { url: media.photoUri, attribution: { name, uri } };
-}

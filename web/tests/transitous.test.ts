@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextBus, tripPlanner } from "@/lib/tools/local";
 import type { ToolContext } from "@/lib/tools/types";
-import { departuresNear, findPlace, PLAN_DAILY_LIMIT, planTrip, resetTransitous, TRANSITOUS_UA } from "@/lib/transitous";
+import { along, decodePolyline, departuresNear, findPlace, PLAN_DAILY_LIMIT, planTrip, resetTransitous, TRANSITOUS_UA, vehiclesNear } from "@/lib/transitous";
 
 const NOW = new Date("2026-11-21T10:00:00Z");
 const at = (min: number) => new Date(NOW.getTime() + min * 60_000).toISOString();
@@ -39,6 +39,34 @@ const PLAN = {
     { legs: [{ mode: "SUBWAY", realTime: false, startTime: at(-5), endTime: at(10), routeShortName: "U2", from: { name: "Old" }, to: { name: "Zoo" } }] },
   ],
 };
+// Google's polyline encoding (precision 5), as MOTIS sends route shapes.
+function encode(points: [number, number][]): string {
+  let out = "", pl = 0, pg = 0;
+  const one = (v: number) => {
+    let n = v < 0 ? ~(v << 1) : v << 1;
+    while (n >= 0x20) { out += String.fromCharCode((0x20 | (n & 0x1f)) + 63); n >>= 5; }
+    out += String.fromCharCode(n + 63);
+  };
+  for (const [la, lg] of points) {
+    const a = Math.round(la * 1e5), g = Math.round(lg * 1e5);
+    one(a - pl); one(g - pg);
+    [pl, pg] = [a, g];
+  }
+  return out;
+}
+const seg = (route: string, mode: string, from: number, to: number, line: [number, number][], extra: Record<string, unknown> = {}) => ({
+  trips: [{ tripId: `trip-${route}`, routeShortName: route }], mode, departure: at(from), arrival: at(to), realTime: true,
+  from: { name: "A" }, to: { name: `Next ${route}` }, polyline: encode(line), ...extra,
+});
+const TRIPS = [
+  // Halfway along a 2 km east-west line through HERE at 10:00.
+  seg("100", "BUS", -1, 1, [[52.5208, 13.3948], [52.5208, 13.4242]]),
+  seg("100", "BUS", 1, 3, [[52.5208, 13.4242], [52.53, 13.45]]), // the same trip later: shown once
+  seg("M2", "TRAM", 1, 4, [[52.5232, 13.4105], [52.53, 13.42]], { realTime: false }), // waits at its stop
+  seg("U2", "SUBWAY", -1, 1, [[52.52, 13.40], [52.52, 13.42]]), // not on the road
+  seg("200", "BUS", -5, -2, [[52.52, 13.40], [52.52, 13.42]]), // already past
+  seg("300", "BUS", -1, 1, [[52.60, 13.50], [52.61, 13.51]]), // far away
+];
 const GEOCODE = (u: URL) => (u.searchParams.get("text")?.startsWith("Zoo") ? [{ type: "STOP", name: "Zoologischer Garten", lat: 52.5069, lon: 13.3323 }] : [{ type: "PLACE", name: "Far town", lat: 10, lon: 10 }]);
 
 let calls: { url: URL; init: RequestInit }[];
@@ -57,6 +85,7 @@ beforeEach(() => {
       if (url.pathname.endsWith("/v5/stoptimes")) return Response.json(STOPTIMES);
       if (url.pathname.endsWith("/v5/plan")) return Response.json(PLAN);
       if (url.pathname.endsWith("/v1/geocode")) return Response.json(GEOCODE(url));
+      if (url.pathname.endsWith("/v5/map/trips")) return Response.json(TRIPS);
       throw new TypeError("network down");
     }),
   );
@@ -167,5 +196,42 @@ describe("bus tools fall back to Transitous outside Erdenet", () => {
     calls = [];
     expect(await nextBus.run({ stop: "Zoo", route: "", to: "", bus: "" }, ctx({ timeZone: "Europe/Berlin", city: undefined }))).toMatchObject({ error: expect.stringMatching(/Location unknown/) });
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("vehicles on the road (Transitous map trips)", () => {
+  it("decodes route shapes and walks along them by distance", () => {
+    const line = decodePolyline(encode([[52.5, 13.4], [52.5, 13.42], [-33.86, 151.2]]));
+    expect(line).toEqual([{ lat: 52.5, lng: 13.4 }, { lat: 52.5, lng: 13.42 }, { lat: -33.86, lng: 151.2 }]);
+    expect(along([{ lat: 0, lng: 0 }, { lat: 0, lng: 2 }], 0.25)).toEqual({ lat: 0, lng: 0.5 });
+    expect(along([{ lat: 0, lng: 0 }, { lat: 0, lng: 2 }], 9)).toEqual({ lat: 0, lng: 2 });
+    expect(along([], 0.5)).toBeNull();
+  });
+
+  it("places buses and trams near the point by the clock, each trip once, nearest first", async () => {
+    const v = await vehiclesNear(HERE, NOW);
+    expect(v.map((x) => [x.route, x.mode, x.live, x.nextStop])).toEqual([["100", "BUS", true, "Next 100"], ["M2", "TRAM", false, "Next M2"]]);
+    expect(v[0].lat).toBeCloseTo(52.5208, 4);
+    expect(v[0].lng).toBeCloseTo(13.4095, 3);
+    expect(v[0].distanceM).toBeLessThan(30);
+    expect(v[1]).toMatchObject({ lat: 52.5232, lng: 13.4105 });
+  });
+
+  it("sends only the ~1 km cell's box and a short window, with our User-Agent, and caches 30 s", async () => {
+    await vehiclesNear(HERE, NOW);
+    const q = calls[0].url.searchParams;
+    expect(q.get("min")).toBe("52.505,13.3853");
+    expect(q.get("max")).toBe("52.535,13.4347");
+    expect(Date.parse(q.get("endTime")!) - Date.parse(q.get("startTime")!)).toBe(120_000);
+    expect(new Headers(calls[0].init.headers).get("User-Agent")).toBe(TRANSITOUS_UA);
+    await vehiclesNear({ lat: 52.5211, lng: 13.4099 }, new Date(NOW.getTime() + 10_000));
+    expect(calls).toHaveLength(1);
+    await vehiclesNear(HERE, new Date(NOW.getTime() + 40_000));
+    expect(calls).toHaveLength(2);
+  });
+
+  it("throws when Transitous is down (so the tool can say so)", async () => {
+    fail = true;
+    await expect(vehiclesNear(HERE, NOW)).rejects.toThrow();
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/ambient/route";
-import { cityParam, getAmbient, googleSky, locate, placeName, resetAmbientCache, skyText, trafficLevel, wikiPhoto, wmoSky, cityPhoto } from "@/lib/ambient";
+import { cityParam, getAmbient, googleSky, locate, photoVariant, placeName, resetAmbientCache, skyText, trafficLevel, wmoSky, cityPhoto } from "@/lib/ambient";
+import { resetAirDetail } from "@/lib/tools/air";
 import { drivingTraffic, haversineKm, resetMapsUsage } from "@/lib/maps";
 import { resetTransitous } from "@/lib/transitous";
 
@@ -15,6 +16,7 @@ const NOW = new Date("2026-11-21T10:00:00Z");
 beforeEach(() => {
   user.current = { id: "user_2abc", email: null };
   resetAmbientCache();
+  resetAirDetail();
   resetMapsUsage();
   resetTransitous();
   vi.stubEnv("GOOGLE_MAPS_API_KEY", "");
@@ -237,7 +239,10 @@ describe("snapshot without a Google key", () => {
     expect(a.sky).toEqual({ kind: "snow", intensity: 0.35, isDay: true, windKph: 14, cloudCover: 90 });
     expect(a.weather).toMatchObject({ tempC: -12, feelsC: -18, text: "Небольшой снег" });
     expect(a.weather?.days[0]).toMatchObject({ date: "2026-11-21", minC: -20, maxC: -8, kind: "snow", precipChance: 60 });
-    expect(a.air).toEqual({ aqi: 112, category: "sensitive", pm25: 40.2, source: "open-meteo", at: expect.any(String) });
+    expect(a.air).toEqual({
+      aqi: 112, category: "sensitive", pm25: 40.2, source: "open-meteo", at: expect.any(String),
+      pollutants: { pm25: 40.2, pm10: 80, o3: null, no2: null, so2: null, co: null }, dominant: null, forecast: [],
+    });
     expect(a.weather).toMatchObject({ source: "open-meteo", at: expect.any(String) });
     expect(a.stopsSource).toBe("erdenet-live");
     expect(a.traffic).toBeNull();
@@ -718,49 +723,6 @@ describe("Erdenet feed edge cases", () => {
   });
 });
 
-describe("wikiPhoto (free fallback)", () => {
-  const img = (w: number, h: number, ext = "jpg", path = "commons") => ({ source: `https://upload.wikimedia.org/wikipedia/${path}/thumb/a/ab/${w}.${ext}/${w}px-${w}.${ext}`, width: w, height: h });
-  const commons = (artist: string, licence: string) => ({
-    query: { pages: { "-1": { imageinfo: [{ descriptionurl: "https://commons.wikimedia.org/wiki/File:View.jpg", extmetadata: { Artist: { value: artist }, LicenseShortName: { value: licence } } }] } } },
-  });
-
-  it("picks a 1600 px landscape Commons JPEG thumbnail and credits its author and licence", async () => {
-    const calls = mockFetch([
-      ["en.wikipedia.org/w/api.php", { query: { pages: {
-        a: { pageimage: "Tall.jpg", thumbnail: img(1200, 2000) },
-        b: { pageimage: "Small.jpg", thumbnail: img(800, 500) },
-        c: { pageimage: "View.jpg", thumbnail: img(1600, 1067) },
-        d: { pageimage: "Map.png", thumbnail: img(1600, 900, "png") },
-        e: { pageimage: "Local.jpg", thumbnail: img(1600, 1000, "jpg", "en") },
-        f: { pageimage: "Pano.jpg", thumbnail: img(1600, 400) },
-      } } }],
-      ["commons.wikimedia.org/w/api.php", commons('<a href="//commons.wikimedia.org/wiki/User:Bat">B. Bat</a>', "CC BY-SA 4.0")],
-    ]);
-    expect(await wikiPhoto({ lat: 49.03, lng: 104.08 })).toEqual({
-      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/1600.jpg/1600px-1600.jpg",
-      attribution: { name: "B. Bat / CC BY-SA 4.0 (Wikimedia Commons)", uri: "https://commons.wikimedia.org/wiki/File:View.jpg" },
-    });
-    expect(calls[0].url).toContain("pithumbsize=1600");
-    expect(calls[0].url).not.toContain("original");
-    expect(calls[1].url).toContain("titles=File%3AView.jpg");
-  });
-
-  it("gives no photo when its author or licence is unknown, and throws (not null) when a request fails", async () => {
-    mockFetch([
-      ["en.wikipedia.org/w/api.php", { query: { pages: { c: { pageimage: "View.jpg", thumbnail: img(1600, 1067) } } } }],
-      ["commons.wikimedia.org/w/api.php", commons("", "CC BY 4.0")],
-    ]);
-    expect(await wikiPhoto({ lat: 49.03, lng: 104.08 })).toBeNull();
-    mockFetch([]);
-    await expect(wikiPhoto({ lat: 49.03, lng: 104.08 })).rejects.toThrow();
-  });
-
-  it("returns null when nothing suitable is nearby", async () => {
-    mockFetch([["en.wikipedia.org/w/api.php", { query: { pages: {} } }]]);
-    expect(await wikiPhoto({ lat: 0, lng: 0 })).toBeNull();
-  });
-});
-
 describe("cityPhoto (whole-city Commons photo)", () => {
   const page = (title: string, index: number, w = 1920, h = 1080) => ({
     title, index,
@@ -780,5 +742,84 @@ describe("cityPhoto (whole-city Commons photo)", () => {
   });
   it("returns null for an empty city", async () => {
     expect(await cityPhoto("")).toBeNull();
+  });
+  it("a variant searches for it and needs it in the title", async () => {
+    const calls = mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: {
+      a: page("File:Erdenet skyline.jpg", 1),
+      b: page("File:Erdenet Winter Palace.jpg", 2),
+      c: page("File:Erdenet city in winter 2020.jpg", 3),
+    } } }]]);
+    expect((await cityPhoto("Erdenet", "winter"))?.url).toBe("https://thumb.wikimedia.org/t/3.jpg");
+    expect(new URL(calls[0].url).searchParams.get("gsrsearch")).toBe("Erdenet city winter filetype:bitmap");
+    mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: { a: page("File:Erdenet skyline.jpg", 1) } } }]]);
+    expect(await cityPhoto("Erdenet", "night")).toBeNull();
+  });
+  it("picks night after dark, winter in snow or deep cold, else the plain photo", () => {
+    const sky = (kind: "clear" | "snow", isDay: boolean, known?: boolean) => ({ kind, intensity: 0, isDay, windKph: null, cloudCover: null, ...(known === false ? { known } : {}) });
+    expect(photoVariant(sky("clear", false), 10)).toBe("night");
+    expect(photoVariant(sky("snow", true), 0)).toBe("winter");
+    expect(photoVariant(sky("clear", true), -12)).toBe("winter");
+    expect(photoVariant(sky("clear", true), 4)).toBeNull();
+    expect(photoVariant(sky("clear", false, false), -12)).toBeNull();
+    expect(photoVariant(null, -12)).toBeNull();
+  });
+});
+
+describe("weather-aware city photo in the snapshot", () => {
+  const page = (title: string, n: number) => ({
+    title, index: 1,
+    imageinfo: [{ thumburl: `https://thumb.wikimedia.org/t/${n}.jpg`, thumbwidth: 1920, thumbheight: 1080, descriptionurl: "https://commons.wikimedia.org/wiki/F",
+      extmetadata: { Artist: { value: "Ann" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
+  });
+  const commons = (u: string) => {
+    const q = new URL(u).searchParams.get("gsrsearch") ?? "";
+    return { query: { pages: { a: /winter|snow/.test(q) ? page("File:Darkhan city in winter.jpg", 2) : page("File:Darkhan skyline.jpg", 1) } } };
+  };
+  const darkhan = () => locate(new URLSearchParams("city=Darkhan"), new Headers());
+  const routes = (weather: unknown) => mockFetch([
+    ["geocoding-api.open-meteo.com", { results: [{ name: "Darkhan", country: "Mongolia", latitude: 49.4867, longitude: 105.9228 }] }],
+    ["api.open-meteo.com/v1/forecast", weather],
+    ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+    ["commons.wikimedia.org/w/api.php", (u: string) => commons(u)],
+  ]);
+
+  it("shows the winter photo when it is -12 C, and the skyline when the variant has none", async () => {
+    routes(OPEN_METEO);
+    expect((await getAmbient(await darkhan(), "en", NOW)).photo?.url).toBe("https://thumb.wikimedia.org/t/2.jpg");
+  });
+  it("falls back to the plain skyline when no variant photo exists", async () => {
+    const calls = mockFetch([
+      ["geocoding-api.open-meteo.com", { results: [{ name: "Darkhan", country: "Mongolia", latitude: 49.4867, longitude: 105.9228 }] }],
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+      ["commons.wikimedia.org/w/api.php", { query: { pages: { a: page("File:Darkhan skyline.jpg", 1) } } }],
+    ]);
+    expect((await getAmbient(await darkhan(), "en", NOW)).photo?.url).toBe("https://thumb.wikimedia.org/t/1.jpg");
+    expect(calls.some((c) => c.url.includes("winter"))).toBe(true);
+  });
+  it("asks for no variant on a mild day", async () => {
+    const calls = routes({ ...OPEN_METEO, current: { ...OPEN_METEO.current, temperature_2m: 12, weather_code: 1 } });
+    expect((await getAmbient(await darkhan(), "en", NOW)).photo?.url).toBe("https://thumb.wikimedia.org/t/1.jpg");
+    expect(calls.some((c) => /winter|night/.test(c.url))).toBe(false);
+  });
+});
+
+describe("air detail in the snapshot", () => {
+  it("adds each pollutant, the dominant one and the next days' worst AQI", async () => {
+    const hours = (day: string, v: number[]) => v.map((_, i) => `${day}T${String(i).padStart(2, "0")}:00`);
+    mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["air-quality-api.open-meteo.com", {
+        current: { us_aqi: 118, pm2_5: 21.84, pm10: 23.3, ozone: 81, nitrogen_dioxide: 12.3, sulphur_dioxide: 23.9, carbon_monoxide: 856, us_aqi_pm2_5: 118, us_aqi_pm10: 40, us_aqi_ozone: 25 },
+        hourly: { time: [...hours("2026-11-21", [1, 2]), ...hours("2026-11-22", [1, 2])], us_aqi: [90, 160, 40, 55] },
+      }],
+    ]);
+    const a = await getAmbient({ coords: { lat: 47.92, lng: 106.92 }, locatedBy: "device", city: null, country: null, timeZone: null }, "en", NOW);
+    expect(a.air).toMatchObject({
+      aqi: 118, category: "sensitive", pm25: 21.8, source: "open-meteo",
+      pollutants: { pm25: 21.8, pm10: 23.3, o3: 81, no2: 12.3, so2: 23.9, co: 856 },
+      dominant: "pm25",
+      forecast: [{ date: "2026-11-21", maxAqi: 160, category: "unhealthy" }, { date: "2026-11-22", maxAqi: 55, category: "moderate" }],
+    });
   });
 });

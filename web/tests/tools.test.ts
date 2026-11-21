@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyActions, takeDue } from "@/lib/device-store";
-import { ALL_TOOLS, runTool, TOOL_LABELS, TOOLS, type ToolStep } from "@/lib/tools";
+import { ALL_TOOLS, runTool, TOOLS, type ToolStep } from "@/lib/tools";
 import { partOfDay, validTimeZone, zonedTime } from "@/lib/tools/time";
 import type { ToolContext } from "@/lib/tools/types";
 import { calculate, kindFromWords } from "@/lib/tools/world";
@@ -150,7 +150,7 @@ describe("no emojis", () => {
       expect(t.description).not.toMatch(PICTOGRAPH);
       for (const p of Object.values(t.parameters.properties)) expect(p.description).not.toMatch(PICTOGRAPH);
     }
-    expect(Object.values(TOOL_LABELS).every((l) => !("icon" in l))).toBe(true);
+    expect(ALL_TOOLS.every((t) => !("icon" in t.label))).toBe(true);
   });
   it("tool descriptions do not default to Erdenet for weather or air", () => {
     const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));

@@ -1,10 +1,10 @@
-// The real sun and its phases, the hour fallback, the demo override, the cached photo's trust boundary
+// The real sun and its phases, the hour fallback, the cached photo's trust boundary
 // and the sky layer.
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { Sky } from "@/components/aspire/Sky";
-import { phaseFromSun, phaseParam, skySun, sunPosition } from "@/lib/sun";
+import { phaseFromSun, skySun, sunPosition } from "@/lib/sun";
 import { parseCachedPhoto } from "@/lib/use-ambient";
 
 const ERDENET = { lat: 49.03, lng: 104.08 };
@@ -61,15 +61,6 @@ describe("phases", () => {
     expect(skySun({ hour: 2, isDay: true }).phase).toBe("sunrise");
   });
 
-  it("takes the demo override from ?time=, and nothing else", () => {
-    expect(phaseParam("?sky=snow&time=sunset")).toBe("sunset");
-    expect(phaseParam("?time=SUNRISE")).toBe("sunrise");
-    expect(phaseParam("?time=bogus")).toBeNull();
-    expect(phaseParam("")).toBeNull();
-    const s = skySun({ override: "golden", coords: ERDENET, at: new Date("2026-12-21T17:05:00Z") });
-    expect(s.phase).toBe("golden");
-    expect(s.altDeg).toBeGreaterThan(0);
-  });
 });
 
 describe("cached photo", () => {

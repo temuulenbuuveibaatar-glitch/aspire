@@ -2,7 +2,7 @@ import { requireUser, signedOut } from "@/lib/auth";
 import { GoogleAuthError } from "@/lib/google";
 import { insertEvent } from "@/lib/google-calendar";
 import { googleAccessToken } from "@/lib/google-token";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { zoneOr } from "@/lib/tools/time";
 
 export const maxDuration = 30;
@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   if (limited) return limited;
   const user = await requireUser();
   if (!user) return signedOut();
+  const perUser = rateLimitKey(`calendar-user:${user.id}`, 30); // one account cannot rotate IPs to run up the bill
+  if (perUser) return perUser;
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const title = text(body?.title, 200);

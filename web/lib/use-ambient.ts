@@ -6,10 +6,12 @@
 // in the request body (never the URL, so it stays out of request logs) only when the person turned
 // location sharing on; otherwise the city they set, if any; otherwise the server falls back to its
 // approximate network location. The last good photo is kept on this device so the hero shows a
-// photo the moment the app opens, before the first snapshot arrives.
+// photo the moment the app opens, and keeps showing it when a snapshot comes without one (heroPhoto).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Ambient, AmbientPhoto } from "@/lib/ambient-types";
+import { haversineKm } from "@/lib/geo";
 import type { Lang } from "@/lib/lang";
+import { httpsUrl } from "@/lib/utils";
 
 const REFRESH_MS = 3 * 60_000;
 /** A tab that comes back sooner than this keeps what it has. */
@@ -49,22 +51,26 @@ export function devicePosition(decimals = 4): Promise<Fix | null> {
     });
 }
 
-/** The last fix without waiting (null when there is none yet), rounded to `decimals`. */
-export function cachedPosition(decimals = 3): Fix | null {
-  return lastFix ? round(lastFix, decimals) : null;
-}
-
 /** About 1 km: enough for the morning briefing's weather. */
 export const roundedPosition = () => devicePosition(2);
 
 /* ---- the last good photo, per device (localStorage) ---- */
 
 export interface CachedPhoto extends AmbientPhoto {
-  /** The place the photo is of (Ambient.place), so another city never shows it. */
+  /** The place's label when it was kept (display only: it is translated, so never compared). */
   place: string | null;
   /** When it was kept (ms): Google Places content is kept a day at most. */
   savedAt?: number;
+  /** Where it was kept, to 1 decimal (about 10 km): the photo is only reused near there. */
+  at?: { lat: number; lng: number };
 }
+
+/** A kept photo is reused within this distance of where it was kept (a city and its edges). */
+const NEAR_KM = 30;
+const latLng = (v: unknown): { lat: number; lng: number } | undefined => {
+  const p = v as { lat?: unknown; lng?: unknown } | null;
+  return p && typeof p.lat === "number" && typeof p.lng === "number" && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 ? { lat: p.lat, lng: p.lng } : undefined;
+};
 
 const GOOGLE_HOST = /(^|\.)(googleusercontent|googleapis|google)\.com$/;
 const DAY_MS = 24 * 3600_000;
@@ -85,7 +91,8 @@ export function parseCachedPhoto(raw: string | null, now = Date.now()): CachedPh
     if (!v || !str(v.url, 2048) || !v.url.startsWith("https://") || !a || typeof a.name !== "string" || typeof a.uri !== "string") return null;
     const savedAt = typeof v.savedAt === "number" && Number.isFinite(v.savedAt) ? v.savedAt : undefined;
     if (GOOGLE_HOST.test(new URL(v.url).hostname) && !(savedAt !== undefined && now - savedAt < DAY_MS)) return null;
-    return { url: v.url, attribution: { name: a.name.slice(0, 80), uri: a.uri.slice(0, 512) }, place: str(v.place, 120) ? v.place : null, ...(savedAt !== undefined && { savedAt }) };
+    const at = latLng(v.at);
+    return { url: v.url, attribution: { name: a.name.slice(0, 80), uri: a.uri.slice(0, 512) }, place: str(v.place, 120) ? v.place : null, ...(savedAt !== undefined && { savedAt }), ...(at && { at }) };
   } catch {
     return null;
   }
@@ -125,12 +132,34 @@ function subscribePhoto(cb: () => void): () => void {
   };
 }
 
-/** Keeps a good photo (with its credit and place) for the next open. */
-export function rememberPhoto(photo: AmbientPhoto | null | undefined, place: string | null) {
-  const p = parseCachedPhoto(JSON.stringify({ ...photo, place, savedAt: Date.now() }));
+/** Keeps a good photo (with its credit, place and rough position) for the next open. */
+export function rememberPhoto(photo: AmbientPhoto | null | undefined, place: string | null, coords?: { lat: number; lng: number } | null) {
+  const at = coords ? { lat: Math.round(coords.lat * 10) / 10, lng: Math.round(coords.lng * 10) / 10 } : undefined;
+  const p = parseCachedPhoto(JSON.stringify({ ...photo, place, savedAt: Date.now(), at }));
   const cur = photoSnapshot();
-  if (p && (p.url !== cur?.url || p.place !== cur?.place)) writePhoto(JSON.stringify(p));
+  if (p && (p.url !== cur?.url || p.place !== cur?.place || p.at?.lat !== cur?.at?.lat || p.at?.lng !== cur?.at?.lng)) writePhoto(JSON.stringify(p));
 }
+
+/** Drops the kept photo: when the person picks another place, or (with its URL) when it fails to load. */
+export function forgetPhoto(url?: string) {
+  const cur = photoSnapshot();
+  if (cur && (url === undefined || httpsUrl(cur.url) === httpsUrl(url))) writePhoto(null);
+}
+
+/**
+ * The kept photo, unless the snapshot is known to be somewhere else (more than NEAR_KM from where it
+ * was kept). A snapshot with no photo, no place or a place label in another language keeps it: the
+ * label is translated and the server's photo search can miss, so neither may blank the hero.
+ */
+export function nearPhoto(ambient: Pick<Ambient, "coords"> | null, cached: CachedPhoto | null): CachedPhoto | null {
+  if (!cached) return null;
+  const here = ambient?.coords;
+  return here && cached.at && haversineKm(here, cached.at) > NEAR_KM ? null : cached;
+}
+
+/** The hero's photo: this snapshot's, else the kept one (before the first snapshot and after it alike). */
+export const heroPhoto = (ambient: Pick<Ambient, "photo" | "coords"> | null, cached: CachedPhoto | null): AmbientPhoto | null =>
+  ambient?.photo ?? nearPhoto(ambient, cached);
 
 /** The last good photo on this device; null on the server and during hydration. */
 export function useCachedPhoto(): CachedPhoto | null {
@@ -195,7 +224,7 @@ export function useAmbient({
       if (res?.ok) {
         const json: unknown = await res.json().catch(() => null);
         if (isAmbient(json)) {
-          if (json.photo) rememberPhoto(json.photo, json.place);
+          if (json.photo) rememberPhoto(json.photo, json.place, json.coords);
           byLang.current.set(`${l}|${share ? 1 : 0}|${c}`, { at: Date.now(), data: json });
           if (opts.current.lang === l) setSnap({ data: json, at: Date.now() });
         }

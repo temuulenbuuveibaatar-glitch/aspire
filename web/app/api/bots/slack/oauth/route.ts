@@ -1,6 +1,7 @@
 // Slack OAuth callback: check the state cookie, exchange the code for a bot token,
 // and hand the installation to the install store.
-import { requireUser } from "@/lib/auth";
+import { requireUser, slackStateSecret } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { checkOAuthState, readCookie, SLACK_STATE_COOKIE, siteUrl, slackInstallStore } from "@/lib/bots/slack";
 
 const clearCookie = `${SLACK_STATE_COOKIE}=; Path=/api/bots/slack; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
@@ -17,11 +18,13 @@ interface OAuthAccess {
 }
 
 export async function GET(req: Request) {
+  const limited = rateLimit(req, "slack-oauth", 10);
+  if (limited) return limited;
   const url = new URL(req.url);
   const site = siteUrl(req);
   const clientId = process.env.SLACK_CLIENT_ID;
   const clientSecret = process.env.SLACK_CLIENT_SECRET;
-  const secret = process.env.CRON_SECRET ?? "";
+  const secret = slackStateSecret();
 
   if (url.searchParams.get("error")) return redirect(`${site}/?slack=cancelled`);
 
@@ -34,6 +37,7 @@ export async function GET(req: Request) {
 
   try {
     const res = await fetch("https://slack.com/api/oauth.v2.access", {
+      redirect: "error",
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

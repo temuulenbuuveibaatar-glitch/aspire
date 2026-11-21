@@ -28,6 +28,7 @@ async function token(): Promise<string> {
   const { id, secret } = creds();
   if (!id || !secret) throw new Error("Spotify is not set up");
   const res = await fetch("https://accounts.spotify.com/api/token", {
+    redirect: "error",
     method: "POST",
     headers: { Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
@@ -55,6 +56,7 @@ export async function searchSpotify(q: string): Promise<SpotifyItem[]> {
   if (!query) return [];
   const params = new URLSearchParams({ q: query, type: "track,playlist", limit: "3" });
   const res = await fetch(`https://api.spotify.com/v1/search?${params}`, {
+    redirect: "error",
     headers: { Authorization: `Bearer ${await token()}` },
     signal: AbortSignal.timeout(10_000),
   });
