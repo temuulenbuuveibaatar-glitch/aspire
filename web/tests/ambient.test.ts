@@ -647,7 +647,7 @@ describe("wikiPhoto (free fallback)", () => {
 describe("cityPhoto (whole-city Commons photo)", () => {
   const page = (title: string, index: number, w = 1920, h = 1080) => ({
     title, index,
-    imageinfo: [{ thumburl: `https://upload.wikimedia.org/t/${index}.jpg`, thumbwidth: w, thumbheight: h, descriptionurl: "https://commons.wikimedia.org/wiki/F",
+    imageinfo: [{ thumburl: `https://thumb.wikimedia.org/t/${index}.jpg`, thumbwidth: w, thumbheight: h, descriptionurl: "https://commons.wikimedia.org/wiki/F",
       extmetadata: { Artist: { value: "<a>Ann</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
   });
   it("takes the first wide photo whose title names the city as a whole word", async () => {
@@ -657,7 +657,7 @@ describe("cityPhoto (whole-city Commons photo)", () => {
       c: page("File:Murun city view 2019.jpg", 3),
     } } }]]);
     expect(await cityPhoto("Murun, Mongolia")).toEqual({
-      url: "https://upload.wikimedia.org/t/3.jpg",
+      url: "https://thumb.wikimedia.org/t/3.jpg",
       attribution: { name: "Ann / CC BY-SA 4.0 (Wikimedia Commons)", uri: "https://commons.wikimedia.org/wiki/F" },
     });
   });

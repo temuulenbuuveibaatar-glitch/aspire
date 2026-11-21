@@ -453,7 +453,7 @@ export async function wikiPhoto(p: LatLng): Promise<AmbientPhoto | null> {
   const best = Object.values(data.query?.pages ?? {})
     .filter((pg) => {
       const { source = "", width = 0, height = 0 } = pg.thumbnail ?? {};
-      return !!pg.pageimage && /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/.+\.jpe?g$/i.test(source) && width >= 1000 && height > 0 && width / height > 1 && width / height <= 2.2;
+      return !!pg.pageimage && /^https:\/\/(upload|thumb)\.wikimedia\.org\/wikipedia\/commons\/.+\.jpe?g$/i.test(source) && width >= 1000 && height > 0 && width / height > 1 && width / height <= 2.2;
     })
     .sort((a, b) => Math.abs((a.thumbnail?.width ?? 0) - 1600) - Math.abs((b.thumbnail?.width ?? 0) - 1600))[0];
   if (!best?.thumbnail?.source || !best.pageimage) return null;
@@ -492,7 +492,7 @@ export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
         const i = pg.imageinfo?.[0];
         const w = i?.thumbwidth ?? 0, h = i?.thumbheight ?? 0;
         return wordRe.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") &&
-          /^https:\/\/upload\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.25;
+          /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.25;
       });
     const info = hit?.imageinfo?.[0];
     if (!info?.thumburl) continue;
