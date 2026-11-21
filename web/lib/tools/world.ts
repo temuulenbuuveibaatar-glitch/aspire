@@ -1,10 +1,12 @@
 // Tools that look things up in the world. Free APIs, no keys needed; weather and air quality
 // use Google Maps Platform first when GOOGLE_MAPS_API_KEY is set, and fall back to Open-Meteo.
+// With no place named, they use where the person is: the shared device location first, then the
+// network city. There is no default city: Aspire serves every country.
 import { airQualityAt, currentWeather, geocode, mapsConfigured } from "@/lib/maps";
-import { str, type Tool } from "./types";
+import type { SkyKind } from "@/lib/ambient-types";
+import { str, type Tool, type ToolContext, type WeatherCardDay } from "./types";
 
-const UA = { "User-Agent": "Aspire/1.0 (Orkhon Hackathon; https://github.com/temuulenbuuveibaatar-glitch/aspire)" };
-const ERDENET = { name: "Erdenet", latitude: 49.0333, longitude: 104.0833 };
+const UA = { "User-Agent": "Aspire/1.0 (voice assistant; https://github.com/temuulenbuuveibaatar-glitch/aspire)" };
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(10_000) });
@@ -12,23 +14,55 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-const isErdenet = (place: string) => !place || /erdenet|эрдэнэт|额尔登特/i.test(place);
+interface Loc {
+  name: string;
+  lat: number;
+  lng: number;
+}
 
-async function locate(place: string) {
-  if (isErdenet(place)) return ERDENET;
+export const NO_PLACE = "Location unknown: ask which city they mean, or suggest turning on 'Use my location' in Settings.";
+
+/**
+ * Where the person is, without any lookup: device location (opt-in) first, then the network
+ * position. Rounded to 2 decimals (about 1 km): weather and air quality need no more, and the
+ * privacy page promises no more for Open-Meteo and the Google Weather / Air Quality APIs.
+ */
+function hereOf(ctx: ToolContext): Loc | null {
+  const at = ctx.device.location ?? ctx.approxLocation;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return at ? { name: ctx.city || "your location", lat: r2(at.lat), lng: r2(at.lng) } : null;
+}
+
+/** Can a place-less question be answered at all? */
+const knowsWhere = (place: string, ctx: ToolContext) => Boolean(place || hereOf(ctx) || ctx.city);
+
+/** Open-Meteo geocoding (free, no key). */
+async function openMeteoGeocode(place: string): Promise<Loc> {
   const data = await getJson<{ results?: Array<{ name: string; country?: string; latitude: number; longitude: number }> }>(
     `https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(place)}`,
   );
   const r = data.results?.[0];
   if (!r) throw new Error(`Place not found: ${place}`);
-  return { name: [r.name, r.country].filter(Boolean).join(", "), latitude: r.latitude, longitude: r.longitude };
+  return { name: [r.name, r.country].filter(Boolean).join(", "), lat: r.latitude, lng: r.longitude };
+}
+
+async function locate(place: string, ctx: ToolContext, viaGoogle: boolean): Promise<Loc> {
+  const here = place ? null : hereOf(ctx);
+  if (here) return here;
+  const q = place || ctx.city || "";
+  if (!q) throw new Error(NO_PLACE);
+  if (viaGoogle) {
+    const g = await geocode(q, ctx.lang ?? "en");
+    return { name: g.name, lat: g.lat, lng: g.lng };
+  }
+  return openMeteoGeocode(q);
 }
 
 /** Google's answer for a place, or null to fall back to Open-Meteo (no key, quota, error, no data). */
-async function viaGoogle<T>(place: string, get: (lat: number, lng: number) => Promise<T>): Promise<({ place: string } & T) | null> {
+async function viaGoogle<T>(place: string, ctx: ToolContext, get: (lat: number, lng: number) => Promise<T>): Promise<({ place: string } & T) | null> {
   if (!mapsConfigured()) return null;
   try {
-    const loc = isErdenet(place) ? { name: ERDENET.name, lat: ERDENET.latitude, lng: ERDENET.longitude } : await geocode(place);
+    const loc = await locate(place, ctx, true);
     return { place: loc.name, ...(await get(loc.lat, loc.lng)) };
   } catch {
     return null;
@@ -45,30 +79,81 @@ const WMO: Record<number, string> = {
   96: "thunderstorm with hail", 99: "thunderstorm with hail",
 };
 
+/** Condition words (Google's English text or the WMO words above) to a sky kind for the card. */
+export function kindFromWords(text: unknown): SkyKind {
+  const t = typeof text === "string" ? text.toLowerCase() : "";
+  if (/thunder|storm/.test(t)) return "storm";
+  if (/hail/.test(t)) return "hail";
+  if (/sleet|freezing|ice pellet|wintry/.test(t)) return "sleet";
+  if (/snow|flurr|blizzard/.test(t)) return "snow";
+  if (/drizzle/.test(t)) return "drizzle";
+  if (/rain|shower/.test(t)) return "rain";
+  if (/fog|mist|haze/.test(t)) return "fog";
+  if (/partly|mostly clear|mainly clear|mostly sunny|partly sunny/.test(t)) return "partly";
+  if (/cloud|overcast/.test(t)) return "cloudy";
+  return "clear";
+}
+
+const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** Adds the weather card for a tool result (both sources share this shape). */
+function pushWeatherCard(
+  ctx: ToolContext,
+  out: {
+    place: string;
+    now: { temperatureC: number; feelsLikeC?: number; conditions?: string };
+    days?: { date: string; minC: number; maxC: number; conditions?: string; precipitationChancePct?: number }[];
+  },
+): void {
+  if (!fin(out.now.temperatureC)) return;
+  const days: WeatherCardDay[] = (out.days ?? [])
+    .filter((d) => d && fin(d.minC) && fin(d.maxC) && /^\d{4}-\d{2}-\d{2}$/.test(String(d.date)))
+    .slice(0, 3)
+    .map((d) => ({
+      date: d.date,
+      minC: d.minC,
+      maxC: d.maxC,
+      kind: kindFromWords(d.conditions),
+      precipChance: fin(d.precipitationChancePct) ? d.precipitationChancePct : null,
+    }));
+  ctx.actions.push({
+    type: "weather",
+    place: String(out.place).slice(0, 80),
+    tempC: out.now.temperatureC,
+    feelsC: fin(out.now.feelsLikeC) ? out.now.feelsLikeC : null,
+    kind: kindFromWords(out.now.conditions),
+    days,
+  });
+}
+
 export const weather: Tool = {
   name: "get_weather",
-  label: { icon: "☁️", mn: "Цаг агаар", en: "Weather" },
+  label: { mn: "Цаг агаар", en: "Weather" },
   description:
-    "Current weather and the next 3 days for a place (default Erdenet): temperature, feels-like, wind, snow/rain chance. Use for any weather or 'what should I wear' question.",
+    "Current weather and the next 3 days for any place in the world: temperature, feels-like, wind, rain or snow chance. With an empty place it uses where the person is (shared location, else their network city). Use for any weather or 'what should I wear' question.",
   parameters: {
     type: "object",
-    properties: { place: { type: "string", description: "City name in English, e.g. 'Ulaanbaatar'. Empty for Erdenet." } },
+    properties: { place: { type: "string", description: "City name in English, e.g. 'Lagos' or 'Berlin'. Empty string = where the person is." } },
     required: ["place"],
   },
-  async run(input) {
+  async run(input, ctx) {
     const place = str(input.place, 80);
-    const google = await viaGoogle(place, currentWeather);
-    if (google) return { ...google, source: "google" };
-    const loc = await locate(place);
+    if (!knowsWhere(place, ctx)) return { error: NO_PLACE };
+    const google = await viaGoogle(place, ctx, currentWeather);
+    if (google) {
+      pushWeatherCard(ctx, google);
+      return { ...google, source: "google" };
+    }
+    const loc = await locate(place, ctx, false);
     const d = await getJson<{
       current: Record<string, number>;
       daily: { time: string[]; temperature_2m_max: number[]; temperature_2m_min: number[]; weather_code: number[]; precipitation_probability_max: number[] };
     }>(
-      `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}` +
+      `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m" +
         "&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=3",
     );
-    return {
+    const result = {
       place: loc.name,
       now: {
         temperatureC: d.current.temperature_2m,
@@ -86,34 +171,39 @@ export const weather: Tool = {
       })),
       source: "open-meteo",
     };
+    pushWeatherCard(ctx, result);
+    return result;
   },
 };
 
 const aqiLevel = (aqi: number) =>
-  aqi <= 50 ? "good" : aqi <= 100 ? "moderate" : aqi <= 150 ? "unhealthy for sensitive groups (elderly)" : aqi <= 200 ? "unhealthy" : "very unhealthy";
+  aqi <= 50 ? "good" : aqi <= 100 ? "moderate" : aqi <= 150 ? "unhealthy for sensitive groups (elderly)" : aqi <= 200 ? "unhealthy" : aqi <= 300 ? "very unhealthy" : "hazardous";
 
 export const airQuality: Tool = {
   name: "get_air_quality",
-  label: { icon: "🌫️", mn: "Агаарын бохирдол", en: "Air quality" },
+  label: { mn: "Агаарын бохирдол", en: "Air quality" },
   description:
-    "Current air pollution (PM2.5, PM10, US AQI) for a place (default Erdenet). Winter smog is a real health risk in Mongolia: use it for 'is the air bad', 'can I go outside', and give simple advice (mask, stay inside) when AQI > 100.",
+    "Current air pollution (PM2.5, PM10, US AQI) for any place in the world. With an empty place it uses where the person is (shared location, else their network city). Use it for 'is the air bad', 'can I go for a run', and give simple advice (mask, stay inside) when AQI > 100; smog is a real health risk for elderly people and children.",
   parameters: {
     type: "object",
-    properties: { place: { type: "string", description: "City name in English. Empty for Erdenet." } },
+    properties: { place: { type: "string", description: "City name in English. Empty string = where the person is." } },
     required: ["place"],
   },
-  async run(input) {
+  async run(input, ctx) {
     const place = str(input.place, 80);
-    const google = await viaGoogle(place, airQualityAt);
+    if (!knowsWhere(place, ctx)) return { error: NO_PLACE };
+    const google = await viaGoogle(place, ctx, airQualityAt);
     if (google) {
       return { place: google.place, usAqi: google.usAqi, level: aqiLevel(google.usAqi), pm2_5: google.pm2_5, pm10: google.pm10, universalAqi: google.universalAqi, source: "google" };
     }
-    const loc = await locate(place);
-    const d = await getJson<{ current: { pm2_5: number; pm10: number; us_aqi: number } }>(
-      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${loc.latitude}&longitude=${loc.longitude}&current=pm2_5,pm10,us_aqi`,
+    const loc = await locate(place, ctx, false);
+    const d = await getJson<{ current?: { pm2_5?: number | null; pm10?: number | null; us_aqi?: number | null } }>(
+      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${loc.lat}&longitude=${loc.lng}&current=pm2_5,pm10,us_aqi`,
     );
-    const aqi = d.current.us_aqi;
-    return { place: loc.name, usAqi: aqi, level: aqiLevel(aqi), pm2_5: d.current.pm2_5, pm10: d.current.pm10, source: "open-meteo" };
+    const aqi = d.current?.us_aqi;
+    // A missing index must not read as "good".
+    if (typeof aqi !== "number" || !Number.isFinite(aqi)) return { place: loc.name, error: "No air quality data for this place right now" };
+    return { place: loc.name, usAqi: aqi, level: aqiLevel(aqi), pm2_5: d.current?.pm2_5 ?? null, pm10: d.current?.pm10 ?? null, source: "open-meteo" };
   },
 };
 
@@ -121,14 +211,15 @@ let ratesCache: { at: number; rates: Record<string, number> } | null = null;
 
 export const currency: Tool = {
   name: "convert_currency",
-  label: { icon: "💱", mn: "Ханш", en: "Exchange rate" },
-  description: "Convert money between currencies with today's rate, e.g. USD to MNT (tögrög), CNY, RUB, EUR, KRW.",
+  label: { mn: "Ханш", en: "Exchange rate" },
+  description:
+    "Convert money between any currencies with today's rate (USD, EUR, GBP, CNY, JPY, RUB, MNT, INR, NGN, BRL...). If the person does not name their own currency, use the one of their country.",
   parameters: {
     type: "object",
     properties: {
       amount: { type: "number", description: "Amount to convert, e.g. 100" },
       from: { type: "string", description: "3-letter currency code, e.g. USD" },
-      to: { type: "string", description: "3-letter currency code, e.g. MNT" },
+      to: { type: "string", description: "3-letter currency code, e.g. EUR" },
     },
     required: ["amount", "from", "to"],
   },
@@ -152,13 +243,13 @@ const WIKI_LANGS = new Set(["mn", "zh", "en", "ru", "de"]);
 
 export const encyclopedia: Tool = {
   name: "encyclopedia",
-  label: { icon: "📚", mn: "Нэвтэрхий толь", en: "Encyclopedia" },
+  label: { mn: "Нэвтэрхий толь", en: "Encyclopedia" },
   description:
     "Look up a person, place, history, science or culture topic on Wikipedia and get a short summary. Good for stable facts; use web search for news and prices.",
   parameters: {
     type: "object",
     properties: {
-      query: { type: "string", description: "What to look up, e.g. 'Chinggis Khaan'" },
+      query: { type: "string", description: "What to look up, e.g. 'Marie Curie'" },
       lang: { type: "string", description: "Wikipedia language", enum: ["mn", "zh", "en", "ru", "de"] },
     },
     required: ["query", "lang"],
@@ -190,7 +281,7 @@ export function calculate(expression: string): number {
 
 export const calculator: Tool = {
   name: "calculate",
-  label: { icon: "🧮", mn: "Тооцоолол", en: "Calculator" },
+  label: { mn: "Тооцоолол", en: "Calculator" },
   description: "Exact arithmetic: prices, change, pension amounts, percentages, unit math. Use instead of computing in your head.",
   parameters: {
     type: "object",

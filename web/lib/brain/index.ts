@@ -36,14 +36,19 @@ export interface AskResult {
 
 const EMPTY_DEVICE: DeviceContext = { memory: {}, reminders: [] };
 
+export type AskExtra = Pick<ToolContext, "gmailToken" | "timeZone" | "city" | "country" | "approxLocation">;
+
 export async function ask(
   text: string,
   lang: Lang,
   history: Turn[] = [],
   device: DeviceContext = EMPTY_DEVICE,
   now = new Date(),
-  /** Server-only capabilities for this request (e.g. a lazy Gmail token); never from the client body. */
-  extra: Pick<ToolContext, "gmailToken"> = {},
+  /**
+   * Per-request context from the server: a lazy Gmail token (never from the client body), and where
+   * the person is (time zone, city, country, network position), validated by the route.
+   */
+  extra: AskExtra = {},
 ): Promise<AskResult> {
   const brains = activeBrains();
   if (brains.length === 0) throw new NoBrainConfigured();

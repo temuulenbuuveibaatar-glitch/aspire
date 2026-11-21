@@ -7,6 +7,9 @@ export type StopNames = Partial<Record<"mn" | "en" | "ru" | "zh" | "de", string>
 export interface Stop {
   id: string;
   names: StopNames;
+  /** Approximate position (sample data), used to offer the nearest timetable stops. */
+  lat?: number;
+  lng?: number;
 }
 export interface Route {
   id: string;
@@ -26,6 +29,11 @@ export interface Timetable {
 }
 
 export const timetable = raw as Timetable;
+
+/** Every stop of the timetable (sample data for Erdenet). */
+export function allStops(tt: Timetable = timetable): Stop[] {
+  return tt.stops;
+}
 
 export interface Arrival {
   route: string;

@@ -6,7 +6,17 @@ import type { DeviceContext, ToolContext } from "@/lib/tools/types";
 
 // 2026-11-20 10:00 in Mongolia
 const NOW = new Date("2026-11-20T10:00:00+08:00");
-const ctx = (device: Partial<DeviceContext> = {}): ToolContext => ({ now: NOW, lang: "en", device: { memory: {}, reminders: [], ...device }, actions: [] });
+const ctx = (device: Partial<DeviceContext> = {}, where: Partial<ToolContext> = {}): ToolContext => ({
+  now: NOW,
+  lang: "en",
+  timeZone: "Asia/Ulaanbaatar",
+  device: { memory: {}, reminders: [], ...device },
+  actions: [],
+  ...where,
+});
+// Somewhere that is not Erdenet: the network says Lagos.
+const lagos = (device: Partial<DeviceContext> = {}) =>
+  ctx(device, { timeZone: "Africa/Lagos", city: "Lagos", country: "NG", approxLocation: { lat: 6.45, lng: 3.39 } });
 const run = async (name: string, input: unknown, c = ctx()) => {
   const steps: ToolStep[] = [];
   return { out: JSON.parse(await runTool(name, input, c, steps)), c, steps };
@@ -118,21 +128,24 @@ describe("weather and air quality via Google, with Open-Meteo fallback", () => {
         ? Response.json({ temperature: { degrees: -18 }, feelsLikeTemperature: { degrees: -25 }, weatherCondition: { description: { text: "Cloudy" } }, wind: { speed: { value: 9 } }, relativeHumidity: 55 })
         : Response.json({ forecastDays: [] }),
     );
-    const { out } = await run("get_weather", { place: "" });
-    expect(out).toMatchObject({ place: "Erdenet", source: "google", now: { temperatureC: -18, feelsLikeC: -25, conditions: "cloudy", windKmh: 9, humidityPct: 55 } });
+    const { out } = await run("get_weather", { place: "" }, lagos());
+    expect(out).toMatchObject({ place: "Lagos", source: "google", now: { temperatureC: -18, feelsLikeC: -25, conditions: "cloudy", windKmh: 9, humidityPct: 55 } });
     expect(urls.every(google)).toBe(true);
+    // the network position is used directly: no geocoding call
+    expect(urls.some((u) => u.includes("places:searchText"))).toBe(false);
+    expect(urls[0]).toContain("location.latitude=6.45");
   });
 
   it("falls back to Open-Meteo when Google fails", async () => {
     route((u) => (google(u) ? Response.json({ error: { status: "INVALID_ARGUMENT" } }, { status: 400 }) : Response.json(openMeteoWeather)));
-    const { out } = await run("get_weather", { place: "" });
+    const { out } = await run("get_weather", { place: "" }, lagos());
     expect(out).toMatchObject({ source: "open-meteo", now: { temperatureC: -20, conditions: "overcast" } });
   });
 
   it("falls back to Open-Meteo without a key", async () => {
     vi.stubEnv("GOOGLE_MAPS_API_KEY", "");
     const urls = route(() => Response.json(openMeteoWeather));
-    expect((await run("get_weather", { place: "" })).out.source).toBe("open-meteo");
+    expect((await run("get_weather", { place: "" }, lagos())).out.source).toBe("open-meteo");
     expect(urls.some(google)).toBe(false);
   });
 
@@ -147,12 +160,41 @@ describe("weather and air quality via Google, with Open-Meteo fallback", () => {
     expect(urls[1]).toContain("location.latitude=47.92");
   });
 
+  it("the shared device location wins over the network position", async () => {
+    const urls = route((u) =>
+      u.includes("currentConditions")
+        ? Response.json({ temperature: { degrees: 21 }, feelsLikeTemperature: { degrees: 21 }, weatherCondition: { description: { text: "Rain" } }, wind: { speed: { value: 4 } }, relativeHumidity: 90 })
+        : Response.json({ forecastDays: [] }),
+    );
+    await run("get_weather", { place: "" }, lagos({ location: { lat: 52.52, lng: 13.405 } }));
+    expect(urls[0]).toContain("location.latitude=52.52");
+  });
+
+  it("geocodes the network city when there is no position", async () => {
+    const urls = route((u) => {
+      if (u.includes("places:searchText")) return Response.json({ places: [{ formattedAddress: "Oslo, Norway", location: { latitude: 59.91, longitude: 10.75 } }] });
+      if (u.includes("currentConditions")) return Response.json({ temperature: { degrees: -3 }, feelsLikeTemperature: { degrees: -8 }, weatherCondition: { description: { text: "Snow" } }, wind: { speed: { value: 10 } }, relativeHumidity: 80 });
+      return Response.json({ forecastDays: [] });
+    });
+    const { out } = await run("get_weather", { place: "" }, ctx({}, { city: "Oslo" }));
+    expect(out).toMatchObject({ place: "Oslo, Norway", source: "google", now: { conditions: "snow" } });
+    expect(urls[0]).toContain("places:searchText");
+  });
+
+  it("with no place and no idea where the person is, it asks (no Erdenet default)", async () => {
+    const urls = route(() => Response.json(openMeteoWeather));
+    const w = await run("get_weather", { place: "" });
+    expect(w.out.error).toMatch(/Location unknown/);
+    expect((await run("get_air_quality", { place: "" })).out.error).toMatch(/Location unknown/);
+    expect(urls).toHaveLength(0);
+  });
+
   it("air quality: Google first, Open-Meteo on error", async () => {
     route(() => Response.json({ indexes: [{ code: "uaqi", aqi: 30 }, { code: "usa_epa", aqi: 172 }], pollutants: [{ code: "pm25", concentration: { value: 95 } }] }));
-    expect((await run("get_air_quality", { place: "" })).out).toMatchObject({ usAqi: 172, level: "unhealthy", universalAqi: 30, pm2_5: 95, source: "google" });
+    expect((await run("get_air_quality", { place: "" }, lagos())).out).toMatchObject({ place: "Lagos", usAqi: 172, level: "unhealthy", universalAqi: 30, pm2_5: 95, source: "google" });
 
     route((u) => (google(u) ? new Response("down", { status: 503 }) : Response.json({ current: { pm2_5: 12, pm10: 20, us_aqi: 55 } })));
-    expect((await run("get_air_quality", { place: "" })).out).toMatchObject({ usAqi: 55, level: "moderate", source: "open-meteo" });
+    expect((await run("get_air_quality", { place: "" }, lagos())).out).toMatchObject({ usAqi: 55, level: "moderate", source: "open-meteo" });
   });
 });
 
@@ -191,6 +233,53 @@ describe("buses: Google transit first, sample timetable fallback", () => {
     const f = await run("plan_trip", { from: "Railway Station", to: "Нэгдсэн эмнэлэг" });
     expect(f.out.source).toBe("sample-timetable");
     expect(f.out.options[0]).toMatchObject({ route: "5", rideMinutes: 22 });
+  });
+
+  it("outside Erdenet the sample timetable never answers; Google transit still does", async () => {
+    const urls = route(() => Response.json({}));
+    const none = await run("get_next_bus", { stop: "Central Square", route: "", to: "" }, lagos());
+    expect(none.out.error).toMatch(/only for Erdenet/);
+    expect(urls).toHaveLength(0);
+    expect((await run("plan_trip", { from: "Central Square", to: "Market" }, lagos())).out.error).toMatch(/get_directions/);
+
+    let sent: Record<string, unknown> | null = null;
+    route((_u, body) => {
+      sent = body;
+      return Response.json(transitRoutes);
+    });
+    const live = await run("get_next_bus", { stop: "Central Square", route: "", to: "Market" }, lagos());
+    expect(live.out).toMatchObject({ source: "google", now: "03:00" }); // 10:00 in Mongolia = 03:00 in Lagos
+    // Lagos stop names are not mapped to Erdenet's; the person's city is added instead
+    expect(sent!).toMatchObject({ origin: { address: "Central Square, Lagos" }, destination: { address: "Market, Lagos" } });
+  });
+
+  it("with nothing known about the place, Erdenet's timetable answers only on a Mongolian clock", async () => {
+    route(() => Response.json({}));
+    const unknownBerlin = ctx({}, { timeZone: "Europe/Berlin" });
+    const berlin = await run("get_next_bus", { stop: "center", route: "", to: "" }, unknownBerlin);
+    expect(berlin.out.source).toBeUndefined();
+    expect(berlin.out.error).toMatch(/Location unknown/);
+    const nothing = await run("get_next_bus", { stop: "center", route: "", to: "" }, ctx({}, { timeZone: undefined }));
+    expect(nothing.out.error).toMatch(/Location unknown/);
+    // Naming Erdenet still works from anywhere.
+    expect((await run("get_next_bus", { stop: "center", route: "", to: "Erdenet market" }, unknownBerlin)).out.source).toBe("sample-timetable");
+    // Unknown place on Mongolian time keeps the demo working.
+    expect((await run("get_next_bus", { stop: "center", route: "", to: "" })).out.source).toBe("sample-timetable");
+  });
+
+  it("air quality with no index from Open-Meteo is an error, never 'good'", async () => {
+    route((u) => (google(u) ? new Response("down", { status: 503 }) : Response.json({ current: { pm2_5: null, pm10: null, us_aqi: null } })));
+    const r = await run("get_air_quality", { place: "" }, lagos());
+    expect(r.out.error).toMatch(/No air quality data/);
+    expect(r.out.level).toBeUndefined();
+    route((u) => (google(u) ? new Response("down", { status: 503 }) : Response.json({ current: { pm2_5: 400, pm10: 500, us_aqi: 420 } })));
+    expect((await run("get_air_quality", { place: "" }, lagos())).out.level).toBe("hazardous");
+  });
+
+  it("a device location in Erdenet keeps the sample timetable", async () => {
+    route(() => Response.json({}));
+    const r = await run("get_next_bus", { stop: "center", route: "", to: "" }, lagos({ location: { lat: 49.03, lng: 104.08 } }));
+    expect(r.out).toMatchObject({ source: "sample-timetable", city: "Erdenet" });
   });
 
   it("Google calls count against MAPS_DAILY_LIMIT, then the timetable answers", async () => {

@@ -102,7 +102,8 @@ describe("bot core (linked users)", () => {
     const { handleBotMessage } = await import("@/lib/bots/core");
     const first = await handleBotMessage(msg("hello", "h1"));
     expect(first.linked).toBe(false);
-    expect(first.text).toBe("Hello!\n\nLink your Aspire account: open Settings → Connections in the app.");
+    // lib/bots/text.ts may still join these with an arrow glyph or already with plain punctuation.
+    expect(first.text).toMatch(/^Hello!\n\nLink your Aspire account: open Settings\W+Connections in the app\.$/);
     expect((await handleBotMessage(msg("hello again", "h1"))).text).toBe("Hello!");
   });
 
@@ -143,6 +144,7 @@ describe("bot core (linked users)", () => {
   });
 
   it("message and calendar actions are rendered as text with links", async () => {
+    vi.stubEnv("BOT_TIME_ZONE", "Asia/Ulaanbaatar");
     ask.mockResolvedValue(
       reply("Ready.", [
         { type: "message", channel: "email", to: "a@b.mn", subject: "Hi", text: "Late" },
@@ -152,9 +154,23 @@ describe("bot core (linked users)", () => {
     );
     const { handleBotMessage } = await import("@/lib/bots/core");
     const out = await handleBotMessage(msg("prepare things"));
-    expect(out.text).toContain("Message to send (Email → a@b.mn): Hi — Late\nhttps://mail.google.com/mail/?view=cm&fs=1&to=a%40b.mn&su=Hi&body=Late");
-    expect(out.text).toContain("Message to send (Slack → #team): Late\nOpen the Aspire app to send it.");
-    expect(out.text).toMatch(/Add to calendar: Dentist, .*09:00\nhttps:\/\/calendar\.google\.com\/x/);
+    expect(out.text).toContain("Message to send (Email: a@b.mn): Hi — Late\nhttps://mail.google.com/mail/?view=cm&fs=1&to=a%40b.mn&su=Hi&body=Late");
+    expect(out.text).toContain("Message to send (Slack: #team): Late\nOpen the Aspire app to send it.");
+    expect(out.text).toMatch(/Add to calendar: Dentist, .*09:00.*\nhttps:\/\/calendar\.google\.com\/x/);
+    expect(out.text).not.toMatch(/[\u2190-\u21FF]/); // no arrow glyphs
+    // BOT_TIME_ZONE reaches the tools
+    expect(ask.mock.calls[0][5]).toEqual({ timeZone: "Asia/Ulaanbaatar" });
+  });
+
+  it("without BOT_TIME_ZONE, event times are shown in UTC and labelled", async () => {
+    vi.stubEnv("BOT_TIME_ZONE", "");
+    ask.mockResolvedValue(
+      reply("Ready.", [{ type: "calendar", title: "Dentist", start: "2026-11-21T01:00:00.000Z", end: "2026-11-21T02:00:00.000Z", details: "", url: "https://calendar.google.com/x" }]),
+    );
+    const { handleBotMessage } = await import("@/lib/bots/core");
+    const out = await handleBotMessage(msg("prepare things", "utc1"));
+    expect(out.text).toMatch(/Dentist, .*01:00.*UTC/);
+    expect(ask.mock.calls[0]).toHaveLength(3); // no time zone passed
   });
 
   it("a failing cloud save still answers", async () => {

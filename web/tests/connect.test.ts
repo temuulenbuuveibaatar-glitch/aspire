@@ -7,6 +7,7 @@ import { isAllowedWebhook } from "@/lib/webhooks";
 const NOW = new Date("2026-11-20T10:00:00+08:00");
 const ctx = (device: Partial<DeviceContext> = {}): ToolContext => ({
   now: NOW,
+  timeZone: "Asia/Ulaanbaatar",
   device: { memory: {}, reminders: [], ...device },
   actions: [],
 });
@@ -35,7 +36,7 @@ describe("send_message", () => {
 
   it("telegram requires connection", async () => {
     const { out, c } = await run("send_message", msg("telegram", "me"));
-    expect(out.error).toBe("telegram is not connected — ask them to connect it in Settings → Connections");
+    expect(out.error).toBe("telegram is not connected. Ask them to connect it in Settings, Connections");
     expect(c.actions).toEqual([]);
     const ok = await run("send_message", msg("discord", "#team"), ctx({ connected: ["discord"] }));
     expect(ok.out.ok).toBe(true);
@@ -83,6 +84,13 @@ describe("add_to_calendar", () => {
     const a = c.actions[0];
     expect(a).toMatchObject({ type: "calendar", title: "Dentist", start: "2026-11-21T01:30:00.000Z", end: "2026-11-21T02:15:00.000Z", details: "Bring card" });
     expect(a.type === "calendar" && a.url).toContain("dates=20261121T013000Z%2F20261121T021500Z");
+  });
+
+  it("uses the person's own time zone, or one the model names", async () => {
+    const ny = await run("add_to_calendar", { title: "Call", date: "2026-11-23", time: "09:00", duration_minutes: 30, details: "", time_zone: "" }, { ...ctx(), timeZone: "America/New_York" });
+    expect(ny.c.actions[0]).toMatchObject({ start: "2026-11-23T14:00:00.000Z", end: "2026-11-23T14:30:00.000Z" });
+    const named = await run("add_to_calendar", { title: "Call", date: "2026-11-23", time: "09:00", duration_minutes: 30, details: "", time_zone: "Europe/London" });
+    expect(named.c.actions[0]).toMatchObject({ start: "2026-11-23T09:00:00.000Z" });
   });
 
   it("rejects bad dates", async () => {

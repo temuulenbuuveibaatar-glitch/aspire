@@ -1,6 +1,32 @@
 import type { Lang } from "@/lib/lang";
 
+/** Morning 05-11, afternoon 12-17, evening 18-04 (in the place's time zone). There is no "Good night": it is a farewell. */
+export type GreetingPart = "morning" | "afternoon" | "evening";
+
+/** Jarvis greeting parts. Sentence 1 = hello + form of address; sentence 2 only on the first open of a session. */
+export interface GreetingText {
+  morning: string;
+  afternoon: string;
+  evening: string;
+  /** Form of address for "mr" and "mrs" inside a greeting. */
+  sir: string;
+  madam: string;
+  /** Sentence 2 on the first open when nothing notable is happening. */
+  howIsItGoing: string;
+}
+
+/** One fact for the greeting's second sentence (spec 14.1). */
+export interface NotableText {
+  rain: string;
+  snow: string;
+  storm: string;
+  air: string;
+  traffic: string;
+  bus: string;
+}
+
 // Short on-screen labels. The screen follows the language the person last spoke.
+// No emojis, no arrow glyphs, no exclamation marks in greetings.
 export const UI: Record<
   Lang,
   {
@@ -67,7 +93,9 @@ export const UI: Record<
     stop: string;
     newChat: string;
     menu: string;
+    /** Starter chips for the empty state: short, polite, true in any city. */
     suggestions: string[];
+    greeting: GreetingText;
     signInTitle: string;
     continueGoogle: string;
     emailMeCode: string;
@@ -79,6 +107,9 @@ export const UI: Record<
     signOut: string;
     signedOutNotice: string;
     wrongCode: string;
+    /** Memory sheet, Learning list: the lesson level and one readable progress line. */
+    lessonLevel: Record<"beginner" | "intermediate" | "advanced", string>;
+    lessonLine: string;
     connectGmail: string;
     gmailConnected: string;
     gmailNote: string;
@@ -110,6 +141,35 @@ export const UI: Record<
     botCopy: string;
     botCopied: string;
     botCancel: string;
+    // v3 main screen (components/Assistant.tsx)
+    skipToConversation: string;
+    live: string;
+    locationOff: string;
+    location: string;
+    display: string;
+    textSize: string;
+    textNormal: string;
+    textLarge: string;
+    textLargest: string;
+    calmMode: string;
+    calmHelp: string;
+    skyEffects: string;
+    skyEffectsHelp: string;
+    on: string;
+    off: string;
+    units: string;
+    unitsAuto: string;
+    unitsMetric: string;
+    unitsImperial: string;
+    startListening: string;
+    stopListening: string;
+    stopSpeaking: string;
+    saved: string;
+    daily: string;
+    suggestionsLabel: string;
+    language: string;
+    /** Sentence 2 of the greeting when one thing is notable right now. `{route}` and `{n}` are filled in. */
+    notable: NotableText;
   }
 > = {
   mn: {
@@ -167,7 +227,7 @@ export const UI: Record<
     to: "Хэнд",
     discordWebhook: "Discord сувгийн холбоос (webhook)",
     slackWebhook: "Slack сувгийн холбоос (webhook)",
-    webhookHelp: "Discord: сервер тохиргоо → Integrations → Webhooks. Slack: Incoming Webhooks.",
+    webhookHelp: "Discord: сервер тохиргоо > Integrations > Webhooks. Slack: Incoming Webhooks.",
     save: "Хадгалах",
     invalidLink: "Энэ холбоос буруу байна",
     alwaysOn: "SMS, дуудлага, имэйл ноорог үргэлж ажиллана — таны утасны апп нээгдэнэ.",
@@ -176,7 +236,8 @@ export const UI: Record<
     stop: "Зогсоох",
     newChat: "Шинэ яриа",
     menu: "Цэс",
-    suggestions: ["Надад цөмийн физикийг энгийнээр зааж өгөөч", "Өнөөдөр цаг агаар ямар байна?", "Маргааш 8 цагт сануулга тавиач", "Багийнхандаа хоцорно гэж бичээд өгөөч", "Дараагийн автобус хэзээ ирэх вэ?", "100 доллар хэдэн төгрөг вэ?"],
+    suggestions: ["Өнөөдөр бороо орох уу?", "Гадаа алхахад агаар цэвэр үү?", "Хотын төв рүү автобусаар яаж очих вэ?", "Өглөөний мэдээг минь уншаад өгөөч", "Маргааш 8 цагт сануулаарай", "Надад шинэ зүйл зааж өгөөч"],
+    greeting: { morning: "Өглөөний мэнд", afternoon: "Өдрийн мэнд", evening: "Оройн мэнд", sir: "эрхэм ээ", madam: "хатагтай", howIsItGoing: "Бүх зүйл сайн байна уу?" },
     signInTitle: "Нэвтрэх",
     continueGoogle: "Google-ээр үргэлжлүүлэх",
     emailMeCode: "Имэйлээр код авах",
@@ -188,6 +249,8 @@ export const UI: Record<
     signOut: "Гарах",
     signedOutNotice: "Нэвтрэлтийн хугацаа дууссан. Дахин нэвтэрнэ үү.",
     wrongCode: "Код буруу эсвэл хугацаа нь дууссан байна. Дахин оролдоно уу.",
+    lessonLevel: { beginner: "Анхан", intermediate: "Дунд", advanced: "Ахисан" },
+    lessonLine: "{level}, {step}-р алхам, {score}%",
     connectGmail: "Gmail холбох",
     gmailConnected: "Gmail холбогдсон",
     gmailNote: "Зөвхөн уншина: Аспайр өглөөний мэдээ болон таны асуусан үед сүүлийн захидлын илгээгч, гарчиг, товч агуулгыг харна. Юу ч илгээхгүй, хадгалахгүй. Google \"баталгаажаагүй апп\" гэж анхааруулна: Advanced (Нэмэлт), дараа нь Continue (Үргэлжлүүлэх) дээр дарна уу.",
@@ -218,6 +281,33 @@ export const UI: Record<
     botCopy: "Код хуулах",
     botCopied: "Хуулагдлаа",
     botCancel: "Болих",
+    skipToConversation: "Яриа руу шилжих",
+    live: "Одоогийн нөхцөл",
+    locationOff: "Байршил унтраалттай",
+    location: "Байршил",
+    display: "Дэлгэц",
+    textSize: "Үсгийн хэмжээ",
+    textNormal: "Энгийн",
+    textLarge: "Том",
+    textLargest: "Хамгийн том",
+    calmMode: "Тайван горим",
+    calmHelp: "Тэнгэр болон бөмбөлөг хөдөлгөөнгүй, анивчилтгүй, самбар тод.",
+    skyEffects: "Тэнгэрийн эффект",
+    skyEffectsHelp: "Бодит цаг агаарыг дагах бороо, цас, үүл. Унтраавал хөдөлгөөнгүй өнгө харагдана.",
+    on: "Асаалттай",
+    off: "Унтраалттай",
+    units: "Хэмжих нэгж",
+    unitsAuto: "Автомат",
+    unitsMetric: "Метр (°C, км/ц)",
+    unitsImperial: "Англи (°F, mph)",
+    startListening: "Сонсож эхлэх",
+    stopListening: "Сонсохоо зогсоох",
+    stopSpeaking: "Ярихаа зогсоох",
+    saved: "Хадгалагдлаа",
+    daily: "Өдөр бүр",
+    suggestionsLabel: "Санал",
+    language: "Хэл",
+    notable: { rain: "Гадаа бороо орж байна.", snow: "Гадаа цас орж байна.", storm: "Гадаа аянгатай бороо орж байна.", air: "Өнөөдөр агаар эрүүл мэндэд хортой байна.", traffic: "Замын түгжрэл их байна.", bus: "{route} автобус {n} минутын дараа ирнэ." },
   },
   zh: {
     idle: "按下说话",
@@ -274,7 +364,7 @@ export const UI: Record<
     to: "收件人",
     discordWebhook: "Discord 频道 Webhook",
     slackWebhook: "Slack 频道 Webhook",
-    webhookHelp: "Discord：服务器设置 → 集成 → Webhooks。Slack：Incoming Webhooks。",
+    webhookHelp: "Discord：服务器设置 > 集成 > Webhooks。Slack：Incoming Webhooks。",
     save: "保存",
     invalidLink: "链接无效",
     alwaysOn: "短信、电话和邮件草稿随时可用，会打开您手机上的应用。",
@@ -283,7 +373,8 @@ export const UI: Record<
     stop: "停止",
     newChat: "新对话",
     menu: "菜单",
-    suggestions: ["用简单的话教我核物理", "今天天气怎么样？", "明天早上8点提醒我", "帮我给团队写条消息说我会迟到", "下一班公交车什么时候来？", "100美元等于多少图格里克？"],
+    suggestions: ["今天会下雨吗？", "空气适合出去散步吗？", "坐公交怎么去市中心？", "给我读今天的早间简报", "明天早上8点提醒我", "教我一点新知识"],
+    greeting: { morning: "早上好", afternoon: "下午好", evening: "晚上好", sir: "先生", madam: "女士", howIsItGoing: "今天过得怎么样？" },
     signInTitle: "登录",
     continueGoogle: "使用 Google 继续",
     emailMeCode: "通过邮件发送验证码",
@@ -295,6 +386,8 @@ export const UI: Record<
     signOut: "退出登录",
     signedOutNotice: "登录已过期，请重新登录。",
     wrongCode: "验证码错误或已过期，请重试。",
+    lessonLevel: { beginner: "入门", intermediate: "中级", advanced: "高级" },
+    lessonLine: "{level}，第 {step} 步，{score}%",
     connectGmail: "连接 Gmail",
     gmailConnected: "Gmail 已连接",
     gmailNote: "只读：Aspire 仅在早间简报或您提问时查看最近邮件的发件人、主题和简短预览，不会发送或保存任何内容。Google 会提示此应用尚未验证：请点“高级”（Advanced），再点“继续”（Continue）。",
@@ -325,6 +418,33 @@ export const UI: Record<
     botCopy: "复制代码",
     botCopied: "已复制",
     botCancel: "取消",
+    skipToConversation: "跳到对话",
+    live: "实时状况",
+    locationOff: "定位已关闭",
+    location: "位置",
+    display: "显示",
+    textSize: "字体大小",
+    textNormal: "标准",
+    textLarge: "大",
+    textLargest: "特大",
+    calmMode: "平静模式",
+    calmHelp: "天空和光球保持静止，没有闪光，面板不透明。",
+    skyEffects: "天空效果",
+    skyEffectsHelp: "雨、雪和云会随实时天气变化。关闭后显示静态渐变。",
+    on: "开",
+    off: "关",
+    units: "单位",
+    unitsAuto: "自动",
+    unitsMetric: "公制（°C、公里/时）",
+    unitsImperial: "英制（°F、英里/时）",
+    startListening: "开始聆听",
+    stopListening: "停止聆听",
+    stopSpeaking: "停止播放",
+    saved: "已保存",
+    daily: "每天",
+    suggestionsLabel: "建议",
+    language: "语言",
+    notable: { rain: "外面正在下雨。", snow: "外面正在下雪。", storm: "外面有雷雨。", air: "今天的空气不利于健康。", traffic: "现在交通很拥堵。", bus: "{route}路公交车{n}分钟后到。" },
   },
   en: {
     idle: "Press and speak",
@@ -381,7 +501,7 @@ export const UI: Record<
     to: "To",
     discordWebhook: "Discord channel webhook",
     slackWebhook: "Slack channel webhook",
-    webhookHelp: "Discord: Server settings → Integrations → Webhooks. Slack: Incoming Webhooks app.",
+    webhookHelp: "Discord: Server settings > Integrations > Webhooks. Slack: Incoming Webhooks app.",
     save: "Save",
     invalidLink: "That link doesn't look right",
     alwaysOn: "SMS, calls and email drafts always work — they open your phone's own apps.",
@@ -390,7 +510,8 @@ export const UI: Record<
     stop: "Stop",
     newChat: "New chat",
     menu: "Menu",
-    suggestions: ["Teach me nuclear physics simply", "What's the weather today?", "Remind me tomorrow at 8", "Tell my team I'll be 10 minutes late", "When is the next bus?", "How much is 100 dollars in tugriks?"],
+    suggestions: ["Will it rain today?", "Is the air good for a walk?", "How do I get to the city centre by bus?", "Read my morning briefing", "Remind me tomorrow at 8", "Teach me something new"],
+    greeting: { morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", sir: "sir", madam: "ma'am", howIsItGoing: "How is it going?" },
     signInTitle: "Sign in",
     continueGoogle: "Continue with Google",
     emailMeCode: "Email me a code",
@@ -402,6 +523,8 @@ export const UI: Record<
     signOut: "Sign out",
     signedOutNotice: "Your session ended. Please sign in again.",
     wrongCode: "That code is wrong or expired. Please try again.",
+    lessonLevel: { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" },
+    lessonLine: "{level}, step {step}, {score}%",
     connectGmail: "Connect Gmail",
     gmailConnected: "Gmail connected",
     gmailNote: "Read-only: Aspire looks at the sender, subject and a short preview of recent mail for your morning briefing or when you ask. Nothing is sent or stored. Google will say the app isn't verified yet: tap Advanced, then Continue.",
@@ -432,6 +555,33 @@ export const UI: Record<
     botCopy: "Copy code",
     botCopied: "Copied",
     botCancel: "Cancel",
+    skipToConversation: "Skip to conversation",
+    live: "Live conditions",
+    locationOff: "Location off",
+    location: "Location",
+    display: "Display",
+    textSize: "Text size",
+    textNormal: "Normal",
+    textLarge: "Large",
+    textLargest: "Largest",
+    calmMode: "Calm mode",
+    calmHelp: "Still sky and orb, no flashes, solid panels.",
+    skyEffects: "Sky effects",
+    skyEffectsHelp: "Rain, snow and clouds that follow the live weather. Off shows a still gradient.",
+    on: "On",
+    off: "Off",
+    units: "Units",
+    unitsAuto: "Automatic",
+    unitsMetric: "Metric (°C, km/h)",
+    unitsImperial: "Imperial (°F, mph)",
+    startListening: "Start listening",
+    stopListening: "Stop listening",
+    stopSpeaking: "Stop speaking",
+    saved: "Saved",
+    daily: "Every day",
+    suggestionsLabel: "Suggestions",
+    language: "Language",
+    notable: { rain: "It is raining outside.", snow: "It is snowing outside.", storm: "There is a thunderstorm outside.", air: "The air is unhealthy today.", traffic: "The traffic is heavy.", bus: "Bus {route} leaves in {n} minutes." },
   },
   ru: {
     idle: "Нажмите и говорите",
@@ -488,7 +638,7 @@ export const UI: Record<
     to: "Кому",
     discordWebhook: "Webhook канала Discord",
     slackWebhook: "Webhook канала Slack",
-    webhookHelp: "Discord: настройки сервера → Интеграция → Вебхуки. Slack: Incoming Webhooks.",
+    webhookHelp: "Discord: настройки сервера > Интеграция > Вебхуки. Slack: Incoming Webhooks.",
     save: "Сохранить",
     invalidLink: "Неверная ссылка",
     alwaysOn: "SMS, звонки и черновики писем работают всегда — открываются приложения телефона.",
@@ -497,7 +647,8 @@ export const UI: Record<
     stop: "Стоп",
     newChat: "Новый разговор",
     menu: "Меню",
-    suggestions: ["Объясни ядерную физику простыми словами", "Какая сегодня погода?", "Напомни мне завтра в 8", "Напиши команде, что я опоздаю", "Когда следующий автобус?", "Сколько тугриков стоит 100 долларов?"],
+    suggestions: ["Сегодня будет дождь?", "Воздух подходит для прогулки?", "Как доехать до центра на автобусе?", "Прочитай мою утреннюю сводку", "Напомни мне завтра в 8", "Научи меня чему-нибудь новому"],
+    greeting: { morning: "Доброе утро", afternoon: "Добрый день", evening: "Добрый вечер", sir: "сэр", madam: "мадам", howIsItGoing: "Как ваши дела?" },
     signInTitle: "Вход",
     continueGoogle: "Продолжить с Google",
     emailMeCode: "Получить код на почту",
@@ -509,6 +660,8 @@ export const UI: Record<
     signOut: "Выйти",
     signedOutNotice: "Сеанс завершён. Пожалуйста, войдите снова.",
     wrongCode: "Код неверный или устарел. Попробуйте ещё раз.",
+    lessonLevel: { beginner: "Начальный", intermediate: "Средний", advanced: "Продвинутый" },
+    lessonLine: "{level}, шаг {step}, {score}%",
     connectGmail: "Подключить Gmail",
     gmailConnected: "Gmail подключён",
     gmailNote: "Только чтение: Аспайр смотрит отправителя, тему и краткий текст последних писем для утренней сводки или когда вы спрашиваете. Ничего не отправляется и не хранится. Google предупредит, что приложение не проверено: нажмите «Дополнительные настройки» (Advanced), затем «Перейти» (Continue).",
@@ -539,6 +692,33 @@ export const UI: Record<
     botCopy: "Скопировать код",
     botCopied: "Скопировано",
     botCancel: "Отмена",
+    skipToConversation: "Перейти к разговору",
+    live: "Обстановка сейчас",
+    locationOff: "Местоположение выключено",
+    location: "Местоположение",
+    display: "Экран",
+    textSize: "Размер текста",
+    textNormal: "Обычный",
+    textLarge: "Крупный",
+    textLargest: "Самый крупный",
+    calmMode: "Спокойный режим",
+    calmHelp: "Небо и сфера неподвижны, без вспышек, плотные панели.",
+    skyEffects: "Эффекты неба",
+    skyEffectsHelp: "Дождь, снег и облака по текущей погоде. Если выключить, будет неподвижный градиент.",
+    on: "Вкл.",
+    off: "Выкл.",
+    units: "Единицы",
+    unitsAuto: "Автоматически",
+    unitsMetric: "Метрические (°C, км/ч)",
+    unitsImperial: "Имперские (°F, миль/ч)",
+    startListening: "Начать слушать",
+    stopListening: "Остановить запись",
+    stopSpeaking: "Остановить речь",
+    saved: "Сохранено",
+    daily: "Каждый день",
+    suggestionsLabel: "Подсказки",
+    language: "Язык",
+    notable: { rain: "На улице идёт дождь.", snow: "На улице идёт снег.", storm: "На улице гроза.", air: "Сегодня воздух вреден для здоровья.", traffic: "На дорогах сильные пробки.", bus: "Автобус {route} отходит через {n} мин." },
   },
   de: {
     idle: "Drücken und sprechen",
@@ -595,7 +775,7 @@ export const UI: Record<
     to: "An",
     discordWebhook: "Discord-Kanal-Webhook",
     slackWebhook: "Slack-Kanal-Webhook",
-    webhookHelp: "Discord: Servereinstellungen → Integrationen → Webhooks. Slack: Incoming Webhooks.",
+    webhookHelp: "Discord: Servereinstellungen > Integrationen > Webhooks. Slack: Incoming Webhooks.",
     save: "Speichern",
     invalidLink: "Dieser Link ist ungültig",
     alwaysOn: "SMS, Anrufe und E-Mail-Entwürfe gehen immer – sie öffnen die Apps Ihres Telefons.",
@@ -604,7 +784,8 @@ export const UI: Record<
     stop: "Stopp",
     newChat: "Neuer Chat",
     menu: "Menü",
-    suggestions: ["Erklär mir Kernphysik einfach", "Wie ist das Wetter heute?", "Erinnere mich morgen um 8", "Sag meinem Team, dass ich später komme", "Wann kommt der nächste Bus?", "Wie viel sind 100 Dollar in Tugrik?"],
+    suggestions: ["Regnet es heute?", "Ist die Luft gut für einen Spaziergang?", "Wie komme ich mit dem Bus ins Zentrum?", "Lies mir mein Morgen-Briefing vor", "Erinnere mich morgen um 8", "Bring mir etwas Neues bei"],
+    greeting: { morning: "Guten Morgen", afternoon: "Guten Tag", evening: "Guten Abend", sir: "Sir", madam: "gnädige Frau", howIsItGoing: "Wie geht es Ihnen?" },
     signInTitle: "Anmelden",
     continueGoogle: "Weiter mit Google",
     emailMeCode: "Code per E-Mail senden",
@@ -616,6 +797,8 @@ export const UI: Record<
     signOut: "Abmelden",
     signedOutNotice: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
     wrongCode: "Der Code ist falsch oder abgelaufen. Bitte noch einmal versuchen.",
+    lessonLevel: { beginner: "Anfänger", intermediate: "Mittelstufe", advanced: "Fortgeschritten" },
+    lessonLine: "{level}, Schritt {step}, {score} %",
     connectGmail: "Gmail verbinden",
     gmailConnected: "Gmail verbunden",
     gmailNote: "Nur lesen: Aspire sieht Absender, Betreff und eine kurze Vorschau neuer Mails für Ihr Morgen-Briefing oder wenn Sie fragen. Nichts wird gesendet oder gespeichert. Google meldet, dass die App noch nicht überprüft ist: Tippen Sie auf „Erweitert“ (Advanced) und dann auf „Weiter“ (Continue).",
@@ -646,5 +829,54 @@ export const UI: Record<
     botCopy: "Code kopieren",
     botCopied: "Kopiert",
     botCancel: "Abbrechen",
+    skipToConversation: "Zum Gespräch springen",
+    live: "Aktuelle Lage",
+    locationOff: "Standort aus",
+    location: "Standort",
+    display: "Anzeige",
+    textSize: "Textgröße",
+    textNormal: "Normal",
+    textLarge: "Groß",
+    textLargest: "Sehr groß",
+    calmMode: "Ruhemodus",
+    calmHelp: "Ruhiger Himmel und ruhige Kugel, keine Blitze, feste Flächen.",
+    skyEffects: "Himmelseffekte",
+    skyEffectsHelp: "Regen, Schnee und Wolken nach dem aktuellen Wetter. Aus zeigt einen ruhigen Farbverlauf.",
+    on: "An",
+    off: "Aus",
+    units: "Einheiten",
+    unitsAuto: "Automatisch",
+    unitsMetric: "Metrisch (°C, km/h)",
+    unitsImperial: "Imperial (°F, mph)",
+    startListening: "Zuhören starten",
+    stopListening: "Zuhören beenden",
+    stopSpeaking: "Sprechen beenden",
+    saved: "Gespeichert",
+    daily: "Täglich",
+    suggestionsLabel: "Vorschläge",
+    language: "Sprache",
+    notable: { rain: "Draußen regnet es.", snow: "Draußen schneit es.", storm: "Draußen ist ein Gewitter.", air: "Die Luft ist heute ungesund.", traffic: "Es ist viel Verkehr.", bus: "Bus {route} fährt in {n} Minuten." },
   },
 };
+
+/** Part of the day for a local hour (0-23). Late night counts as evening. */
+export function greetingPart(hour: number): GreetingPart {
+  if (hour >= 5 && hour <= 11) return "morning";
+  if (hour >= 12 && hour <= 17) return "afternoon";
+  return "evening";
+}
+
+/**
+ * The short Jarvis greeting, e.g. "Good evening, sir. How is it going?".
+ * `title` is the saved form of address ("" = none); `first` adds sentence 2 (first open of a session).
+ * `name` (optional) is the person's first name, used instead of the title when they chose it.
+ * It never lists capabilities and is shown and spoken identically.
+ */
+export function jarvisGreeting(lang: Lang, part: GreetingPart, title: "mr" | "mrs" | "" = "", first = true, name = ""): string {
+  const g = UI[lang].greeting;
+  const given = name.replace(/[^\p{L}\p{M}' -]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const who = given || (title === "mr" ? g.sir : title === "mrs" ? g.madam : "");
+  const cjk = lang === "zh";
+  const hello = who ? `${g[part]}${cjk ? "\uFF0C" : ", "}${who}${cjk ? "\u3002" : "."}` : `${g[part]}${cjk ? "\u3002" : "."}`;
+  return first ? `${hello}${cjk ? "" : " "}${g.howIsItGoing}` : hello;
+}

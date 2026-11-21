@@ -58,7 +58,7 @@ export const claude: Brain = {
       collectSources(response.content, run);
       for (const b of response.content) {
         if (b.type === "server_tool_use") {
-          run.steps.push({ tool: b.name, icon: b.name === "web_fetch" ? "📄" : "🔍", label: b.name === "web_fetch" ? "Reading page" : "Web search", ok: true });
+          run.steps.push({ tool: b.name, label: b.name === "web_fetch" ? "Reading page" : "Web search", ok: true });
         }
       }
 

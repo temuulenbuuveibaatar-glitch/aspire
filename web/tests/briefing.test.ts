@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/briefing/route";
-import { buildBriefingFacts, makeBriefing, mongoliaDate, shouldBrief } from "@/lib/briefing";
+import { buildBriefingFacts, localDate, makeBriefing, shouldBrief } from "@/lib/briefing";
 import type { MailItem } from "@/lib/google";
 
 const user = vi.hoisted(() => ({ current: { id: "user_2abc", email: null } as { id: string; email: null } | null }));
@@ -23,6 +23,7 @@ vi.mock("@/lib/tools/world", async (importOriginal) => {
 });
 
 const NOW = new Date("2026-11-20T07:30:00+08:00");
+const UB = "Asia/Ulaanbaatar";
 const mail = (from: string, subject: string): MailItem => ({ from, subject, date: NOW.toISOString(), snippet: "" });
 
 beforeEach(() => {
@@ -55,7 +56,7 @@ describe("buildBriefingFacts", () => {
       mail("School", "Parent meeting"),
       ...["A", "B", "C", "D", "E"].map((n) => mail(n, `hello from ${n}`)),
     ];
-    const facts = buildBriefingFacts({ mail: items, weather: { now: { temperatureC: -18 } }, air: null, reminders: [], now: NOW });
+    const facts = buildBriefingFacts({ mail: items, weather: { now: { temperatureC: -18 } }, air: null, reminders: [], now: NOW, timeZone: UB });
     expect(facts).toContain("8 new message(s) from 7 sender(s)");
     expect(facts).toContain('- NVIDIA (2): "GTC keynote", "Your order"');
     expect(facts.match(/^- .*\(\d+\): /gm)).toHaveLength(5);
@@ -75,11 +76,33 @@ describe("buildBriefingFacts", () => {
         { id: "3", text: "Walk", at: "2026-11-21T10:00:00.000Z", repeatDaily: true }, // daily
       ],
       now: NOW,
+      timeZone: UB,
     });
     expect(facts).toContain("Email: not available. Do not mention email.");
     expect(facts).toContain("- 09:00 Take medicine");
     expect(facts).toContain("- 18:00 Walk (daily)");
     expect(facts).not.toContain("Dentist");
+  });
+
+  it("reads the clock in the person's own time zone, any country", () => {
+    const facts = buildBriefingFacts({ mail: null, weather: null, air: null, reminders: [], now: NOW, timeZone: "Europe/Berlin" });
+    // 07:30 in Ulaanbaatar is 00:30 in Berlin.
+    expect(facts).toContain("00:30 (morning), time zone Europe/Berlin.");
+    expect(facts).not.toContain("Mongolia");
+  });
+
+  it("never passes a tool error (no location) to the writer as weather", () => {
+    const facts = buildBriefingFacts({
+      mail: null,
+      weather: { error: "Location unknown: ask which city they mean" },
+      air: { error: "Location unknown: ask which city they mean" },
+      reminders: [],
+      now: NOW,
+    });
+    expect(facts).toContain("Weather: not available.");
+    expect(facts).toContain("Air quality: not available.");
+    expect(facts).not.toContain("Location unknown");
+    expect(facts).toContain("time zone UTC");
   });
 });
 
@@ -97,7 +120,7 @@ describe("makeBriefing", () => {
       }),
     );
     const write = vi.fn(async () => "Good morning, sir. One email from NVIDIA about GTC.");
-    const r = await makeBriefing({ lang: "en", title: "mr", reminders: [], accessToken: "ya29.x", now: NOW }, { write });
+    const r = await makeBriefing({ lang: "en", title: "mr", reminders: [], accessToken: "ya29.x", now: NOW, where: { timeZone: UB } }, { write });
     expect(r).toEqual({ text: "Good morning, sir. One email from NVIDIA about GTC.", mailCount: 1, gmailError: false });
     const [facts, lang, title] = write.mock.calls[0] as unknown as [string, string, string];
     expect(facts).toContain("- NVIDIA (1): \"GTC\"");
@@ -107,7 +130,7 @@ describe("makeBriefing", () => {
 
   it("falls back to a plain briefing when the writer fails", async () => {
     const r = await makeBriefing(
-      { lang: "en", title: "", reminders: [], accessToken: null, now: NOW },
+      { lang: "en", title: "", reminders: [], accessToken: null, now: NOW, where: { timeZone: UB } },
       { write: async () => Promise.reject(new Error("down")) },
     );
     expect(r.text).toBe("Good morning. It is -18 degrees now.");
@@ -156,13 +179,14 @@ describe("POST /api/briefing", () => {
   });
 });
 
-describe("first open per Mongolia day", () => {
-  it("briefs on a new Mongolia calendar day only", () => {
-    expect(mongoliaDate(new Date("2026-11-21T00:30:00+08:00"))).toBe("2026-11-21");
-    expect(shouldBrief("2026-11-20", new Date("2026-11-21T00:30:00+08:00"))).toBe(true);
-    expect(shouldBrief("2026-11-20", new Date("2026-11-20T23:59:00+08:00"))).toBe(false);
-    // 16:30 UTC is already the next day in Ulaanbaatar.
-    expect(shouldBrief("2026-11-20", new Date("2026-11-20T16:30:00Z"))).toBe(true);
+describe("first open per local day", () => {
+  it("briefs on a new calendar day in the person's own time zone", () => {
+    expect(localDate(new Date("2026-11-21T00:30:00+08:00"), UB)).toBe("2026-11-21");
+    expect(shouldBrief("2026-11-20", new Date("2026-11-21T00:30:00+08:00"), UB)).toBe(true);
+    expect(shouldBrief("2026-11-20", new Date("2026-11-20T23:59:00+08:00"), UB)).toBe(false);
+    // 16:30 UTC is already the next day in Ulaanbaatar, but still the same day in New York.
+    expect(shouldBrief("2026-11-20", new Date("2026-11-20T16:30:00Z"), UB)).toBe(true);
+    expect(shouldBrief("2026-11-20", new Date("2026-11-20T16:30:00Z"), "America/New_York")).toBe(false);
     expect(shouldBrief(undefined, NOW)).toBe(true);
   });
 });

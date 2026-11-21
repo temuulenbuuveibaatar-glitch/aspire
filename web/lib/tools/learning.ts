@@ -26,7 +26,7 @@ function findLesson(ctx: ToolContext, id: string): Lesson | undefined {
 
 export const startLesson: Tool = {
   name: "start_lesson",
-  label: { icon: "🎓", mn: "Хичээл", en: "Lesson" },
+  label: { mn: "Хичээл", en: "Lesson" },
   description:
     "Start a tutor-mode lesson when the person wants to learn a topic step by step (e.g. 'teach me aerodynamics'). Then teach one small step at a time, ask one quiz question at a time, wait for the answer, and record progress with save_progress. Returns the lesson id.",
   parameters: {
@@ -53,7 +53,7 @@ export const startLesson: Tool = {
 
 export const saveProgress: Tool = {
   name: "save_progress",
-  label: { icon: "📈", mn: "Ахиц", en: "Progress" },
+  label: { mn: "Ахиц", en: "Progress" },
   description: "Save the person's progress in a lesson after a step or quiz answer: the step they reached and their score (0-100, share of quiz answers correct so far).",
   parameters: {
     type: "object",
@@ -76,7 +76,7 @@ export const saveProgress: Tool = {
 
 export const saveRoutine: Tool = {
   name: "save_routine",
-  label: { icon: "🧩", mn: "Дадал", en: "Routine" },
+  label: { mn: "Дадал", en: "Routine" },
   description:
     "Save a routine the person teaches you: 'When I say <trigger>, do <steps>'. Later, when a message matches the trigger, run the steps with your tools. Saving the same trigger again replaces its steps.",
   parameters: {
@@ -104,7 +104,7 @@ export const saveRoutine: Tool = {
 
 export const listRoutines: Tool = {
   name: "list_routines",
-  label: { icon: "📋", mn: "Дадлууд", en: "Routines" },
+  label: { mn: "Дадлууд", en: "Routines" },
   description: "List the routines the person taught you (id, trigger, steps).",
   parameters: { type: "object", properties: {}, required: [] },
   async run(_input, ctx) {
@@ -114,7 +114,7 @@ export const listRoutines: Tool = {
 
 export const deleteRoutine: Tool = {
   name: "delete_routine",
-  label: { icon: "🗑️", mn: "Дадал устгах", en: "Delete routine" },
+  label: { mn: "Дадал устгах", en: "Delete routine" },
   description: "Delete a routine by id (get ids with list_routines).",
   parameters: { type: "object", properties: { id: { type: "string", description: "Routine id" } }, required: ["id"] },
   async run(input, ctx) {

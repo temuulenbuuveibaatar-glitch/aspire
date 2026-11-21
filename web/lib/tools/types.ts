@@ -1,4 +1,5 @@
 // Agent tool system: every AI provider sees the same tools.
+import type { SkyKind } from "@/lib/ambient-types";
 import type { Lang } from "@/lib/lang";
 
 /** Where "send for me" can deliver a message. */
@@ -40,7 +41,17 @@ export type ClientAction =
   | { type: "delete_routine"; id: string }
   | ({ type: "lesson" } & Lesson)
   /** "Open in Google Maps" card (url is a Google Maps link). */
-  | { type: "map"; title: string; url: string };
+  | { type: "map"; title: string; url: string }
+  /** Weather result card (spec 10.2): the numbers behind a spoken weather answer. */
+  | { type: "weather"; place: string; tempC: number; feelsC: number | null; kind: SkyKind; days: WeatherCardDay[] };
+
+export interface WeatherCardDay {
+  date: string; // YYYY-MM-DD
+  minC: number;
+  maxC: number;
+  kind: SkyKind;
+  precipChance: number | null;
+}
 
 export interface Reminder {
   id: string;
@@ -61,7 +72,7 @@ export interface Settings {
   /** Only kept on the device (or encrypted server-side for linked bots); never sent to /api/ask. */
   gmailRefreshToken?: string;
   gmailConnected?: boolean;
-  /** YYYY-MM-DD in Mongolia time: the day the morning briefing last played. */
+  /** YYYY-MM-DD: the day the morning briefing last played. */
   lastBriefingDate?: string;
   /** Opt-in: send a rounded location with questions (directions, nearby places). Default off. */
   shareLocation?: boolean;
@@ -90,12 +101,20 @@ export interface ToolContext {
   lang?: Lang;
   /** Google access token with Gmail read access, fetched lazily (null = Gmail not connected). Server only. */
   gmailToken?: () => Promise<string | null>;
+  /** The person's IANA time zone (device first, else the network). Missing = unknown (UTC is used). */
+  timeZone?: string;
+  /** The person's city (device or network). Missing = unknown. */
+  city?: string;
+  /** ISO 3166-1 alpha-2 country code from the network, e.g. "DE". Missing = unknown. */
+  country?: string;
+  /** City-level position from the network (never the device). Used only when no place is named. */
+  approxLocation?: { lat: number; lng: number };
 }
 
 export interface Tool {
   name: string;
-  /** Short label shown on screen while the tool runs. */
-  label: { icon: string; mn: string; en: string };
+  /** Short label shown on screen while the tool runs (text only; no emoji or icon glyphs). */
+  label: { mn: string; en: string };
   description: string;
   parameters: {
     type: "object";

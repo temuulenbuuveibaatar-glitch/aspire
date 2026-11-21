@@ -14,6 +14,7 @@ import { detectTextLanguage, type Lang } from "@/lib/lang";
 import { gmailComposeUrl, isGoogleMapsUrl, smsUrl, telegramShareUrl } from "@/lib/links";
 import { emptyState, toDevice } from "@/lib/state";
 import type { ClientAction } from "@/lib/tools";
+import { validTimeZone, zoneOr } from "@/lib/tools/time";
 import type { Channel } from "@/lib/tools/types";
 import { findLinkedUser, listLinks, redeemLinkCode as redeemCode } from "./links";
 import { botText } from "./text";
@@ -63,7 +64,7 @@ export async function loadLinkedUser(platform: BotPlatform, platformUserId: stri
   }
 }
 
-/** Redeem a 6-digit code from Settings → Connections. Null = invalid/expired code or linking unavailable. */
+/** Redeem a 6-digit code from Settings, Connections. Null = invalid/expired code or linking unavailable. */
 export async function redeemLinkCode(code: string, link: LinkTarget): Promise<LinkedUser | null> {
   if (!supabaseConfigured()) return null;
   return redeemCode(code, link);
@@ -95,20 +96,28 @@ function remember(platform: BotPlatform, chatId: string, turns: Turn[]) {
 const LOCALE: Record<Lang, string> = { mn: "mn-MN", zh: "zh-CN", en: "en-GB", ru: "ru-RU", de: "de-DE" };
 const CHANNEL_NAME: Record<Channel, string> = { telegram: "Telegram", discord: "Discord", slack: "Slack", sms: "SMS", email: "Email" };
 
-function when(iso: string, lang: Lang): string {
+/**
+ * Chats carry no time zone, so bots use BOT_TIME_ZONE (IANA, optional) for reminders and events.
+ * Without it times are UTC and the model asks the person for their city first.
+ */
+export const botTimeZone = (): string | undefined => validTimeZone(process.env.BOT_TIME_ZONE) ?? undefined;
+
+function when(iso: string, lang: Lang, timeZone?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(LOCALE[lang], { timeZone: "Asia/Ulaanbaatar", dateStyle: "medium", timeStyle: "short" });
+  const zone = zoneOr(timeZone);
+  const text = d.toLocaleString(LOCALE[lang], { timeZone: zone, dateStyle: "medium", timeStyle: "short" });
+  return zone === "UTC" ? `${text} UTC` : text;
 }
 
 /** Actions the web app would show as cards become plain text lines in chat (nothing is sent). */
-export function renderActions(actions: ClientAction[], lang: Lang): string[] {
+export function renderActions(actions: ClientAction[], lang: Lang, timeZone = botTimeZone()): string[] {
   const t = botText(lang);
   const lines: string[] = [];
   for (const a of actions) {
     if (a.type === "call") lines.push(`${t.call} ${a.label}: ${a.number}`.replace(/\s+:/, ":"));
     if (a.type === "message") {
-      const head = `${t.message} (${CHANNEL_NAME[a.channel]}${a.to ? ` → ${a.to}` : ""}): ${a.subject ? `${a.subject} — ` : ""}${a.text}`;
+      const head = `${t.message} (${CHANNEL_NAME[a.channel]}${a.to ? `: ${a.to}` : ""}): ${a.subject ? `${a.subject} — ` : ""}${a.text}`;
       const link =
         a.channel === "email"
           ? gmailComposeUrl(a.to, a.subject, a.text)
@@ -119,7 +128,7 @@ export function renderActions(actions: ClientAction[], lang: Lang): string[] {
               : t.openApp;
       lines.push(`${head}\n${link}`);
     }
-    if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang)}\n${a.url}`);
+    if (a.type === "calendar") lines.push(`${t.calendar}: ${a.title}, ${when(a.start, lang, timeZone)}\n${a.url}`);
     if (a.type === "map" && isGoogleMapsUrl(a.url)) lines.push(`Google Maps: ${a.title}\n${a.url}`);
   }
   return lines;
@@ -136,6 +145,8 @@ export async function handleBotMessage(input: BotMessage): Promise<BotReply> {
   const linked = linkedUser !== null;
 
   const history = historyFor(input.platform, input.chatId);
+  const timeZone = botTimeZone();
+  const where = timeZone ? { timeZone } : {};
   try {
     let result;
     if (linkedUser) {
@@ -148,13 +159,14 @@ export async function handleBotMessage(input: BotMessage): Promise<BotReply> {
       const connected = [...new Set(links.map((l) => l.platform))] as Channel[];
       result = await ask(text, lang, history, { ...toDevice(cloud), connected }, now, {
         gmailToken: () => googleAccessToken(userId),
+        ...where,
       });
       // The answer still goes out if saving fails; the person can repeat the request.
       await applyCloudActions(userId, cloud, result.actions, now).catch((e) => logError("cloud save", e));
     } else {
-      result = await ask(text, lang, history);
+      result = timeZone ? await ask(text, lang, history, undefined, now, where) : await ask(text, lang, history);
     }
-    const extra = renderActions(result.actions, lang);
+    const extra = renderActions(result.actions, lang, timeZone);
     // Unlinked: point at linking once per chat (only when linking is available at all).
     const hint = !linked && supabaseConfigured() && history.length === 0 ? botText(lang).linkHint : "";
     const reply = [result.reply.trim(), ...(extra.length ? [extra.join("\n")] : []), hint].filter(Boolean).join("\n\n");

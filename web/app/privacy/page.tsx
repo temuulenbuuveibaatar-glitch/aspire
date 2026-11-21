@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import LegalPage, { Contact } from "@/components/LegalPage";
+import LegalPage, { Contact, LangJump } from "@/components/LegalPage";
 
 export const metadata: Metadata = { title: "Нууцлалын бодлого · Privacy Policy — Aspire" };
 
@@ -8,7 +8,8 @@ const GOOGLE_POLICY = "https://developers.google.com/terms/api-services-user-dat
 export default function Privacy() {
   return (
     <LegalPage title="Нууцлалын бодлого · Privacy Policy">
-      <section lang="mn">
+      <LangJump />
+      <section lang="mn" id="mn">
         <h2>Товчхондоо</h2>
         <ul>
           <li>
@@ -43,6 +44,16 @@ export default function Privacy() {
           картын дугаар, ПИН кодыг туслах хадгалахаас татгалзана. Тохиргооноос байршил хуваалцахыг асаасан үед л ойролцоогоор (~100 м
           хүртэл бөөрөнхийлсөн) байршил асуулттай хамт болон Google Maps Platform руу зөвхөн тухайн асуултад хариулахын тулд илгээгдэх
           бөгөөд хадгалагдахгүй.
+        </p>
+
+        <h2>Байршил ба орчны мэдээлэл</h2>
+        <p>
+          Таны байгаа газрын цаг агаар (бороо, цас), агаарын чанар, замын түгжрэл, ойролцоох автобусны буудлыг харуулахын тулд{" "}
+          <b>хотын түвшний сүлжээний байршил</b> (IP хаягаас Vercel тодорхойлсон хот, ойролцоох солбицол) болон, хэрэв та зөвшөөрвөл,{" "}
+          <b>төхөөрөмжийн байршлыг</b> ашиглана. Байршлыг ойролцоогоор 1 км хүртэл бөөрөнхийлж, зөвхөн энэ мэдээллийг авахын тулд Google
+          Maps Platform болон Open-Meteo руу илгээнэ. Бид байршлыг хадгалдаггүй, таны бүртгэлтэй холбодоггүй: үр дүн серверийн санах
+          ойд 10 минут хүртэл (замын хөдөлгөөн 20 минут, агаарын чанар 30 минут, 3 өдрийн урьдчилсан мэдээ 3 цаг, ойролцоох буудал ба хотын төв нэг өдөр хүртэл) түр байгаад устана.
+          Төхөөрөмжийн байршлыг хөтчийн тохиргооноос хэзээ ч унтрааж болно.
         </p>
 
         <h2>Мэдээллийн сан (Supabase)</h2>
@@ -96,7 +107,7 @@ export default function Privacy() {
           <li>Google: Gmail API, нэвтрэлт. Apple: нэвтрэлт.</li>
           <li>Telegram, Discord, Slack: ботууд.</li>
           <li>Open-Meteo (цаг агаар, агаарын бохирдол), Wikipedia (мэдлэг), open.er-api.com (валютын ханш).</li>
-          <li>Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар, цаг агаар, агаарын бохирдол.</li>
+          <li>Google Maps Platform: чиглэл, нийтийн тээвэр, ойролцоох газар ба автобусны буудал, замын түгжрэл, цаг агаар, агаарын бохирдол.</li>
         </ul>
         <p>
           Эдгээр компани өөрсдийн нөхцөлийн дагуу мэдээллийг аюулгүй байдлын зорилгоор богино хугацаанд хадгалж болно.{" "}
@@ -104,7 +115,7 @@ export default function Privacy() {
             Google-ийн үнэгүй багцыг ашиглах үед Google асуултыг өөрийн бүтээгдэхүүнийг сайжруулахад ашиглаж, хүн уншиж болзошгүй.
           </b>{" "}
           Тиймээс шаардлагагүй хувийн мэдээллээ бүү хэлээрэй. Open-Meteo, Wikipedia, open.er-api.com руу зөвхөн хотын нэр, хайх үг
-          илгээгдэнэ; таны нэр илгээгдэхгүй.
+          эсвэл бөөрөнхийлсөн байршил (~1 км) илгээгдэнэ; таны нэр илгээгдэхгүй.
         </p>
 
         <h2>Таны эрх</h2>
@@ -112,7 +123,7 @@ export default function Privacy() {
           Монгол Улсын Хувь хүний мэдээлэл хамгаалах тухай хуулийн дагуу та өөрийн мэдээллийг үзэх, засуулах, устгуулах эрхтэй.
           Төхөөрөмж дээрх мэдээллээ &quot;Санах ой&quot; болон &quot;Тохиргоо&quot; хэсгээс харж, засаж, устгана. Үүлэн дэх мэдээллээ
           &quot;Үүлэн дэх мэдээллээ устгах&quot; товчоор устгана. Бусад хүсэлт, тухайлбал бүртгэлээ бүрэн устгуулах бол холбогдоно уу:{" "}
-          <Contact />.
+          <Contact lang="mn" />.
         </p>
 
         <h2>Хүүхэд</h2>
@@ -121,7 +132,7 @@ export default function Privacy() {
 
       <hr />
 
-      <section lang="en">
+      <section lang="en" id="en">
         <h2>Summary</h2>
         <ul>
           <li>
@@ -154,6 +165,16 @@ export default function Privacy() {
           any time in &quot;Memory&quot;. The assistant refuses to store passwords, card numbers or PIN codes. Only when you turn on
           location sharing in Settings, a rounded location (about 100 m) is sent with your questions and to Google Maps Platform, only to
           answer them, and is not stored.
+        </p>
+
+        <h2>Your location and live conditions</h2>
+        <p>
+          To show the weather where you are (rain or snow), air quality, traffic and nearby bus stops, Aspire uses your{" "}
+          <b>city-level network location</b> (the city and approximate coordinates Vercel derives from your IP address) and, only if you
+          allow it, your <b>device location</b>. The position is rounded to about 1 km and sent to Google Maps Platform and Open-Meteo
+          only to fetch these conditions. We do not store your location or link it to your account: the results stay in server memory
+          for up to 10 minutes (traffic up to 20 minutes, air quality up to 30 minutes, the 3-day forecast up to 3 hours, nearby stops and the city centre up to a day) and are then discarded. You
+          can turn device location off at any time in your browser settings.
         </p>
 
         <h2>Our database (Supabase)</h2>
@@ -207,15 +228,15 @@ export default function Privacy() {
           <li>Google: Gmail API and sign-in. Apple: sign-in.</li>
           <li>Telegram, Discord, Slack: bots.</li>
           <li>Open-Meteo (weather and air quality), Wikipedia (encyclopedia), open.er-api.com (exchange rates).</li>
-          <li>Google Maps Platform: directions, public transport, nearby places, weather and air quality.</li>
+          <li>Google Maps Platform: directions, public transport, nearby places and bus stops, traffic, weather and air quality.</li>
         </ul>
         <p>
           These providers may keep data briefly for safety and abuse monitoring under their own terms.{" "}
           <b>
             When we use Google&apos;s free tier, Google may use questions to improve its products, and people may review them.
           </b>{" "}
-          So please don&apos;t share personal details you don&apos;t need to. Only a place name or search words are sent to Open-Meteo,
-          Wikipedia and open.er-api.com, never your name.
+          So please don&apos;t share personal details you don&apos;t need to. Only a place name, search words or a rounded location (about
+          1 km) are sent to Open-Meteo, Wikipedia and open.er-api.com, never your name.
         </p>
 
         <h2>Your rights</h2>
@@ -227,6 +248,63 @@ export default function Privacy() {
 
         <h2>Children</h2>
         <p>Children under 13 should use it with a parent or guardian.</p>
+      </section>
+
+      <hr />
+
+      <section lang="zh-Hans" id="zh">
+        <h2>摘要</h2>
+        <ul>
+          <li>登录由 Clerk 提供（Google、Apple 或发送到邮箱的 6 位验证码）。Aspire 不保存密码。</li>
+          <li>默认情况下，您的记忆、提醒、流程、课程、设置以及 Discord/Slack 频道链接只保存在您的设备上。</li>
+          <li>只有在您关联 Telegram、Discord 或 Slack 机器人时，才会在我们的数据库（Supabase，韩国首尔）中保存一份副本。</li>
+          <li>Gmail 为只读，不保存任何邮件内容。</li>
+          <li>天气、空气质量、路况和附近车站使用约 1 公里精度的位置，不会保存，也不会与您的账户关联。</li>
+          <li>消息、短信、电话和邮件只有在您点击确认按钮后才会发送。没有广告追踪，我们绝不出售您的数据。</li>
+        </ul>
+        <p>
+          联系方式：<Contact lang="zh" />。
+        </p>
+      </section>
+
+      <hr />
+
+      <section lang="ru" id="ru">
+        <h2>Кратко</h2>
+        <ul>
+          <li>Вход обеспечивает Clerk (Google, Apple или 6-значный код на почту). Aspire не хранит пароли.</li>
+          <li>
+            По умолчанию ваша память, напоминания, сценарии, уроки, настройки и ссылки на каналы Discord/Slack хранятся только на вашем
+            устройстве.
+          </li>
+          <li>Только если вы подключите бота Telegram, Discord или Slack, их копия хранится в нашей базе (Supabase, Сеул, Южная Корея).</li>
+          <li>Доступ к Gmail только для чтения, содержимое писем не сохраняется.</li>
+          <li>Для погоды, качества воздуха, пробок и остановок используется местоположение с точностью около 1 км; оно не хранится.</li>
+          <li>Сообщения, SMS, звонки и письма отправляются только после подтверждения. Никаких рекламных трекеров, данные не продаются.</li>
+        </ul>
+        <p>
+          Контакт: <Contact lang="ru" />.
+        </p>
+      </section>
+
+      <hr />
+
+      <section lang="de" id="de">
+        <h2>Kurz gesagt</h2>
+        <ul>
+          <li>Die Anmeldung erfolgt über Clerk (Google, Apple oder ein 6-stelliger Code per E-Mail). Aspire speichert keine Passwörter.</li>
+          <li>
+            Gedächtnis, Erinnerungen, Abläufe, Lektionen, Einstellungen und Discord/Slack-Kanallinks bleiben standardmäßig nur auf Ihrem
+            Gerät.
+          </li>
+          <li>Nur wenn Sie einen Telegram-, Discord- oder Slack-Bot verknüpfen, liegt eine Kopie in unserer Datenbank (Supabase, Seoul, Südkorea).</li>
+          <li>Gmail ist nur lesbar; aus Ihren E-Mails wird nichts gespeichert.</li>
+          <li>Für Wetter, Luftqualität, Verkehr und Haltestellen wird ein auf etwa 1 km gerundeter Standort genutzt und nicht gespeichert.</li>
+          <li>Nachrichten, SMS, Anrufe und E-Mails gehen erst nach Ihrer Bestätigung raus. Keine Werbe-Tracker, kein Verkauf Ihrer Daten.</li>
+        </ul>
+        <p>
+          Kontakt: <Contact lang="de" />.
+        </p>
       </section>
     </LegalPage>
   );

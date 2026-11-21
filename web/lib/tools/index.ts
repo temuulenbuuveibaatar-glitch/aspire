@@ -38,9 +38,9 @@ export const TOOLS: Tool[] = [
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 
+/** One tool call, shown on screen as a text chip (the UI picks any icon from `tool`). */
 export interface ToolStep {
   tool: string;
-  icon: string;
   label: string;
   ok: boolean;
 }
@@ -58,7 +58,7 @@ export async function runTool(name: string, input: unknown, ctx: ToolContext, st
     ok = false;
     result = { error: e instanceof Error ? e.message : "tool failed" };
   }
-  steps.push({ tool: name, icon: tool.label.icon, label: tool.label.en, ok });
+  steps.push({ tool: name, label: tool.label.en, ok });
   return typeof result === "string" ? result : JSON.stringify(result);
 }
 

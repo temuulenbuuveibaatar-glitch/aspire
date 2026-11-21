@@ -1,17 +1,43 @@
 // "Send for me" tools: messages, calls and calendar events.
 // None of these touch the network. Each one puts a confirm card on the person's screen;
 // nothing is sent, posted or dialed until they press the button themselves.
+import type { Lang } from "@/lib/lang";
 import { googleCalendarUrl, phoneDigits } from "@/lib/links";
-import { mongoliaTime } from "./local";
+import { TIME_ZONE_PARAM, zoneFor } from "./local";
+import { zonedTime } from "./time";
 import { CHANNELS, type Channel, str, type Tool } from "./types";
 
-const EMERGENCY: Record<string, string> = { "103": "Ambulance 103", "101": "Fire 101", "102": "Police 102", "105": "Emergency 105" };
+// Emergency lines around the world (always "known", so no "check the number" warning). The
+// kind, not an English label: the card shows it in the person's language.
+type EmergencyKind = "emergency" | "police" | "fire" | "ambulance";
+const EMERGENCY: Record<string, EmergencyKind> = {
+  "112": "emergency", // EU, Russia, most of the world on mobile
+  "911": "emergency", // Americas
+  "999": "emergency", // UK, Hong Kong
+  "000": "emergency", // Australia
+  "111": "emergency", // New Zealand
+  "110": "police", // China, Japan, Germany
+  "119": "fire", // China, Japan, Korea
+  "120": "ambulance", // China
+  "101": "fire", // Mongolia
+  "102": "police", // Mongolia, Russia
+  "103": "ambulance", // Mongolia, Russia
+  "105": "emergency", // Mongolia
+};
+const EMERGENCY_WORD: Record<Lang, Record<EmergencyKind, string>> = {
+  mn: { emergency: "Яаралтай тусламж", police: "Цагдаа", fire: "Гал унтраах", ambulance: "Түргэн тусламж" },
+  zh: { emergency: "紧急求助", police: "报警", fire: "火警", ambulance: "急救" },
+  en: { emergency: "Emergency", police: "Police", fire: "Fire", ambulance: "Ambulance" },
+  ru: { emergency: "Экстренная помощь", police: "Полиция", fire: "Пожарная", ambulance: "Скорая" },
+  de: { emergency: "Notruf", police: "Polizei", fire: "Feuerwehr", ambulance: "Rettungsdienst" },
+};
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LINKED_CHANNELS: readonly Channel[] = ["telegram", "discord", "slack"];
 
-/** Phone number in a comparable local form: digits only, Mongolia's +976 prefix dropped. */
+/** Phone number in a comparable form: digits only, the last 8 digits (ignores country prefixes and trunk zeros). */
 function localNumber(n: string): string {
-  return n.replace(/\D/g, "").replace(/^976(?=\d{8}$)/, "");
+  const digits = n.replace(/\D/g, "");
+  return digits.length > 8 ? digits.slice(-8) : digits;
 }
 
 /** 3-15 digits; spaces, dashes, brackets and a leading + allowed. Returns the cleaned number or null. */
@@ -23,14 +49,14 @@ function validPhone(raw: string): string | null {
 
 /** Is this number an emergency line or one the person saved in memory? */
 function isKnownNumber(number: string, memory: Record<string, string>): boolean {
-  if (EMERGENCY[number]) return true;
+  if (number in EMERGENCY) return true;
   const target = localNumber(number);
   return Object.values(memory).some((v) => (v.match(/\+?\d[\d\s()-]*\d/g) ?? []).some((found) => localNumber(found) === target));
 }
 
 export const sendMessage: Tool = {
   name: "send_message",
-  label: { icon: "✉️", mn: "Мессеж", en: "Message" },
+  label: { mn: "Мессеж", en: "Message" },
   description:
     "Prepare a message for the person to send: Telegram, Discord or Slack (only if connected), SMS (phone number) or email (address). It shows a card with the text; the person can edit it and must press Send. It is NOT sent by this tool, so never say it was sent: say it is ready to send. Write the text in the language they want it sent in.",
   parameters: {
@@ -62,7 +88,7 @@ export const sendMessage: Tool = {
       if (!n) return { error: "sms needs a phone number with 3-15 digits; ask the person for it" };
       to = n;
     } else if (LINKED_CHANNELS.includes(channel) && !(ctx.device.connected ?? []).includes(channel)) {
-      return { error: `${channel} is not connected — ask them to connect it in Settings → Connections` };
+      return { error: `${channel} is not connected. Ask them to connect it in Settings, Connections` };
     }
 
     ctx.actions.push({ type: "message", channel, to, subject, text: rawText });
@@ -72,13 +98,13 @@ export const sendMessage: Tool = {
 
 export const call: Tool = {
   name: "call_phone",
-  label: { icon: "📞", mn: "Залгах", en: "Call" },
+  label: { mn: "Залгах", en: "Call" },
   description:
-    "Show a big 'Call' button for any phone number: emergency (103 ambulance, 101 fire, 102 police), a number saved in memory, or a number the person says. The person presses it to call; it never dials by itself. Numbers that are not emergency or saved are marked as new: tell the person to check the number before calling.",
+    "Show a big 'Call' button for any phone number: the local emergency number for the person's country (112 in Europe, 911 in the Americas, 999 in the UK, 000 in Australia, 120 ambulance and 110 police in China, 103 ambulance and 101 fire in Mongolia and Russia), a number saved in memory, or a number the person says. The person presses it to call; it never dials by itself. Numbers that are not emergency or saved are marked as new: tell the person to check the number before calling.",
   parameters: {
     type: "object",
     properties: {
-      number: { type: "string", description: "Phone number, e.g. '103' or '+97699112233'" },
+      number: { type: "string", description: "Phone number, e.g. '112' or '+4915123456789'" },
       label: { type: "string", description: "Who it is, in the person's language, e.g. 'Охин Сараа'" },
     },
     required: ["number", "label"],
@@ -87,31 +113,34 @@ export const call: Tool = {
     const number = validPhone(str(input.number, 30));
     if (!number) return { error: "Not a valid phone number (needs 3-15 digits)" };
     const known = isKnownNumber(number, ctx.device.memory);
-    ctx.actions.push({ type: "call", number, label: str(input.label, 60) || EMERGENCY[number] || number, known });
+    const kind = EMERGENCY[number];
+    const fallback = kind ? `${(EMERGENCY_WORD[ctx.lang ?? "en"] ?? EMERGENCY_WORD.en)[kind]} ${number}` : number;
+    ctx.actions.push({ type: "call", number, label: str(input.label, 60) || fallback, known });
     return known ? { ok: true, shown: "call button", known } : { ok: true, shown: "call button", known, note: "New number: ask the person to check it before calling" };
   },
 };
 
 export const addToCalendar: Tool = {
   name: "add_to_calendar",
-  label: { icon: "📅", mn: "Календарь", en: "Calendar" },
+  label: { mn: "Календарь", en: "Calendar" },
   description:
-    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' button; the person presses it to save. Get the local time first for words like 'tomorrow'.",
+    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' button; the person presses it to save. Times are the person's own local time. Get the local time first for words like 'tomorrow'.",
   parameters: {
     type: "object",
     properties: {
       title: { type: "string", description: "Event title in the person's language" },
-      date: { type: "string", description: "YYYY-MM-DD in Mongolia time" },
-      time: { type: "string", description: "Start time HH:MM (24h) in Mongolia time" },
+      date: { type: "string", description: "YYYY-MM-DD local date" },
+      time: { type: "string", description: "Start time HH:MM (24h), local time" },
       duration_minutes: { type: "number", description: "Length in minutes, e.g. 60" },
       details: { type: "string", description: "Notes, place or empty string" },
+      time_zone: TIME_ZONE_PARAM,
     },
-    required: ["title", "date", "time", "duration_minutes", "details"],
+    required: ["title", "date", "time", "duration_minutes", "details", "time_zone"],
   },
   async run(input, ctx) {
     const title = str(input.title, 120);
     if (!title) return { error: "title is required" };
-    const start = mongoliaTime(str(input.date, 10), str(input.time, 5));
+    const start = zonedTime(str(input.date, 10), str(input.time, 5), zoneFor(input, ctx));
     if (!start) return { error: "date must be YYYY-MM-DD and time HH:MM" };
     const rawMinutes = Number(input.duration_minutes);
     const minutes = Number.isFinite(rawMinutes) && rawMinutes > 0 ? Math.min(Math.round(rawMinutes), 24 * 60) : 60;

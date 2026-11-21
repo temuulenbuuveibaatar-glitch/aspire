@@ -60,7 +60,7 @@ describe("brain chain (any AI)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { ask } = await import("@/lib/brain");
-    const out = await ask("Автобус хэзээ ирэх вэ?", "mn");
+    const out = await ask("Автобус хэзээ ирэх вэ?", "mn", [], undefined, undefined, { timeZone: "Asia/Ulaanbaatar" }); // a phone on Mongolian time
 
     expect(out.brain).toBe("local");
     expect(out.reply).toBe("12-р автобус 5 минутын дараа ирнэ."); // markdown removed for speech
@@ -174,5 +174,131 @@ describe("Claude research sources", () => {
     expect(byName.start_lesson).toBeTruthy();
     expect(byName.send_message).toBeTruthy();
     vi.doUnmock("@anthropic-ai/sdk");
+  });
+});
+
+describe("Jarvis tone and every city", () => {
+  const runAt = (now: string, where: { timeZone?: string; city?: string; country?: string; approxLocation?: { lat: number; lng: number } } = {}, location?: { lat: number; lng: number }) => ({
+    ctx: { now: new Date(now), device: { memory: {}, reminders: [], settings: { title: "mr" as const }, ...(location ? { location } : {}) }, actions: [], ...where },
+    steps: [],
+    sources: [],
+  });
+
+  it("the note gives the local time of day and city, from the person's time zone", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const note = contextNote("en", runAt("2026-11-20T19:30:00Z", { timeZone: "Europe/Berlin", city: "Berlin", country: "DE" }));
+    expect(note).toContain("Friday 20:30, evening (time zone Europe/Berlin)");
+    expect(note).toContain('"Good evening"');
+    expect(note).toContain("They are in Berlin (DE), approximately, from their network");
+    expect(note).toContain("sir / Mr.");
+  });
+
+  it("morning in Tokyo, afternoon in Lagos, and late night says Good evening (never Good night)", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    expect(contextNote("en", runAt("2026-11-20T23:30:00Z", { timeZone: "Asia/Tokyo" }))).toMatch(/08:30, morning.*"Good morning"/);
+    expect(contextNote("en", runAt("2026-11-20T13:00:00Z", { timeZone: "Africa/Lagos" }))).toMatch(/14:00, afternoon.*"Good afternoon"/);
+    const late = contextNote("en", runAt("2026-11-20T01:15:00Z", { timeZone: "Europe/London" }));
+    expect(late).toMatch(/01:15, night.*"Good evening"/);
+    expect(late).not.toContain("Good night");
+  });
+
+  it("an unknown place and time zone is said plainly (no Erdenet default)", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const note = contextNote("en", runAt("2026-11-20T12:00:00Z"));
+    expect(note).toMatch(/time zone is unknown/);
+    expect(note).toMatch(/neutral greeting/);
+    expect(note).toMatch(/city is unknown/);
+    expect(note).not.toMatch(/Erdenet|Mongolia/);
+  });
+
+  it("a network position without a city name is still used for weather", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    const note = contextNote("en", runAt("2026-11-20T12:00:00Z", { timeZone: "Europe/Paris", country: "FR", approxLocation: { lat: 48.86, lng: 2.35 } }));
+    expect(note).toMatch(/approximate position is known from the network \(country FR\)/);
+    expect(note).not.toMatch(/ask which city/);
+  });
+
+  it("a shared device location is named as such", async () => {
+    const { contextNote } = await import("@/lib/brain/shared");
+    expect(contextNote("de", runAt("2026-11-20T12:00:00Z", { timeZone: "Europe/Vienna", city: "Wien" }, { lat: 48.2, lng: 16.37 }))).toContain("Wien, from their device location");
+    expect(contextNote("de", runAt("2026-11-20T12:00:00Z", { timeZone: "Europe/Vienna" }, { lat: 48.2, lng: 16.37 }))).toContain("shared their device location");
+  });
+
+  it("the system prompt keeps greetings short, never lists capabilities and bans emojis", async () => {
+    const { SYSTEM } = await import("@/lib/brain/shared");
+    expect(SYSTEM).toContain("Good evening, sir. How is it going?");
+    expect(SYSTEM).toContain("Good morning, ma'am. Everything is in order. How may I help?");
+    expect(SYSTEM).toMatch(/one or two short sentences/);
+    expect(SYSTEM).toMatch(/Never list what you can do/);
+    expect(SYSTEM).toMatch(/Never use emojis/);
+    expect(SYSTEM).toMatch(/every country and city/);
+    expect(SYSTEM).toMatch(/Never assume Erdenet or Mongolia/);
+    expect(SYSTEM).toMatch(/get_directions with mode "transit"/);
+    expect(SYSTEM).not.toMatch(/default Erdenet|made in Erdenet/);
+    // stable: no per-request time in the cached prompt
+    expect(SYSTEM).not.toMatch(/time zone Europe|Their local time:/);
+  });
+
+  it("nothing the model reads carries emoji or arrow glyphs", async () => {
+    const { SYSTEM, TOOL_SPECS, contextNote } = await import("@/lib/brain/shared");
+    const glyph = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}]/u;
+    expect(SYSTEM).not.toMatch(glyph);
+    expect(JSON.stringify(TOOL_SPECS)).not.toMatch(glyph);
+    expect(contextNote("en", runAt("2026-11-20T12:00:00Z"))).not.toMatch(glyph);
+  });
+
+  it("forSpeech strips emojis, flags and arrows from model output", async () => {
+    const { forSpeech } = await import("@/lib/brain/shared");
+    const sun = String.fromCodePoint(0x2600, 0xfe0f);
+    const smile = String.fromCodePoint(0x1f600);
+    const flag = String.fromCodePoint(0x1f1f2, 0x1f1f3);
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467);
+    const arrow = String.fromCodePoint(0x2192);
+    expect(forSpeech(`Good evening, sir ${smile}. Sunny ${sun} today ${flag}.`)).toBe("Good evening, sir. Sunny today.");
+    expect(forSpeech(`Home ${arrow} work ${family}`)).toBe("Home work");
+    // ordinary punctuation stays
+    expect(forSpeech("Minus 12 \u2212 cold \u2014 wear a hat. \u201cQuote\u201d")).toBe("Minus 12 \u2212 cold \u2014 wear a hat. \u201cQuote\u201d");
+  });
+
+  it("web search steps carry no icon glyphs", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+    vi.stubEnv("BRAIN_ORDER", "claude");
+    const create = vi.fn(async () => ({
+      stop_reason: "end_turn",
+      content: [
+        { type: "server_tool_use", id: "s1", name: "web_search", input: { query: "x" } },
+        { type: "text", text: "Done, sir." },
+      ],
+    }));
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: class {
+        beta = { messages: { create } };
+      },
+    }));
+    const { ask } = await import("@/lib/brain");
+    const out = await ask("look it up", "en");
+    expect(out.steps).toEqual([{ tool: "web_search", label: "Web search", ok: true }]);
+    vi.doUnmock("@anthropic-ai/sdk");
+  });
+
+  it("ask passes the time zone and city into the tool context", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "");
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("LOCAL_LLM_URL", "http://local.test/v1");
+    vi.stubEnv("BRAIN_ORDER", "local");
+    const bodies: Array<{ messages: Array<{ role: string; content?: string }> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return json({ choices: [{ message: { content: "Good evening, sir. How is it going?" } }] });
+      }),
+    );
+    const { ask } = await import("@/lib/brain");
+    const out = await ask("hi", "en", [], { memory: {}, reminders: [] }, new Date("2026-11-20T19:00:00Z"), { timeZone: "America/Sao_Paulo", city: "Sao Paulo" });
+    expect(out.reply).toBe("Good evening, sir. How is it going?");
+    expect(bodies[0].messages[0].content).toContain("16:00, afternoon (time zone America/Sao_Paulo)");
+    expect(bodies[0].messages[0].content).toContain("They are in Sao Paulo");
   });
 });

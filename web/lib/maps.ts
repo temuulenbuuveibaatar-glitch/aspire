@@ -1,7 +1,8 @@
 // Google Maps Platform client (server only: the key comes from GOOGLE_MAPS_API_KEY and is
 // sent only in the X-Goog-Api-Key header, never in URLs, logs or error messages).
-// APIs used: Routes API (computeRoutes), Places API (New) (searchText), Weather API, Air Quality API.
+// APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby), Weather API, Air Quality API.
 import type { Lang } from "@/lib/lang";
+import { validTimeZone } from "@/lib/tools/time";
 
 export class MapsError extends Error {
   constructor(message: string) {
@@ -30,17 +31,30 @@ function dailyLimit(): number {
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_DAILY_LIMIT;
 }
 
-function takeQuota(): void {
+/**
+ * Background calls (the live ambient snapshot, refreshed on its own) may use only this share of
+ * the daily cap, so the person's own questions (directions, places, weather) always have quota left.
+ */
+const BACKGROUND_SHARE = 0.6;
+
+/** Options for calls made without the person asking (GET /api/ambient). */
+export interface CallOpts {
+  background?: boolean;
+}
+
+function takeQuota(background = false): void {
   const day = new Date().toISOString().slice(0, 10);
   if (usage.day !== day) usage = { day, count: 0 };
-  if (usage.count >= dailyLimit()) throw new MapsError("Maps daily limit reached");
+  const limit = dailyLimit();
+  if (usage.count >= limit) throw new MapsError("Maps daily limit reached");
+  if (background && usage.count >= Math.floor(limit * BACKGROUND_SHARE)) throw new MapsError("Maps background limit reached");
   usage.count++;
 }
 
-async function google<T>(url: string, opts: { body?: unknown; fieldMask?: string } = {}): Promise<T> {
+async function google<T>(url: string, opts: { body?: unknown; fieldMask?: string; background?: boolean } = {}): Promise<T> {
   const key = apiKey();
   if (!key) throw new MapsError(NOT_SET_UP);
-  takeQuota();
+  takeQuota(opts.background === true);
   const headers: Record<string, string> = { "X-Goog-Api-Key": key };
   if (opts.fieldMask) headers["X-Goog-FieldMask"] = opts.fieldMask;
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -99,15 +113,15 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 const seconds = (d: unknown) => (typeof d === "string" ? parseFloat(d) || 0 : 0);
 const meters = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${round1(m / 1000)} km`);
 
-/** ISO instant -> "HH:MM" in a time zone. */
-function clock(iso: string | undefined, timeZone = "Asia/Ulaanbaatar"): string | undefined {
+/** ISO instant -> "HH:MM" in a time zone (the stop's, else the person's, else UTC; never a fixed city). */
+function clock(iso: string | undefined, timeZone?: string): string | undefined {
   if (!iso) return undefined;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return undefined;
   try {
-    return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+    return new Intl.DateTimeFormat("en-GB", { timeZone: validTimeZone(timeZone) ?? "UTC", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
   } catch {
-    return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ulaanbaatar", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+    return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
   }
 }
 
@@ -185,7 +199,16 @@ export interface RouteResult {
 
 export const MAX_STEPS = 8;
 
-async function requestRoutes(opts: { origin: string; destination: string; mode: TravelMode; departureTime?: string; lang: Lang; alternatives?: boolean }) {
+async function requestRoutes(opts: {
+  origin: string;
+  destination: string;
+  mode: TravelMode;
+  departureTime?: string;
+  lang: Lang;
+  alternatives?: boolean;
+  /** The person's IANA zone: used for clock times when Google sends none. */
+  timeZone?: string;
+}) {
   const body: Record<string, unknown> = {
     origin: waypoint(opts.origin),
     destination: waypoint(opts.destination),
@@ -200,7 +223,7 @@ async function requestRoutes(opts: { origin: string; destination: string; mode: 
 
 const allSteps = (r: GRoute) => (r.legs ?? []).flatMap((l) => l.steps ?? []);
 
-function transitStep(s: GStep): RouteStep {
+function transitStep(s: GStep, timeZone?: string): RouteStep {
   const t = s.transitDetails ?? {};
   const line = t.transitLine?.nameShort || t.transitLine?.name;
   const vehicle = t.transitLine?.vehicle?.name?.text || "Transit";
@@ -211,13 +234,13 @@ function transitStep(s: GStep): RouteStep {
     line,
     from: t.stopDetails?.departureStop?.name,
     to: t.stopDetails?.arrivalStop?.name,
-    departs: lv?.departureTime?.time?.text || clock(t.stopDetails?.departureTime, lv?.departureTime?.timeZone),
-    arrives: lv?.arrivalTime?.time?.text || clock(t.stopDetails?.arrivalTime, lv?.arrivalTime?.timeZone),
+    departs: lv?.departureTime?.time?.text || clock(t.stopDetails?.departureTime, lv?.departureTime?.timeZone ?? timeZone),
+    arrives: lv?.arrivalTime?.time?.text || clock(t.stopDetails?.arrivalTime, lv?.arrivalTime?.timeZone ?? timeZone),
     stops: t.stopCount,
   };
 }
 
-function mapSteps(raw: GStep[], mode: TravelMode): RouteStep[] {
+function mapSteps(raw: GStep[], mode: TravelMode, timeZone?: string): RouteStep[] {
   const out: RouteStep[] = [];
   let walkM = 0;
   let walkS = 0;
@@ -229,7 +252,7 @@ function mapSteps(raw: GStep[], mode: TravelMode): RouteStep[] {
   for (const s of raw) {
     if (s.travelMode === "TRANSIT" && s.transitDetails) {
       flushWalk();
-      out.push(transitStep(s));
+      out.push(transitStep(s, timeZone));
     } else if (mode === "transit") {
       // In transit routes the many small walking turns become one "walk" line.
       walkM += s.distanceMeters ?? 0;
@@ -243,10 +266,17 @@ function mapSteps(raw: GStep[], mode: TravelMode): RouteStep[] {
 }
 
 /** One route from A to B. Origins/destinations are free text or "lat,lng". */
-export async function computeRoute(opts: { origin: string; destination: string; mode: TravelMode; departureTime?: string; lang: Lang }): Promise<RouteResult> {
+export async function computeRoute(opts: {
+  origin: string;
+  destination: string;
+  mode: TravelMode;
+  departureTime?: string;
+  lang: Lang;
+  timeZone?: string;
+}): Promise<RouteResult> {
   const [route] = await requestRoutes(opts);
   if (!route) throw new MapsError("No route found");
-  const steps = mapSteps(allSteps(route), opts.mode);
+  const steps = mapSteps(allSteps(route), opts.mode, opts.timeZone);
   const transit = steps.filter((s) => s.kind === "transit");
   return {
     durationMin: Math.round(seconds(route.duration) / 60),
@@ -272,7 +302,7 @@ export interface TransitOption {
 }
 
 /** Real departures by public transport (soonest first). Empty when Google has no transit here. */
-export async function transitOptions(opts: { from: string; to: string; now: Date; lang: Lang }): Promise<TransitOption[]> {
+export async function transitOptions(opts: { from: string; to: string; now: Date; lang: Lang; timeZone?: string }): Promise<TransitOption[]> {
   const routes = await requestRoutes({ origin: opts.from, destination: opts.to, mode: "transit", departureTime: opts.now.toISOString(), lang: opts.lang, alternatives: true });
   const out: TransitOption[] = [];
   for (const r of routes) {
@@ -282,7 +312,7 @@ export async function transitOptions(opts: { from: string; to: string; now: Date
     const last = rides[rides.length - 1].transitDetails!;
     const dep = new Date(first.stopDetails!.departureTime!);
     const arr = new Date(last.stopDetails?.arrivalTime ?? first.stopDetails!.departureTime!);
-    const tz = first.localizedValues?.departureTime?.timeZone;
+    const tz = first.localizedValues?.departureTime?.timeZone ?? opts.timeZone;
     out.push({
       line: first.transitLine?.nameShort || first.transitLine?.name || "",
       lineName: first.transitLine?.name || first.transitLine?.nameShort || "",
@@ -430,9 +460,19 @@ function epaIndex(c: number, table: Array<[number, number, number, number]>): nu
   return Math.round(((ih - il) / (ch - cl)) * (Math.max(c, cl) - cl) + il);
 }
 
-export async function airQualityAt(lat: number, lng: number): Promise<{ usAqi: number; universalAqi: number | null; pm2_5: number | null; pm10: number | null }> {
+export interface AirNow {
+  usAqi: number;
+  universalAqi: number | null;
+  pm2_5: number | null;
+  pm10: number | null;
+  /** Google's dominant pollutant code, e.g. "pm25". */
+  dominant: string | null;
+}
+
+/** Current air quality plus the dominant pollutant (the live ambient snapshot uses this). */
+export async function airQualityNow(lat: number, lng: number, opts: CallOpts = {}): Promise<AirNow> {
   const data = await google<{
-    indexes?: Array<{ code?: string; aqi?: number }>;
+    indexes?: Array<{ code?: string; aqi?: number; dominantPollutant?: string }>;
     pollutants?: Array<{ code?: string; concentration?: { value?: number } }>;
   }>("https://airquality.googleapis.com/v1/currentConditions:lookup", {
     body: {
@@ -443,21 +483,216 @@ export async function airQualityAt(lat: number, lng: number): Promise<{ usAqi: n
       customLocalAqis: [{ regionCode: "MN", aqi: "usa_epa" }],
       languageCode: "en",
     },
+    background: opts.background,
   });
-  const index = (code: string) => data.indexes?.find((i) => i.code === code)?.aqi;
+  const find = (code: string) => data.indexes?.find((i) => i.code === code);
   const pollutant = (code: string) => {
     const v = data.pollutants?.find((p) => p.code === code)?.concentration?.value;
     return typeof v === "number" && Number.isFinite(v) ? Math.round(v * 10) / 10 : null;
   };
   const pm2_5 = pollutant("pm25");
   const pm10 = pollutant("pm10");
-  const fromPm = Math.max(
-    pm2_5 === null ? -1 : (epaIndex(Math.floor(pm2_5 * 10) / 10, PM25) ?? -1),
-    pm10 === null ? -1 : (epaIndex(Math.floor(pm10), PM10) ?? -1),
-  );
-  const epa = index("usa_epa");
-  const usAqi = typeof epa === "number" ? epa : fromPm >= 0 ? fromPm : null;
+  const fromPm25 = pm2_5 === null ? -1 : (epaIndex(Math.floor(pm2_5 * 10) / 10, PM25) ?? -1);
+  const fromPm10 = pm10 === null ? -1 : (epaIndex(Math.floor(pm10), PM10) ?? -1);
+  const fromPm = Math.max(fromPm25, fromPm10);
+  const epaIdx = find("usa_epa");
+  const epa = typeof epaIdx?.aqi === "number" && Number.isFinite(epaIdx.aqi) ? epaIdx.aqi : null;
+  const usAqi = epa ?? (fromPm >= 0 ? fromPm : null);
   if (usAqi === null) throw new MapsError("No air quality data here");
-  const uaqi = index("uaqi");
-  return { usAqi, universalAqi: typeof uaqi === "number" ? uaqi : null, pm2_5, pm10 };
+  const uaqi = find("uaqi")?.aqi;
+  // The dominant pollutant must belong to the number shown: when the US index was computed here
+  // from particles, it is whichever particle set it (another index's NO2 or O3 would not match).
+  const dom = epa !== null ? (epaIdx?.dominantPollutant ?? null) : fromPm25 >= fromPm10 ? "pm25" : "pm10";
+  return {
+    usAqi,
+    universalAqi: typeof uaqi === "number" ? uaqi : null,
+    pm2_5,
+    pm10,
+    dominant: typeof dom === "string" && /^[a-z0-9_]{1,20}$/i.test(dom) ? dom.toLowerCase() : null,
+  };
+}
+
+export async function airQualityAt(lat: number, lng: number): Promise<{ usAqi: number; universalAqi: number | null; pm2_5: number | null; pm10: number | null }> {
+  const { usAqi, universalAqi, pm2_5, pm10 } = await airQualityNow(lat, lng);
+  return { usAqi, universalAqi, pm2_5, pm10 };
+}
+
+// ---- Live snapshot helpers (GET /api/ambient) ----------------------------------------------
+const fin = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+export interface WeatherSnapshotDay {
+  date: string; // YYYY-MM-DD
+  minC: number | null;
+  maxC: number | null;
+  /** Google WeatherCondition.Type, e.g. "LIGHT_SNOW". */
+  type: string | null;
+  text: string;
+  precipChance: number | null;
+}
+
+export interface WeatherSnapshot {
+  /** Google WeatherCondition.Type, e.g. "LIGHT_RAIN". */
+  type: string | null;
+  text: string;
+  isDaytime: boolean | null;
+  cloudCover: number | null;
+  windKph: number | null;
+  windDirDeg: number | null;
+  precipChance: number | null;
+  /** Quantitative precipitation forecast, millimetres. */
+  qpfMm: number | null;
+  humidity: number | null;
+  tempC: number;
+  feelsC: number;
+  timeZone: string | null;
+  days: WeatherSnapshotDay[];
+}
+
+interface GCondition {
+  type?: string;
+  description?: { text?: string };
+}
+
+const conditionType = (t: unknown) => (typeof t === "string" && /^[A-Z_]{1,80}$/.test(t) ? t : null);
+
+/**
+ * Google Weather API currentConditions + 3-day forecast, structured for the live sky.
+ * Field names per https://developers.google.com/maps/documentation/weather/reference/rest
+ * (weatherCondition.type, isDaytime, cloudCover, wind.speed.value, wind.direction.degrees,
+ * precipitation.probability.percent, precipitation.qpf.quantity, relativeHumidity,
+ * temperature.degrees, feelsLikeTemperature.degrees, timeZone.id). Metric units.
+ * The forecast is optional: if only it fails, `days` is empty.
+ */
+const weatherWhere = (lat: number, lng: number, lang: Lang) =>
+  `location.latitude=${lat}&location.longitude=${lng}&unitsSystem=METRIC&languageCode=${encodeURIComponent(googleLanguage(lang))}`;
+
+/** Google Weather currentConditions only (one call). Throws when there is no data. */
+export async function weatherCurrent(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<Omit<WeatherSnapshot, "days">> {
+  const c = await google<{
+    timeZone?: { id?: string };
+    isDaytime?: boolean;
+    weatherCondition?: GCondition;
+    temperature?: { degrees?: number };
+    feelsLikeTemperature?: { degrees?: number };
+    relativeHumidity?: number;
+    cloudCover?: number;
+    wind?: { speed?: { value?: number }; direction?: { degrees?: number } };
+    precipitation?: { probability?: { percent?: number }; qpf?: { quantity?: number } };
+  }>(`https://weather.googleapis.com/v1/currentConditions:lookup?${weatherWhere(lat, lng, lang)}`, { background: opts.background });
+  const tempC = fin(c.temperature?.degrees);
+  if (tempC === null) throw new MapsError("No weather data here");
+  return {
+    type: conditionType(c.weatherCondition?.type),
+    text: c.weatherCondition?.description?.text ?? "",
+    isDaytime: typeof c.isDaytime === "boolean" ? c.isDaytime : null,
+    cloudCover: fin(c.cloudCover),
+    windKph: fin(c.wind?.speed?.value),
+    windDirDeg: fin(c.wind?.direction?.degrees),
+    precipChance: fin(c.precipitation?.probability?.percent),
+    qpfMm: fin(c.precipitation?.qpf?.quantity),
+    humidity: fin(c.relativeHumidity),
+    tempC,
+    feelsC: fin(c.feelsLikeTemperature?.degrees) ?? tempC,
+    timeZone: typeof c.timeZone?.id === "string" ? c.timeZone.id : null,
+  };
+}
+
+/** Google Weather 3-day forecast only (one call). */
+export async function weatherDays(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<WeatherSnapshotDay[]> {
+  const fc = await google<{
+    forecastDays?: Array<{
+      displayDate?: { year?: number; month?: number; day?: number };
+      maxTemperature?: { degrees?: number };
+      minTemperature?: { degrees?: number };
+      daytimeForecast?: { weatherCondition?: GCondition; precipitation?: { probability?: { percent?: number } } };
+    }>;
+  }>(`https://weather.googleapis.com/v1/forecast/days:lookup?${weatherWhere(lat, lng, lang)}&days=3&pageSize=3`, { background: opts.background });
+  return (fc.forecastDays ?? []).slice(0, 3).map((d) => ({
+    date: `${d.displayDate?.year ?? ""}-${pad(d.displayDate?.month)}-${pad(d.displayDate?.day)}`,
+    minC: fin(d.minTemperature?.degrees),
+    maxC: fin(d.maxTemperature?.degrees),
+    type: conditionType(d.daytimeForecast?.weatherCondition?.type),
+    text: d.daytimeForecast?.weatherCondition?.description?.text ?? "",
+    precipChance: fin(d.daytimeForecast?.precipitation?.probability?.percent),
+  }));
+}
+
+export async function weatherSnapshot(lat: number, lng: number, lang: Lang = "en", opts: CallOpts = {}): Promise<WeatherSnapshot> {
+  const [cur, fc] = await Promise.allSettled([weatherCurrent(lat, lng, lang, opts), weatherDays(lat, lng, lang, opts)]);
+  if (cur.status === "rejected") throw cur.reason;
+  return { ...cur.value, days: fc.status === "fulfilled" ? fc.value : [] };
+}
+
+/**
+ * The centre of the town around a position (Places Text Search biased to 30 km around it),
+ * plus the town's name from addressComponents. `city` is the name to search for, when known.
+ */
+export async function cityCentre(near: LatLng, city: string | null, lang: Lang = "en", opts: CallOpts = {}): Promise<({ city: string | null } & LatLng) | null> {
+  const data = await google<{
+    places?: Array<GPlace & { addressComponents?: Array<{ longText?: string; types?: string[] }> }>;
+  }>(PLACES_URL, {
+    body: {
+      textQuery: city || "city centre",
+      languageCode: googleLanguage(lang),
+      pageSize: 1,
+      locationBias: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 30_000 } },
+    },
+    fieldMask: "places.displayName,places.location,places.addressComponents",
+    background: opts.background,
+  });
+  const p = data.places?.[0];
+  const lat = p?.location?.latitude;
+  const lng = p?.location?.longitude;
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+  const locality = p?.addressComponents?.find((a) => a.types?.includes("locality"))?.longText;
+  return { lat, lng, city: locality || city || null };
+}
+
+/** Live vs free-flow driving time between two points (Routes API, TRAFFIC_AWARE), in seconds. */
+export async function drivingTraffic(from: LatLng, to: LatLng, opts: CallOpts = {}): Promise<{ durationS: number; staticS: number } | null> {
+  const pt = (p: LatLng) => ({ location: { latLng: { latitude: p.lat, longitude: p.lng } } });
+  const data = await google<{ routes?: Array<{ duration?: string; staticDuration?: string }> }>(ROUTES_URL, {
+    body: { origin: pt(from), destination: pt(to), travelMode: "DRIVE", routingPreference: "TRAFFIC_AWARE" },
+    fieldMask: "routes.duration,routes.staticDuration",
+    background: opts.background,
+  });
+  const r = data.routes?.[0];
+  if (!r) return null;
+  const durationS = seconds(r.duration);
+  const staticS = seconds(r.staticDuration);
+  return durationS > 0 && staticS > 0 ? { durationS, staticS } : null;
+}
+
+export interface NearbyStop extends LatLng {
+  id: string;
+  name: string;
+  mapsUrl: string;
+}
+
+const GOOGLE_MAPS_LINK = /^https:\/\/(?:maps\.google\.com|www\.google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)\//;
+
+/** Up to 5 bus / transit stops within 1 km, nearest first (Places API (New) searchNearby). */
+export async function nearbyTransitStops(near: LatLng, lang: Lang = "en", opts: CallOpts = {}): Promise<NearbyStop[]> {
+  const data = await google<{ places?: Array<GPlace & { id?: string }> }>("https://places.googleapis.com/v1/places:searchNearby", {
+    body: {
+      includedTypes: ["bus_stop", "bus_station", "transit_station"],
+      maxResultCount: 5,
+      rankPreference: "DISTANCE",
+      languageCode: googleLanguage(lang),
+      locationRestriction: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 1000 } },
+    },
+    fieldMask: "places.id,places.displayName,places.location,places.googleMapsUri",
+    background: opts.background,
+  });
+  const out: NearbyStop[] = [];
+  for (const p of data.places ?? []) {
+    const lat = p.location?.latitude;
+    const lng = p.location?.longitude;
+    const name = p.displayName?.text;
+    if (typeof lat !== "number" || typeof lng !== "number" || !name) continue;
+    const id = typeof p.id === "string" && /^[\w-]{1,300}$/.test(p.id) ? p.id : "";
+    const search = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${id ? `&query_place_id=${id}` : ""}`;
+    out.push({ id, name, lat, lng, mapsUrl: p.googleMapsUri && GOOGLE_MAPS_LINK.test(p.googleMapsUri) ? p.googleMapsUri : search });
+  }
+  return out.slice(0, 5);
 }

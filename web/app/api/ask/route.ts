@@ -5,10 +5,13 @@ import { googleAccessToken } from "@/lib/google-token";
 import { rateLimit } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
 import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
+import { whereFrom } from "@/lib/where";
 
 export const maxDuration = 60;
 
-// POST { text, lang?, history?, device? } -> { lang, reply, brain, actions, steps, sources }
+// POST { text, lang?, history?, device?, tz?, city? } -> { lang, reply, brain, actions, steps, sources }
+// `tz` (IANA, from the browser) and `city` (from the device) are optional; without them the
+// Vercel network headers (x-vercel-ip-timezone / -city / -country / -latitude / -longitude) are used.
 // `device` = what the person's device remembers (memory, reminders, routines, lessons,
 // connected channels, and a location only if they turned on location sharing). It lives only on
 // their device; we use it for this answer and keep nothing.
@@ -23,6 +26,9 @@ export async function POST(req: Request) {
     lang?: unknown;
     history?: unknown;
     device?: RawDevice;
+    tz?: unknown;
+    timeZone?: unknown;
+    city?: unknown;
   } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
   if (!text) return Response.json({ error: "text is required" }, { status: 400 });
@@ -39,7 +45,8 @@ export async function POST(req: Request) {
     // Gmail token only when a tool actually needs it (one Clerk call at most per request).
     let gmail: Promise<string | null> | undefined;
     const gmailToken = () => (gmail ??= googleAccessToken(user.id));
-    const result = await ask(text, lang, history, cleanDevice(body?.device), new Date(), { gmailToken });
+    const device = cleanDevice(body?.device);
+    const result = await ask(text, lang, history, device, new Date(), { gmailToken, ...whereFrom(req.headers, body ?? {}, device) });
     return Response.json({ lang, ...result });
   } catch (e) {
     if (e instanceof NoBrainConfigured) return Response.json({ lang, error: "brain_not_configured" }, { status: 503 });

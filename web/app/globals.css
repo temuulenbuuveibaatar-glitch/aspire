@@ -1,101 +1,574 @@
 @import "tailwindcss";
 
-/* Aspire design tokens (spec §6.7) */
-@theme {
+/*
+ * Aspire v3 "Skylight Halo" design tokens and global styles.
+ * Source of truth: docs/design/aspire-v3-design.md (sections 2, 3, 4, 11, 13).
+ *
+ * Layering: component classes (.panel, .glass, .press, .ticks ...) live in
+ * @layer components so any Tailwind utility on the same element wins.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Tokens                                                              */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /* Surfaces */
   --color-bg: #060b16;
-  --color-ink: #eef4ff;
-  --color-ink-soft: #a7b6cc;
-  --color-ink-faint: #6f8099;
-  --color-glass: rgb(255 255 255 / 0.06);
-  --color-glass-strong: rgb(255 255 255 / 0.1);
-  --color-line: rgb(255 255 255 / 0.1);
-  --color-cyan: #38dcff;
-  --color-violet: #8b7cff;
-  --color-amber: #ffb547;
-  --color-ok: #34d399;
-  --color-bad: #ff7a7a;
-  --font-sans: var(--font-body), "Inter", system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --color-panel: #0b1220;
+  --color-panel-2: #121c2e;
+  --color-panel-3: #1a2740;
+
+  /* Text */
+  --color-ink: #f2f6fc;
+  --color-ink-muted: #b6c2d6;
+  --color-ink-faint: #93a3bc;
+
+  /* Accents and status (each also carries an icon and a word in the UI) */
+  --color-accent: #5ee7ff;
+  --color-on-accent: #0b1220;
+  --color-accent-2: #8fb2ff;
+  --color-signal: #f5c26b;
+  --color-danger: #ff8a8a;
+  --color-success: #5be3a4;
+
+  /* Lines */
+  --color-line: rgb(242 246 252 / 0.14);
+  --color-line-strong: rgb(242 246 252 / 0.28);
+
+  /* AQI ramp, US EPA order lifted for a dark ground (fills and markers only) */
+  --color-aqi-1: #5be3a4;
+  --color-aqi-2: #f5d76b;
+  --color-aqi-3: #f5a66b;
+  --color-aqi-4: #ff8a8a;
+  --color-aqi-5: #c99bff;
+  --color-aqi-6: #e0457b;
+
+  /* Traffic strip cells (non-text only) */
+  --color-traffic-free: #5be3a4;
+  --color-traffic-slow: #f5c26b;
+  --color-traffic-jam: #ff8a8a;
+  --color-traffic-heavy: #e0457b;
+
+  /* No pure white or black anywhere (halation): remap the defaults. */
+  --color-white: #f2f6fc;
+  --color-black: #060b16;
+
+  /* Legacy aliases (v2 names still used by untouched files; remove in v3.1) */
+  --color-ink-soft: #b6c2d6; /* = ink-muted */
+  --color-cyan: #5ee7ff; /* = accent */
+  --color-amber: #f5c26b; /* = signal */
+  --color-ok: #5be3a4; /* = success */
+  --color-bad: #ff8a8a; /* = danger */
+  --color-violet: #8fb2ff; /* retired, maps to accent-2 */
+  --color-glass: rgb(11 18 32 / 0.88);
+  --color-glass-strong: rgb(18 28 46 / 0.94);
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  /* Elevation */
+  --shadow-panel: inset 0 1px 0 rgb(242 246 252 / 0.08), 0 16px 40px -16px rgb(2 6 16 / 0.65);
+  --shadow-lift: inset 0 1px 0 rgb(242 246 252 / 0.1), 0 24px 56px -20px rgb(2 6 16 / 0.75);
+  --shadow-accent: 0 0 0 1px rgb(94 231 255 / 0.35), 0 10px 28px -10px rgb(94 231 255 / 0.55);
+
+  /* Fonts: Inter body, Tektur display, Noto Sans SC then system CJK fallbacks */
+  --font-sans:
+    var(--font-body), var(--font-cjk), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    system-ui, sans-serif;
   --font-display: var(--font-brand), var(--font-sans);
+
+  /* Weights (Inter is variable; never below 400) */
+  --font-weight-book: 450;
+
+  /* Type scale (rem, so the A / A+ / A++ control scales everything). Floor is 16px. */
+  --text-xs: 1rem; /* raised to the 16px floor for untouched files */
+  --text-xs--line-height: 1.4;
+  --text-sm: 1rem; /* raised to the 16px floor for untouched files */
+  --text-sm--line-height: 1.45;
+
+  --text-label: 1rem;
+  --text-label--line-height: 1.3;
+  --text-label--font-weight: 500;
+  --text-small: 1rem;
+  --text-small--line-height: 1.45;
+  --text-body: 1.125rem;
+  --text-body--line-height: 1.55;
+  --text-reply: 1.25rem;
+  --text-reply--line-height: 1.55;
+  --text-lead: 1.375rem;
+  --text-lead--line-height: 1.4;
+  --text-lead--font-weight: 500;
+  --text-greeting: clamp(1.75rem, 1.2rem + 2.4vw, 2.25rem);
+  --text-greeting--line-height: 1.2;
+  --text-greeting--font-weight: 500;
+  --text-value-sm: 1.25rem;
+  --text-value-sm--line-height: 1.1;
+  --text-value-sm--font-weight: 500;
+  --text-eta: 2rem;
+  --text-eta--line-height: 1;
+  --text-eta--font-weight: 500;
+  --text-value: 2.5rem;
+  --text-value--line-height: 1;
+  --text-value--font-weight: 500;
+  --text-hero: clamp(4.5rem, 3rem + 7vw, 7rem);
+  --text-hero--line-height: 0.95;
+  --text-hero--font-weight: 400;
+  --text-wordmark: 1rem;
+  --text-wordmark--line-height: 1;
+  --text-wordmark--font-weight: 700;
+  --text-wordmark--letter-spacing: 0.28em;
+
+  /* Easing */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Sky drift loops (transform only; frozen under reduced motion and Calm mode) */
+  --animate-drift-60: aspire-drift 60s ease-in-out infinite alternate;
+  --animate-drift-75: aspire-drift 75s ease-in-out infinite alternate-reverse;
+  --animate-drift-90: aspire-drift 90s ease-in-out infinite alternate;
+  --animate-fog-80: aspire-fog 80s ease-in-out infinite alternate;
+  --animate-fog-110: aspire-fog 110s ease-in-out infinite alternate-reverse;
+  --animate-twinkle: aspire-twinkle 3.5s ease-in-out infinite alternate;
 }
 
-html {
-  color-scheme: dark;
-  -webkit-text-size-adjust: 100%;
+@keyframes aspire-drift {
+  from {
+    transform: translate3d(-9%, 0, 0);
+  }
+  to {
+    transform: translate3d(9%, 0, 0);
+  }
 }
-body {
-  min-height: 100dvh;
-  background:
-    radial-gradient(900px 600px at 50% -10%, rgb(56 220 255 / 0.1), transparent 60%),
-    radial-gradient(700px 500px at 100% 100%, rgb(139 124 255 / 0.08), transparent 60%),
-    var(--color-bg);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: 17px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+@keyframes aspire-fog {
+  from {
+    transform: translate3d(-6%, 0, 0);
+  }
+  to {
+    transform: translate3d(6%, 0, 0);
+  }
 }
-
-/* Frosted glass panels; solid when the user asks for less transparency. */
-.glass {
-  background: var(--color-glass);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--color-line);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .glass {
-    background: #101a2c;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+@keyframes aspire-twinkle {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
   }
 }
 
-/* Every pressable thing answers the press immediately. */
-.press {
-  transition: transform 140ms var(--ease-out-strong), background-color 160ms ease, border-color 160ms ease;
-  touch-action: manipulation;
+/* ------------------------------------------------------------------ */
+/* Variants for other units                                            */
+/*   still:  prefers-reduced-motion OR Calm mode                       */
+/*   opaque: prefers-reduced-transparency OR Calm mode                 */
+/*   calm:   Calm mode only (data-calm="true" on <html>)               */
+/* ------------------------------------------------------------------ */
+@custom-variant calm (&:where([data-calm="true"], [data-calm="true"] *));
+@custom-variant still {
+  @media (prefers-reduced-motion: reduce) {
+    @slot;
+  }
+  &:where([data-calm="true"], [data-calm="true"] *) {
+    @slot;
+  }
 }
-.press:active {
-  transform: scale(0.97);
-}
-@media (prefers-reduced-motion: reduce) {
-  .press,
-  .press:active {
-    transition: background-color 160ms ease;
-    transform: none;
+@custom-variant opaque {
+  @media (prefers-reduced-transparency: reduce) {
+    @slot;
+  }
+  &:where([data-calm="true"], [data-calm="true"] *) {
+    @slot;
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
 @layer base {
-  :focus-visible {
-    outline: 3px solid var(--color-cyan);
-    outline-offset: 3px;
+  :root {
+    /* Live sky pair. SkyLayer overwrites these inline on <html>; the defaults are a clear night. */
+    --sky-top: #050a18;
+    --sky-horizon: #1b2a4a;
+    /* EdgeGlow hue: 70% sky horizon, 30% accent. */
+    --edge: color-mix(in oklab, var(--sky-horizon) 70%, var(--color-accent));
+    --edge-soft: color-mix(in oklab, var(--edge) 45%, transparent);
+    /* Text size control (A / A+ / A++). Set data-text-size or --text-scale on <html>. */
+    --text-scale: 1;
+  }
+  :root[data-text-size="lg"] {
+    --text-scale: 1.125;
+  }
+  :root[data-text-size="xl"] {
+    --text-scale: 1.25;
+  }
+
+  html {
+    color-scheme: dark;
+    /* WCAG 2.4.11: keyboard focus never lands under the sticky header or the fixed composer.
+       Assistant measures the header into --aspire-header-h. */
+    scroll-padding-top: var(--aspire-header-h, 9rem);
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 8rem);
+    font-size: calc(100% * var(--text-scale));
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    background-color: var(--color-bg);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(900px 600px at 50% -10%, rgb(94 231 255 / 0.07), transparent 60%),
+      var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-book);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-synthesis-weight: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  p,
+  li,
+  dd,
+  blockquote {
+    text-wrap: pretty;
+  }
+
+  button,
+  [role="button"] {
+    overflow-wrap: anywhere;
+  }
+
+  :lang(de),
+  :lang(en) {
+    hyphens: auto;
+  }
+
+  /* Chinese: no tracking, no caps, no italics, taller lines for running text. */
+  :lang(zh) {
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    font-style: normal !important;
+  }
+  /* Spec 4.2: CJK weight is capped at 700 (Noto Sans SC ships 400 and 700 only). */
+  :is(.font-extrabold, .font-black):lang(zh) {
+    font-weight: 700 !important;
+  }
+  :is(p, li, dd, blockquote, .text-body, .text-reply, .text-small, .text-lead):lang(zh) {
+    --tw-leading: 1.75;
+    line-height: 1.75;
+  }
+  /* Cyrillic (mn, ru): comfortable leading. Long Cyrillic is never letter-spaced by design. */
+  :is(p, li, dd, blockquote):lang(mn),
+  :is(p, li, dd, blockquote):lang(ru) {
+    line-height: 1.55;
+  }
+
+
+  ::selection {
+    background-color: rgb(94 231 255 / 0.32);
+    color: var(--color-ink);
+  }
+
+  /* Every changing number aligns. */
+  time,
+  data,
+  meter,
+  progress {
+    font-variant-numeric: tabular-nums;
+  }
+
+  a {
+    text-underline-offset: 0.18em;
   }
 }
 
-/* ---- privacy / terms pages ---- */
+/* ------------------------------------------------------------------ */
+/* Components (material)                                               */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* The only text surface. Solid enough (0.88) to keep 12.5:1 over a white snow sky.
+     No backdrop-filter: blurring a moving canvas recomposites every frame. */
+  .panel,
+  .glass {
+    background-color: rgb(11 18 32 / 0.88);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-panel);
+    border-radius: var(--radius-lg);
+    overflow-wrap: break-word;
+  }
+  .panel-2 {
+    background-color: var(--color-panel-2);
+    border: 1px solid var(--color-line);
+  }
+  .panel-3 {
+    background-color: var(--color-panel-3);
+    border: 1px solid var(--color-line-strong);
+  }
+
+  /* Every pressable thing answers the press immediately (individual `scale`
+     composes with motion/react's inline transform). */
+  .press {
+    transition:
+      scale 140ms var(--ease-out-strong),
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      opacity 160ms ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .press:active {
+    scale: 0.97;
+  }
+  /* A disabled control must not look like it accepted the press. */
+  .press:is(:disabled, [aria-disabled="true"]):active {
+    scale: none;
+  }
+
+  /* Desktop rail corner ticks: four 10px L marks inset 8px, no extra DOM. */
+  .ticks {
+    position: relative;
+  }
+  @media (min-width: 1024px) {
+    .ticks::before,
+    .ticks::after {
+      --tick: var(--color-line-strong);
+      content: "";
+      position: absolute;
+      inset: 8px;
+      pointer-events: none;
+      background-repeat: no-repeat;
+    }
+    .ticks::before {
+      background-image:
+        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick)),
+        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick));
+      background-size:
+        10px 1.5px,
+        1.5px 10px,
+        10px 1.5px,
+        1.5px 10px;
+      background-position:
+        left top,
+        left top,
+        right top,
+        right top;
+    }
+    .ticks::after {
+      background-image:
+        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick)),
+        linear-gradient(var(--tick), var(--tick)), linear-gradient(var(--tick), var(--tick));
+      background-size:
+        10px 1.5px,
+        1.5px 10px,
+        10px 1.5px,
+        1.5px 10px;
+      background-position:
+        left bottom,
+        left bottom,
+        right bottom,
+        right bottom;
+    }
+  }
+
+  /* Sky-tinted 1px hairline (sheet top edge). */
+  .hairline-sky {
+    height: 1px;
+    background-image: linear-gradient(90deg, transparent, var(--sky-horizon), transparent);
+    opacity: 0.6;
+  }
+
+  /* Skip link: first focusable element, visible only on focus. */
+  .skip-link {
+    position: fixed;
+    /* viewport-fit=cover: keep clear of the notch and rounded corners. */
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    z-index: 60;
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 20px;
+    border-radius: var(--radius-md);
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
+    font-weight: 600;
+    translate: 0 -200%;
+    opacity: 0;
+  }
+  .skip-link:focus-visible,
+  .skip-link:focus {
+    translate: 0 0;
+    opacity: 1;
+    outline-color: var(--color-ink);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilities                                                           */
+/* ------------------------------------------------------------------ */
+/* Focus ring: two-tone so it reads on every sky (snow day #EEF3F8 as well as clear night).
+   Cyan sits on a near-black halo (about 13:1), independent of what is behind the control.
+   In the utilities layer so it beats .panel's box-shadow (components layer); wrapped in
+   :where() so per-element focus-visible:* utilities still win. */
+@layer utilities {
+  :where(:focus-visible) {
+    outline: 3px solid var(--color-accent);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 2px var(--color-bg),
+      0 0 0 7px rgb(6 11 22 / 0.9);
+  }
+  /* On accent and success fills the accent ring vanishes; use ink instead. */
+  :where(.bg-accent, .bg-cyan, .bg-success, .on-accent, [data-on-accent], .skip-link):focus-visible {
+    outline-color: var(--color-ink);
+  }
+}
+/* Tabular numerals for any changing number. */
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+/* Tektur display numerals: condensed width, tabular. */
+@utility numeral {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings: "wdth" 88;
+}
+
+/* ------------------------------------------------------------------ */
+/* Preferences (kept in layers so explicit utilities still win)        */
+/* ------------------------------------------------------------------ */
+@layer base {
+  /* More contrast: stronger hairlines and labels. */
+  @media (prefers-contrast: more) {
+    :root {
+      --color-line: rgb(242 246 252 / 0.32);
+      --color-line-strong: rgb(242 246 252 / 0.5);
+      --color-ink-faint: #b6c2d6;
+    }
+  }
+
+  /* Reduced motion or Calm mode: CSS loops freeze, one-shot CSS animations jump to their end state. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-delay: 0s !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  :root[data-calm="true"] *,
+  :root[data-calm="true"] *::before,
+  :root[data-calm="true"] *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  /* Reduced transparency or Calm mode: opaque panels, stronger edges, no glow. */
+  @media (prefers-reduced-transparency: reduce) {
+    .panel,
+    .glass {
+      background-color: var(--color-panel);
+      border-color: var(--color-line-strong);
+      box-shadow: none;
+    }
+    .hairline-sky {
+      background-image: none;
+      background-color: var(--color-line-strong);
+      opacity: 1;
+    }
+  }
+  :root[data-calm="true"] :is(.panel, .glass) {
+    background-color: var(--color-panel);
+    border-color: var(--color-line-strong);
+    box-shadow: none;
+  }
+  :root[data-calm="true"] .hairline-sky {
+    background-image: none;
+    background-color: var(--color-line-strong);
+    opacity: 1;
+  }
+
+  /* Reduced motion or Calm mode: presses change colour only. */
+  @media (prefers-reduced-motion: reduce) {
+    .press,
+    .press:active {
+      transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;
+      scale: none;
+    }
+  }
+  :root[data-calm="true"] :is(.press, .press:active) {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+    scale: none;
+  }
+
+  @media (prefers-contrast: more) {
+    .panel,
+    .glass {
+      background-color: var(--color-panel);
+    }
+  }
+
+  /* Windows high contrast: keep panel edges visible. */
+  @media (forced-colors: active) {
+    .panel,
+    .panel-2,
+    .panel-3,
+    .glass {
+      border-color: CanvasText;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Privacy / terms pages                                               */
+/* ------------------------------------------------------------------ */
 .legal {
   max-width: 760px;
   margin: 0 auto;
   padding: 28px 16px 60px;
-  font-size: 18px;
+  font-size: var(--text-body);
   line-height: 1.6;
 }
 .legal a {
-  color: var(--color-cyan);
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 .legal h1 {
-  font-size: clamp(26px, 6vw, 36px);
+  font-size: clamp(1.75rem, 6vw, 2.25rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
   margin: 16px 0 4px;
   font-weight: 700;
 }
 .legal h2 {
-  font-size: 22px;
+  font-size: 1.375rem;
   margin: 26px 0 8px;
-  color: var(--color-cyan);
+  color: var(--color-accent);
   font-weight: 700;
 }
 .legal p,
@@ -112,6 +585,6 @@ body {
   border-top: 1px solid var(--color-line);
 }
 .legal-updated {
-  color: var(--color-ink-soft);
-  font-size: 15px;
+  color: var(--color-ink-muted);
+  font-size: 1rem;
 }

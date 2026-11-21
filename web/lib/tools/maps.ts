@@ -8,7 +8,10 @@ const MODES: readonly TravelMode[] = ["transit", "walk", "drive"];
 const MAX_CARDS = 3;
 
 const errorOf = (e: unknown) => ({ error: e instanceof Error ? e.message : "Maps failed" });
+/** The shared device location (precise, opt-in). */
 const here = (ctx: ToolContext) => ctx.device.location;
+/** Where to bias a place search: the device location, else the city-level network position. */
+const near = (ctx: ToolContext) => ctx.device.location ?? ctx.approxLocation;
 
 function mapCard(ctx: ToolContext, title: string, url: string) {
   if (title && isGoogleMapsUrl(url)) ctx.actions.push({ type: "map", title: title.slice(0, 120), url });
@@ -16,9 +19,9 @@ function mapCard(ctx: ToolContext, title: string, url: string) {
 
 export const getDirections: Tool = {
   name: "get_directions",
-  label: { icon: "🧭", mn: "Чиглэл", en: "Directions" },
+  label: { mn: "Чиглэл", en: "Directions" },
   description:
-    "Route from A to B anywhere with Google Maps: public transport (bus/train lines, stop names, departure and arrival times, number of stops), walking or driving. Gives total minutes and up to 8 steps, and shows an 'Open in Google Maps' button. Places can be names or addresses (add the city, e.g. 'Эрдэнэт, Нэгдсэн эмнэлэг') or 'lat,lng'.",
+    "Route from A to B anywhere in the world with Google Maps: public transport (bus, tram, metro and train lines, stop names, departure and arrival times, number of stops), walking or driving. This is the way to answer 'which bus', 'next bus to X' and 'how do I get to X' in any city. Gives total minutes and up to 8 steps, and shows an 'Open in Google Maps' button. Places can be names or addresses (add the city, e.g. 'Central Station, Sydney') or 'lat,lng'.",
   parameters: {
     type: "object",
     properties: {
@@ -42,7 +45,7 @@ export const getDirections: Tool = {
     }
     const mode = (MODES as readonly string[]).includes(str(input.mode, 10)) ? (str(input.mode, 10) as TravelMode) : "transit";
     try {
-      const route = await computeRoute({ origin, destination, mode, departureTime: ctx.now.toISOString(), lang: ctx.lang ?? "en" });
+      const route = await computeRoute({ origin, destination, mode, departureTime: ctx.now.toISOString(), lang: ctx.lang ?? "en", timeZone: ctx.timeZone });
       mapCard(ctx, destination, route.mapsUrl);
       return { ...route, mode };
     } catch (e) {
@@ -53,9 +56,9 @@ export const getDirections: Tool = {
 
 export const findPlaces: Tool = {
   name: "find_places",
-  label: { icon: "📍", mn: "Газар хайх", en: "Places" },
+  label: { mn: "Газар хайх", en: "Places" },
   description:
-    "Find places with Google Maps (pharmacy, hospital, restaurant, ATM, hotel, shop, a named place): name, address, rating, open now, distance. Near the person's location when they shared it; otherwise put the city in the query (e.g. 'pharmacy in Erdenet'). Shows 'Open in Google Maps' buttons.",
+    "Find places anywhere with Google Maps (pharmacy, hospital, bus stop, restaurant, ATM, hotel, shop, a named place): name, address, rating, open now, distance. Near the person when their location is known; otherwise put the city in the query (e.g. 'pharmacy in Nairobi'). Shows 'Open in Google Maps' buttons.",
   parameters: {
     type: "object",
     properties: {
@@ -69,7 +72,7 @@ export const findPlaces: Tool = {
     const query = str(input.query, 200);
     if (!query) return { error: "query is required" };
     try {
-      const places = await searchPlaces({ query, near: here(ctx), openNow: bool(input.open_now), lang: ctx.lang ?? "en", max: 5 });
+      const places = await searchPlaces({ query, near: near(ctx), openNow: bool(input.open_now), lang: ctx.lang ?? "en", max: 5 });
       for (const p of places.slice(0, MAX_CARDS)) mapCard(ctx, p.name, p.mapsUrl);
       return places.length ? { places, nearYou: Boolean(here(ctx)) } : { places, note: "Nothing found; try other words or add the city" };
     } catch (e) {

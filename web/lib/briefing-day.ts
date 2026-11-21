@@ -1,13 +1,25 @@
-// When the morning briefing plays: once per calendar day in Mongolia. Safe for the browser.
+// When the morning briefing plays: once per calendar day where the person is (their device's
+// time zone), in any country. Safe for the browser.
 
-const TZ = "Asia/Ulaanbaatar";
-
-/** YYYY-MM-DD in Mongolia time. */
-export function mongoliaDate(now: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+/** The device's IANA time zone, or UTC when the browser cannot tell. */
+export function deviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
 }
 
-/** True on the first open of a new Mongolia calendar day (or the very first open ever). */
-export function shouldBrief(lastBriefingDate: string | undefined | null, now: Date): boolean {
-  return lastBriefingDate !== mongoliaDate(now);
+/** YYYY-MM-DD in a time zone (default: the device's own). */
+export function localDate(now: Date, tz: string = deviceTimeZone()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  }
+}
+
+/** True on the first open of a new local calendar day (or the very first open ever). */
+export function shouldBrief(lastBriefingDate: string | undefined | null, now: Date, tz?: string): boolean {
+  return lastBriefingDate !== localDate(now, tz);
 }

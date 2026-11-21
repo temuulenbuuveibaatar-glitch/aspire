@@ -2,16 +2,16 @@
   "city": "Erdenet",
   "timezone": "Asia/Ulaanbaatar",
   "sample": true,
-  "note": "SAMPLE DATA for the Orkhon Hackathon demo. Routes, stops and times are illustrative, not the real Erdenet schedule. Replace with the operator's timetable or a GTFS feed.",
+  "note": "SAMPLE DATA for the Orkhon Hackathon demo. Routes, stops, stop positions and times are illustrative, not the real Erdenet schedule. Replace with the operator's timetable or a GTFS feed.",
   "stops": [
-    { "id": "center", "names": { "mn": "Төв талбай", "en": "Central Square", "ru": "Центральная площадь", "zh": "中心广场", "de": "Zentralplatz" } },
-    { "id": "market", "names": { "mn": "Төв зах", "en": "Central Market", "ru": "Центральный рынок", "zh": "中心市场", "de": "Zentralmarkt" } },
-    { "id": "hospital", "names": { "mn": "Нэгдсэн эмнэлэг", "en": "General Hospital", "ru": "Больница", "zh": "综合医院", "de": "Krankenhaus" } },
-    { "id": "culture", "names": { "mn": "Соёлын төв", "en": "Culture Center", "ru": "Дом культуры", "zh": "文化中心", "de": "Kulturzentrum" } },
-    { "id": "railway", "names": { "mn": "Галт тэрэгний буудал", "en": "Railway Station", "ru": "Вокзал", "zh": "火车站", "de": "Bahnhof" } },
-    { "id": "plant", "names": { "mn": "Эрдэнэт үйлдвэр", "en": "Erdenet Mining Plant", "ru": "Горно-обогатительный комбинат", "zh": "额尔登特矿厂", "de": "Bergbauwerk Erdenet" } },
-    { "id": "school", "names": { "mn": "1-р сургууль", "en": "School No. 1", "ru": "Школа №1", "zh": "第一学校", "de": "Schule Nr. 1" } },
-    { "id": "dormitory", "names": { "mn": "Хороолол", "en": "Residential District", "ru": "Микрорайон", "zh": "住宅区", "de": "Wohnviertel" } }
+    { "id": "center", "lat": 49.0300, "lng": 104.0800, "names": { "mn": "Төв талбай", "en": "Central Square", "ru": "Центральная площадь", "zh": "中心广场", "de": "Zentralplatz" } },
+    { "id": "market", "lat": 49.0330, "lng": 104.0700, "names": { "mn": "Төв зах", "en": "Central Market", "ru": "Центральный рынок", "zh": "中心市场", "de": "Zentralmarkt" } },
+    { "id": "hospital", "lat": 49.0260, "lng": 104.0900, "names": { "mn": "Нэгдсэн эмнэлэг", "en": "General Hospital", "ru": "Больница", "zh": "综合医院", "de": "Krankenhaus" } },
+    { "id": "culture", "lat": 49.0310, "lng": 104.0860, "names": { "mn": "Соёлын төв", "en": "Culture Center", "ru": "Дом культуры", "zh": "文化中心", "de": "Kulturzentrum" } },
+    { "id": "railway", "lat": 49.0050, "lng": 104.1000, "names": { "mn": "Галт тэрэгний буудал", "en": "Railway Station", "ru": "Вокзал", "zh": "火车站", "de": "Bahnhof" } },
+    { "id": "plant", "lat": 49.0400, "lng": 104.1300, "names": { "mn": "Эрдэнэт үйлдвэр", "en": "Erdenet Mining Plant", "ru": "Горно-обогатительный комбинат", "zh": "额尔登特矿厂", "de": "Bergbauwerk Erdenet" } },
+    { "id": "school", "lat": 49.0280, "lng": 104.0740, "names": { "mn": "1-р сургууль", "en": "School No. 1", "ru": "Школа №1", "zh": "第一学校", "de": "Schule Nr. 1" } },
+    { "id": "dormitory", "lat": 49.0350, "lng": 104.0620, "names": { "mn": "Хороолол", "en": "Residential District", "ru": "Микрорайон", "zh": "住宅区", "de": "Wohnviertel" } }
   ],
   "routes": [
     {

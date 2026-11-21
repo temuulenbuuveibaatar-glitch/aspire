@@ -5,12 +5,13 @@
 export const LANGS = ["mn", "zh", "en", "ru", "de"] as const;
 export type Lang = (typeof LANGS)[number];
 
-export const LANG_NAMES: Record<Lang, { native: string; english: string; flag: string }> = {
-  mn: { native: "Монгол", english: "Mongolian", flag: "🇲🇳" },
-  zh: { native: "中文", english: "Chinese", flag: "🇨🇳" },
-  en: { native: "English", english: "English", flag: "🇬🇧" },
-  ru: { native: "Русский", english: "Russian", flag: "🇷🇺" },
-  de: { native: "Deutsch", english: "German", flag: "🇩🇪" },
+// No flags: a language is not a country. The UI shows `code` ("MN", "ZH", ...) or `native`.
+export const LANG_NAMES: Record<Lang, { native: string; english: string; code: string }> = {
+  mn: { native: "Монгол", english: "Mongolian", code: "MN" },
+  zh: { native: "中文", english: "Chinese", code: "ZH" },
+  en: { native: "English", english: "English", code: "EN" },
+  ru: { native: "Русский", english: "Russian", code: "RU" },
+  de: { native: "Deutsch", english: "German", code: "DE" },
 };
 
 export function isLang(x: unknown): x is Lang {
