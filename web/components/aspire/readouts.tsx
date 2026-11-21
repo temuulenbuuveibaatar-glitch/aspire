@@ -17,6 +17,8 @@ export function temp(c: number, imperial: boolean, unit = true): string {
 
 /** "Erdenet, GPS", "Erdenet, Set", "Ulaanbaatar, approx." */
 function placeLabel(a: Ambient | null, t: T): string {
+  // The exact street address when the device gave its position (as ride apps show it).
+  if (a?.address) return a.address;
   if (!a?.place) return t.hud.noLocation;
   const src = a.locatedBy === "device" ? t.hud.gps : a.locatedBy === "city" ? t.hud.set : t.hud.approx;
   return `${a.place}, ${src}`;

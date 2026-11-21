@@ -1,11 +1,13 @@
 // Tools for buses, time, and the person's own device (reminders, memory). Calls live in connect.ts.
 // Buses: in Erdenet, the city's live open feed (Orkhon ТКХДТ): real stops, live buses, estimated
-// arrivals. Elsewhere, Google Maps transit. Every answer says its `source`. Live answers carry each
+// arrivals. Elsewhere, Google Maps transit, then Transitous (open data, worldwide; each time marked
+// live or scheduled). Every answer says its `source`. Live answers carry each
 // bus's data age (ageS); stale buses never get an estimate; a dead feed is reported, never guessed around.
 // Clock times use the person's own time zone (ctx.timeZone), never a fixed offset.
 import { arrivals, CREDIT, findStations, findVehicles, getStatic, isErdenet, liveVehicles, moving, nearestStations, type Station, trip } from "@/lib/erdenet-transit";
 import { isGoogleMapsUrl } from "@/lib/links";
-import { directionsUrl, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
+import { directionsUrl, type LatLng, mapsConfigured, type TransitOption, transitOptions } from "@/lib/maps";
+import { departuresNear, findPlace, planTrip, TRANSITOUS_CREDIT, TRANSITOUS_SOURCES } from "@/lib/transitous";
 import { clockIn, dayIn, validTimeZone, zonedTime, zoneOr } from "./time";
 import { bool, str, type Tool, type ToolContext } from "./types";
 
@@ -36,15 +38,20 @@ function erdenetOrder(ctx: ToolContext, ...said: string[]): "first" | "after" | 
   return MONGOLIAN_ZONE.test(validTimeZone(ctx.timeZone) ?? "") ? "after" : "never";
 }
 
-/** Live first (Erdenet), else Google first; null results fall through; the feed failing is reported only in Erdenet. */
-async function liveOrGoogle<T>(order: ReturnType<typeof erdenetOrder>, live: () => Promise<T | null>, google: () => Promise<T | null>, none: T): Promise<T> {
-  const steps = order === "first" ? [live, google] : order === "after" ? [google, live] : [google];
-  let down = false;
+type Step<T> = () => Promise<T | null>;
+
+/**
+ * Live first (Erdenet), else Google first; outside Erdenet Transitous after Google. null results fall
+ * through; a failing source is reported (Erdenet's feed in Erdenet, Transitous elsewhere), never guessed around.
+ */
+async function liveOrGoogle<T>(order: ReturnType<typeof erdenetOrder>, live: Step<T>, google: Step<T>, open: Step<T>, none: T): Promise<T> {
+  const steps = order === "first" ? [live, google] : order === "after" ? [google, live] : [google, open];
+  let down: object | null = null;
   for (const step of steps) {
-    const r = await step().catch(() => ((down = order === "first"), null));
+    const r = await step().catch(() => ((down = order === "first" ? FEED_DOWN : step === open ? OPEN_DOWN : down), null));
     if (r) return r;
   }
-  return down ? (FEED_DOWN as T) : none;
+  return (down ?? none) as T;
 }
 
 /** Why a stop has no arrivals: no bus coming, or no bus reporting at all (then nothing can be estimated). */
@@ -56,12 +63,16 @@ const emptyReason = async () =>
 const notHere = (ctx: ToolContext) => ({
   error:
     inErdenet(ctx) === false
-      ? "No live stop times for this city without a destination. Use get_directions with mode 'transit' for real departures, or find_places 'bus stop' for nearby stops."
+      ? "No bus times found: Google and Transitous have none for this stop or place (with no stop named, the device location is needed). Say so; do not guess. Ask which stop, or use get_directions with mode 'transit', or find_places 'bus stop' for nearby stops."
       : "Location unknown: ask which city they are in (or suggest 'Use my location'), then use get_directions with mode 'transit'.",
 });
 const FEED_DOWN = {
   liveDataUnavailable: true,
   error: "Live bus data unavailable: Erdenet's bus feed is not answering. Say exactly that; do not guess arrival times or bus positions. Suggest trying again in a minute.",
+};
+const OPEN_DOWN = {
+  liveDataUnavailable: true,
+  error: "Bus times unavailable: the open transit data service (Transitous) is not answering right now. Say exactly that; do not guess. Suggest get_directions with mode 'transit' or trying again later.",
 };
 
 /** The person's city is added to a place name Google should find. */
@@ -74,6 +85,25 @@ function placeFor(query: string, ctx: ToolContext): string {
 async function googleTransit(from: string, to: string, ctx: ToolContext): Promise<TransitOption[]> {
   if (!mapsConfigured() || !from || !to) return [];
   return transitOptions({ from: placeFor(from, ctx), to: placeFor(to, ctx), now: ctx.now, lang: ctx.lang ?? "en", timeZone: ctx.timeZone }).catch(() => []);
+}
+
+const OPEN = { source: "transitous", credit: TRANSITOUS_CREDIT, creditUrl: TRANSITOUS_SOURCES } as const;
+
+/** Where the person is for Transitous: the device, else the network's city-level position. */
+const anchor = (ctx: ToolContext): LatLng | null => ctx.device.location ?? ctx.approxLocation ?? null;
+
+/** A named place for Transitous near the person (the city added when no position is known). */
+const openPlace = (query: string, ctx: ToolContext) => {
+  const near = anchor(ctx);
+  return near || ctx.city ? findPlace(near ? query : placeFor(query, ctx), near) : Promise.resolve(null);
+};
+
+/** Transitous options between two named places; empty `from` = the device position. */
+async function openTrip(from: string, to: string, ctx: ToolContext) {
+  const [a, b] = await Promise.all([from ? openPlace(from, ctx) : ctx.device.location ?? null, openPlace(to, ctx)]);
+  if (!a || !b) return null;
+  const options = await planTrip(a, b, ctx.now, { timeZone: ctx.timeZone });
+  return options.length ? { from: "name" in a ? a.name : from, options } : null;
 }
 
 /**
@@ -108,6 +138,10 @@ const LIVE = { ...SOURCE, estimate: true } as const;
 const TRUTH =
   "Report only what the data says. Minutes are estimates: say 'about N minutes (estimate)'. ageS is how old that bus's position is: when it is over 30, say how old (e.g. 'position 45 seconds old'). Buses silent for over 60 s are left out of estimates. Routes are matched from each bus's position (null when unclear). stopped: the bus is standing still now (say so). If the result says live data is unavailable, say so and never guess.";
 
+/** How Transitous answers must be told. */
+const OPEN_TRUTH =
+  "Transitous times: live true is real-time (say 'live'); live false is the timetable only (say 'scheduled', never 'live'). Credit 'Transitous'.";
+
 /** One bus by its plate: route, destination, nearest stop, speed, heading and how old its position is. */
 async function busByPlate(plate: string) {
   const found = await findVehicles(plate);
@@ -137,7 +171,9 @@ export const nextBus: Tool = {
   description:
     "Next buses at a stop: minutes until each bus, route, bus plate. In Erdenet, Mongolia: live bus positions from the city's open feed; stop names are Mongolian Cyrillic; an empty stop means the stop nearest the person; 'bus' with a plate (e.g. '0216') instead tells where that one bus is going, its speed and heading. " +
     TRUTH +
-    " Elsewhere give a destination ('to') and real Google Maps transit departures are used, or use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
+    " Elsewhere: Google Maps transit when a destination ('to') is given, else Transitous (open data; departures near a named stop or the person's position). " +
+    OPEN_TRUTH +
+    " Or use get_directions with mode 'transit'. If the person saved their usual stop in memory, use it.",
   parameters: {
     type: "object",
     properties: {
@@ -178,7 +214,32 @@ export const nextBus: Tool = {
         source: "google",
       };
     };
-    return liveOrGoogle<object>(order, live, google, notHere(ctx));
+    const open = async () => {
+      if (to) {
+        const t = await openTrip(stop, to, ctx);
+        const list = t?.options.filter((o) => !route || o.line === route) ?? [];
+        if (!t || !list.length) return null;
+        return {
+          stop: list[0].stop || t.from,
+          now: clockIn(ctx.now, zoneOr(ctx.timeZone)),
+          arrivals: list.map((o) => ({ route: o.line, routeName: o.lineName, minutes: o.waitMinutes, time: o.departs, towards: o.headsign, live: o.live })),
+          ...OPEN,
+        };
+      }
+      const at = stop ? await openPlace(stop, ctx) : ctx.device.location;
+      if (!at) return null;
+      const list = (await departuresNear(at, ctx.now, { timeZone: ctx.timeZone })).filter((d) => sameRoute(d.route, route)).slice(0, 8);
+      if (!list.length) return null;
+      return {
+        stop: list[0].stop,
+        ...(stop ? {} : { note: "Stops near the person" }),
+        now: clockIn(ctx.now, zoneOr(ctx.timeZone)),
+        // distanceM is from the person only when no stop was named (else it is from that stop).
+        arrivals: list.map((d) => ({ route: d.route, minutes: d.minutes, time: d.time, towards: d.headsign, stop: d.stop, ...(stop ? {} : { distanceM: d.distanceM }), live: d.live })),
+        ...OPEN,
+      };
+    };
+    return liveOrGoogle<object>(order, live, google, open, notHere(ctx));
   },
 };
 
@@ -188,7 +249,9 @@ export const tripPlanner: Tool = {
   description:
     "Bus between two stops: which route, how long to wait, how long the ride is. In Erdenet: the city's live feed (direct routes; stop names Mongolian Cyrillic; waitMinutes null means no live bus is on its way). " +
     TRUTH +
-    " Elsewhere: Google Maps transit. For door-to-door routes anywhere, prefer get_directions.",
+    " Elsewhere: Google Maps transit, else Transitous. " +
+    OPEN_TRUTH +
+    " For door-to-door routes anywhere, prefer get_directions.",
   parameters: {
     type: "object",
     properties: {
@@ -221,8 +284,18 @@ export const tripPlanner: Tool = {
         source: "google",
       };
     };
+    const open = async () => {
+      const t = await openTrip(from, to, ctx);
+      if (!t) return null;
+      return {
+        from: t.options[0].stop || t.from,
+        to,
+        options: t.options.map((o) => ({ route: o.line, departs: o.departs, arrives: o.arrives, waitMinutes: o.waitMinutes, rideMinutes: o.rideMinutes, stops: o.stops, live: o.live })),
+        ...OPEN,
+      };
+    };
     const none = order !== "first" ? notHere(ctx) : { error: "No direct Erdenet bus found between these stops. Suggest get_directions with mode 'transit' or 'walk'." };
-    return liveOrGoogle<object>(order, live, google, none);
+    return liveOrGoogle<object>(order, live, google, open, none);
   },
 };
 

@@ -33,11 +33,23 @@ export interface AmbientDay {
   precipChance: number | null;
 }
 
+/** One hour of the forecast (the hero's hourly strip). */
+export interface AmbientHour {
+  /** Start of the hour, ISO 8601 (UTC). */
+  time: string;
+  tempC: number;
+  kind: SkyKind;
+  /** 0..100; null when the provider does not say. */
+  precipChance: number | null;
+}
+
 export interface AmbientWeather {
   tempC: number;
   feelsC: number;
   text: string;
   days: AmbientDay[];
+  /** Up to the next 12 hours, from the current hour. Absent or empty: unknown, show nothing. */
+  hourly?: AmbientHour[];
 }
 
 export interface AmbientAir {
@@ -81,6 +93,8 @@ export interface AmbientNextBus {
   departsInMin: number;
   /** "erdenet-live": the city's live feed (credit Орхон ТКХДТ); "google": Google transit. */
   source: "erdenet-live" | "google";
+  /** live: a vehicle position or real-time feed; scheduled: a timetable; estimate: inferred. Absent: treat as scheduled. */
+  kind?: "live" | "scheduled" | "estimate";
   /** Server time (ISO) the estimate was made: the client counts down from it and drops it when old. */
   at: string;
 }
@@ -97,6 +111,8 @@ export interface Ambient {
   traffic: AmbientTraffic | null;
   stops: AmbientStop[];
   photo?: AmbientPhoto | null;
+  /** Exact street address of a device position ("Кувейтийн гудамж 6-1, Баян-Өндөр"); null otherwise. */
+  address?: string | null;
   taxis?: AmbientTaxi[];
   nextBus?: AmbientNextBus | null;
   timeZone: string | null;

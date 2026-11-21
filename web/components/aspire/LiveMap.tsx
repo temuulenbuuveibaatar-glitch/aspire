@@ -28,7 +28,8 @@ const T: Record<Lang, Record<Key, string>> = {
 const HUD = "#7fe3ff";
 const STALE = "#93a3bc";
 const OUTLINE = "#04121c";
-const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/dark";
+// "fiord": dark blue with legible streets ("dark" was near-black and read as a broken map).
+const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/fiord";
 const STYLE_URL = /^https:\/\/[^\s]+$/.test(process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "") ? process.env.NEXT_PUBLIC_MAP_STYLE_URL! : DEFAULT_STYLE;
 // Same string as OpenFreeMap's tiles carry, so MapLibre shows it once; kept for any configured style.
 const ATTRIBUTION = '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank">&copy; OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>';
@@ -47,8 +48,12 @@ export function parseTransit(json: unknown, now = Date.now()): TransitFeed {
   return { stations: arr(o.stations), paths: arr(o.paths), routes: arr(o.routes), vehicles, updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : null };
 }
 
+/** maplibre-gl, bundled; the UMD build may come through as `default` only. */
+const loadMaplibre = (): Promise<Ml> =>
+  import("maplibre-gl").then((mod) => ((mod as unknown as { default?: Ml }).default ?? mod) as Ml);
+
 /** Starts fetching maplibre-gl ahead of the first map (idle time, or a finger landing on a Map button). */
-export const prefetchMap = () => import("maplibre-gl").catch(() => null);
+export const prefetchMap = () => loadMaplibre().catch(() => null);
 
 export function osmUrl(at: LatLng | null): string {
   return at ? `https://www.openstreetmap.org/?mlat=${at.lat.toFixed(5)}&mlon=${at.lng.toFixed(5)}#map=16/${at.lat.toFixed(5)}/${at.lng.toFixed(5)}` : "https://www.openstreetmap.org/";
@@ -162,9 +167,8 @@ export function LiveMap({ center, lang, stops = [], taxis = [], erdenet = false,
     let off = false;
     let map: MlMap | null = null;
     if (!webgl()) { setFailed(true); return; }
-    import("maplibre-gl").then((mod) => {
+    loadMaplibre().then((ml) => {
       if (off || !mapEl.current) return;
-      const ml = (mod as unknown as { default?: Ml }).default ?? mod; // UMD build: bundlers may expose it as default only
       const start = center ?? (erdenet ? ERDENET_CENTER : null);
       const wheel = (k: string) => t.wheel.replace("{k}", k);
       map = new ml.Map({
@@ -389,6 +393,9 @@ export function LiveMap({ center, lang, stops = [], taxis = [], erdenet = false,
           "[&_.maplibregl-ctrl-bottom-right]:mb-[env(safe-area-inset-bottom)] [&_.maplibregl-ctrl-bottom-right]:mr-[env(safe-area-inset-right)] [&_.maplibregl-ctrl-bottom-left]:mb-[env(safe-area-inset-bottom)] [&_.maplibregl-ctrl-bottom-left]:ml-[env(safe-area-inset-left)]",
           failed && "hidden",
         )}
+        // Inline: maplibre's own CSS sets .maplibregl-map { position: relative }, which beats the class and
+        // left the map 0 px tall (blank map).
+        style={{ position: "absolute", inset: 0 }}
       />
       {!gm && !failed && (
         <p role="status" className="pointer-events-none absolute inset-0 grid place-items-center text-ink-muted">{t.loading}</p>

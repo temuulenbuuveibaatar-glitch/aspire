@@ -1,7 +1,8 @@
 // Server side of the live "world around you" snapshot (GET /api/ambient): sky, weather, air,
-// traffic, stops, taxis, the next bus and a photo of the place, for any city. Every source is
-// optional and fetched in parallel; Google first (key only in a header, via lib/maps.ts),
-// Open-Meteo as the free fallback, and in Erdenet the city's live bus feed (Орхон ТКХДТ).
+// traffic, stops, taxis (map only), the next bus and a photo of the place, for any city. Every source
+// is optional and fetched in parallel; Google first (key only in a header, via lib/maps.ts),
+// Open-Meteo as the free fallback, in Erdenet the city's live bus feed (Орхон ТКХДТ), and where
+// Google has no stops or bus, Transitous (open data, worldwide; lib/transitous.ts, 30 s).
 // The precise position (4 decimals, from the device) is used for this answer only and never
 // stored: caches are keyed by a coarse cell (2 decimals, about 1 km), only that cell goes to
 // Google and Open-Meteo, and distances are measured from the precise point. Numbers are fetched
@@ -13,6 +14,7 @@ import { aqiCategory } from "@/lib/ambient-types";
 import { arrivals, isErdenet, nearestStations } from "@/lib/erdenet-transit";
 import type { Lang } from "@/lib/lang";
 import { UA } from "@/lib/site";
+import { streetAddress } from "@/lib/address";
 import {
   airQualityNow,
   cityCentre,
@@ -23,12 +25,12 @@ import {
   mapsConfigured,
   nearbyTaxis,
   nearbyTransitStops,
-  placePhoto,
   transitOptions,
   weatherCurrent,
   weatherDays,
 } from "@/lib/maps";
 import { hourIn, validTimeZone } from "@/lib/tools/time";
+import { departuresNear } from "@/lib/transitous";
 import { openMeteoGeocode } from "@/lib/tools/world";
 
 // ---- location ---------------------------------------------------------------------------------
@@ -480,7 +482,9 @@ export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
   // The city name as a whole word ("Murun" must not match "Muruntau").
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const wordRe = new RegExp(`(^|[^\\p{L}])${escaped}([^\\p{L}]|$)`, "iu");
-  for (const words of ["city view", "skyline", "panorama", "city"]) {
+  // Whole city only: a single building, hotel, monument or vehicle is not "the city".
+  const notCity = /hotel|building|monument|statue|church|temple|monastery|mine|plant|factory|station|stadium|museum|mall|tower|bridge|car\b|volga|bus\b|portrait|interior|sign/i;
+  for (const words of ["skyline", "panorama", "cityscape", "aerial view", "city view"]) {
     const q = new URLSearchParams({
       action: "query", format: "json", origin: "*", generator: "search", gsrnamespace: "6", gsrlimit: "10",
       gsrsearch: `${name} ${words} filetype:bitmap`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1920",
@@ -491,8 +495,8 @@ export async function cityPhoto(city: string): Promise<AmbientPhoto | null> {
       .find((pg) => {
         const i = pg.imageinfo?.[0];
         const w = i?.thumbwidth ?? 0, h = i?.thumbheight ?? 0;
-        return wordRe.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") &&
-          /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.25;
+        return wordRe.test(pg.title ?? "") && !notCity.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") &&
+          /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.3;
       });
     const info = hit?.imageinfo?.[0];
     if (!info?.thumburl) continue;
@@ -561,7 +565,29 @@ async function googleBus(c: LatLng, centre: Centre | null, lang: Lang, now: Date
   const gone = Math.floor((now.getTime() - got.at) / 60_000);
   const o = got.options.find((x) => x.waitMinutes - gone >= 0 && (x.line || x.lineName));
   if (!o) return null;
-  return { line: (o.line || o.lineName).slice(0, 40), departsInMin: o.waitMinutes - gone, source: "google", at: now.toISOString() };
+  return { line: (o.line || o.lineName).slice(0, 40), departsInMin: o.waitMinutes - gone, source: "google", kind: "scheduled", at: now.toISOString() };
+}
+
+// Integrator: add "transitous" to AmbientNextBus.source in ambient-types.ts; this cast is then a no-op.
+const TRANSITOUS = "transitous" as AmbientNextBus["source"];
+
+/** Transitous: the nearest stops with their next departures, and the soonest of them (live or scheduled). */
+async function transitousPart(p: LatLng, now: Date, timeZone: string | null): Promise<{ stops: AmbientStop[]; nextBus: AmbientNextBus | null }> {
+  const deps = await departuresNear(p, now, { timeZone: timeZone ?? undefined });
+  const byStop = new Map<string, AmbientStop>();
+  for (const d of [...deps].sort((a, b) => a.distanceM - b.distanceM)) {
+    const s = byStop.get(d.stop) ?? { name: d.stop, distanceM: d.distanceM, lat: d.lat, lng: d.lng, lines: [] };
+    if (s.lines!.length < 4) s.lines!.push({ route: d.route, minutes: d.minutes });
+    byStop.set(d.stop, s);
+  }
+  const stops = [...byStop.values()].slice(0, 5);
+  // The soonest departure at the three nearest stops.
+  const near = new Set(stops.slice(0, 3).map((s) => s.name));
+  const soon = deps.find((d) => near.has(d.stop));
+  return {
+    stops,
+    nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: TRANSITOUS, kind: soon.live ? "live" : "scheduled", at: now.toISOString() } : null,
+  };
 }
 
 /** Erdenet: the nearest stations of the city's live feed with their next buses (no Google calls). */
@@ -580,7 +606,8 @@ async function erdenetPart(p: LatLng, now: Date): Promise<{ stops: AmbientStop[]
   );
   // The soonest bus at any of them (the nearest stop wins a tie).
   const soon = stations.flatMap((_, i) => next[i].slice(0, 1)).sort((x, y) => x.minutes - y.minutes)[0];
-  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live", at: now.toISOString() } : null };
+  // Arrival minutes are inferred from live positions: an estimate.
+  return { stops, nextBus: soon ? { line: soon.route, departsInMin: soon.minutes, source: "erdenet-live", kind: "estimate", at: now.toISOString() } : null };
 }
 
 // ---- snapshot + cache ----------------------------------------------------------------------------
@@ -641,9 +668,6 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const google = mapsConfigured();
   // A network (IP) position can be far off: no "nearest stop" or "next bus from here" for it.
   const precise = loc.locatedBy !== "network";
-  // The free Wikimedia photo starts now, in parallel: it covers a Google key that is missing or rejected
-  // (memoised per ~10 km cell for a day; a failed request is not memoised).
-  const wiki = memo(`wiki:${cell10(c)}`, DAY_MS, () => wikiPhoto(c)).catch(() => null);
   const [centreR, taxisR, erdR] = await Promise.allSettled([
     google ? centreFor(c, loc.city, lang) : null,
     google ? taxisPart(c, p, lang) : [],
@@ -655,24 +679,25 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const erd = value(erdR, null);
   // Google's stops and transit elsewhere, or in Erdenet when its feed is down.
   const googleTransit = google && precise && !erd;
-  const [trafficR, photoR, stopsR, busR] = await Promise.allSettled([
+  const [trafficR, stopsR, busR] = await Promise.allSettled([
     google ? trafficPart(c, centre) : null,
-    google ? memo(`photo:${cell10(c)}`, DAY_MS, () => placePhoto(`${city ?? ""} landmark`.trim(), c, BG)) : null,
     googleTransit ? stopsPart(c, p, lang) : [],
     googleTransit ? googleBus(c, centre, lang, now) : null,
   ]);
+  const gStops = value(stopsR, []);
+  const gBus = value(busR, null);
+  // Where Google has no stops or bus (no key, no transit data, quota), Transitous; never for a network position.
+  const open = precise && !erd && (!gStops.length || !gBus) ? await transitousPart(p, now, loc.timeZone).catch(() => null) : null;
   return {
     traffic: value(trafficR, null),
     city,
-    stops: erd ? erd.stops : value(stopsR, []),
+    stops: erd ? erd.stops : gStops.length ? gStops : (open?.stops ?? []),
+    // Map pins only: no "nearest taxi" readout.
     taxis: value(taxisR, []),
-    // A whole-city photo first (English city name searches Commons best), then Google's, then a nearby
-    // Wikipedia lead image, so the backdrop is the city and never empty.
-    photo:
-      (await memo(`city:${(loc.city ?? city ?? "").toLowerCase()}`, DAY_MS, () => cityPhoto(loc.city ?? city ?? "")).catch(() => null)) ??
-      value(photoR, null) ??
-      (await wiki),
-    nextBus: erd ? erd.nextBus : value(busR, null),
+    // The WHOLE city only (skyline / panorama / cityscape from Commons; English city name searches best).
+    // No landmark or hotel photos (owner); with none, the client shows its default skyline.
+    photo: await memo(`city:${(loc.city ?? city ?? "").toLowerCase()}`, DAY_MS, () => cityPhoto(loc.city ?? city ?? "")).catch(() => null),
+    nextBus: erd ? erd.nextBus : (gBus ?? open?.nextBus ?? null),
   };
 }
 
@@ -712,7 +737,12 @@ export async function getAmbient(loc: Located, lang: Lang, now: Date = new Date(
     };
   }
   const p = loc.coords;
-  const [world, local] = await Promise.all([worldFor(coarse(p)), localFor({ ...loc, coords: p }, lang, now)]);
+  const [world, local, address] = await Promise.all([
+    worldFor(coarse(p)),
+    localFor({ ...loc, coords: p }, lang, now),
+    // The exact street address only for a device position (never for an IP guess).
+    loc.locatedBy === "device" ? streetAddress(p, lang) : null,
+  ]);
   const timeZone = world.weather?.timeZone ?? loc.timeZone;
   const localHour = hourAt(timeZone, now);
   // An IP-derived position stays here: it never goes back to the browser.
@@ -720,6 +750,7 @@ export async function getAmbient(loc: Located, lang: Lang, now: Date = new Date(
   return {
     // Google's locality is in the person's language; the network city header is in English.
     place: placeName(local.city, loc.country, lang),
+    address,
     coords: approx ? null : { lat: p.lat, lng: p.lng },
     locatedBy: loc.locatedBy,
     sky: world.weather?.sky ?? clearSky(daylight(localHour ?? now.getUTCHours())),

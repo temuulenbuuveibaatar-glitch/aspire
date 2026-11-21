@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/ambient/route";
 import { cityParam, getAmbient, googleSky, locate, placeName, resetAmbientCache, skyText, trafficLevel, wikiPhoto, wmoSky, cityPhoto } from "@/lib/ambient";
 import { drivingTraffic, haversineKm, resetMapsUsage } from "@/lib/maps";
+import { resetTransitous } from "@/lib/transitous";
 
 const user = vi.hoisted(() => ({ current: { id: "user_2abc", email: null } as { id: string; email: null } | null }));
 vi.mock("@/lib/auth", async (importOriginal) => ({
@@ -15,6 +16,7 @@ beforeEach(() => {
   user.current = { id: "user_2abc", email: null };
   resetAmbientCache();
   resetMapsUsage();
+  resetTransitous();
   vi.stubEnv("GOOGLE_MAPS_API_KEY", "");
   vi.stubEnv("MAPS_DAILY_LIMIT", "");
 });
@@ -228,7 +230,7 @@ describe("snapshot without a Google key", () => {
     expect(a.stops[0].distanceM).toBeLessThan(20);
     expect(a.stops[1].lines).toEqual([{ route: "Ч:1-Ч:2", minutes: 6 }]);
     expect(a.stops[2].lines).toBeUndefined();
-    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live", at: NOW.toISOString() });
+    expect(a.nextBus).toEqual({ line: "Ч:1-Ч:2", departsInMin: 3, source: "erdenet-live", kind: "estimate", at: NOW.toISOString() });
     expect(a.taxis).toEqual([]);
     expect(a.photo).toBeNull();
     expect(a.timeZone).toBe("Asia/Ulaanbaatar");
@@ -245,13 +247,42 @@ describe("snapshot without a Google key", () => {
       ["api.open-meteo.com/v1/forecast", OPEN_METEO],
       ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
       ["en.wikipedia.org/w/api.php", { query: { pages: {} } }], // "no image here" is kept for the day
+      ["api.transitous.org", { stopTimes: [] }], // "no departures here" is kept for 30 s
     ]);
     const first = await getAmbient(await locate(new URLSearchParams("lat=47.9211&lng=106.9211"), new Headers()), "en", NOW);
-    const n = calls.length;
+    // The street address is per ~11 m, so only it is looked up again.
+    const notAddress = () => calls.filter((c) => !/geocode\.googleapis|nominatim/.test(c.url)).length;
+    const n = notAddress();
     const second = await getAmbient(await locate(new URLSearchParams("lat=47.9189&lng=106.9189"), new Headers()), "en", NOW);
-    expect(calls.length).toBe(n);
+    expect(notAddress()).toBe(n);
     expect(second.weather).toEqual(first.weather);
     expect(second.coords).toEqual({ lat: 47.9189, lng: 106.9189 });
+  });
+
+  it("takes stops and the next bus from Transitous, live or scheduled, with only the 1 km cell sent", async () => {
+    const dep = (name: string, lat: number, lon: number, min: number, route: string, realTime: boolean) => ({
+      place: { name, lat, lon, tz: "Europe/Paris", departure: new Date(NOW.getTime() + min * 60_000).toISOString() },
+      routeShortName: route,
+      realTime,
+      headsign: "Centre",
+    });
+    const calls = mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["api.transitous.org/api/v5/stoptimes", { stopTimes: [dep("Gare", 48.8443, 2.3745, 4, "91", false), dep("Bastille", 48.8532, 2.3691, 2, "29", true), dep("Gare", 48.8443, 2.3745, 9, "24", true)] }],
+    ]);
+    const a = await getAmbient(await locate(new URLSearchParams("lat=48.8449&lng=2.3739"), new Headers()), "en", NOW);
+    expect(a.stops).toEqual([
+      { name: "Gare", distanceM: expect.any(Number), lat: 48.8443, lng: 2.3745, lines: [{ route: "91", minutes: 4 }, { route: "24", minutes: 9 }] },
+      { name: "Bastille", distanceM: expect.any(Number), lat: 48.8532, lng: 2.3691, lines: [{ route: "29", minutes: 2 }] },
+    ]);
+    expect(a.nextBus).toEqual({ line: "29", departsInMin: 2, source: "transitous", kind: "live", at: NOW.toISOString() });
+    const t = calls.find((c) => c.url.includes("transitous"))!;
+    expect(new URL(t.url).searchParams.get("center")).toBe("48.84,2.37");
+    expect(t.url).not.toContain("48.8449");
+    // A network (IP) position never gets a "next bus from here".
+    resetAmbientCache();
+    const ip = await getAmbient(await locate(new URLSearchParams(), new Headers({ "x-vercel-ip-latitude": "48.84", "x-vercel-ip-longitude": "2.37" })), "en", NOW);
+    expect(ip).toMatchObject({ stops: [], nextBus: null });
   });
 
   it("still answers when every source fails", async () => {
@@ -369,12 +400,9 @@ describe("snapshot with Google", () => {
       { name: "Taxistand Invalidenstr.", phone: null, distanceM: expect.any(Number), lat: 52.5301, lng: 13.3801 },
     ]);
     expect(a.taxis![0].distanceM).toBeLessThan(a.taxis![1].distanceM);
-    expect(a.nextBus).toEqual({ line: "M10", departsInMin: 7, source: "google", at: NOW.toISOString() });
-    // The landscape photo, with its author credit; the photo URL never carries our key.
-    expect(a.photo).toEqual({ url: PHOTO_URI, attribution: { name: "A. Bat", uri: "https://maps.google.com/maps/contrib/1" } });
-    const photoSearch = calls.find((c) => c.url.includes("searchText") && mask(c.init).includes("photos"))!;
-    expect(body(photoSearch.init)).toMatchObject({ textQuery: "Berlin landmark" });
-    expect(calls.some((c) => c.url.endsWith("/v1/places/p1/photos/wide/media?maxWidthPx=1600&skipHttpRedirect=true"))).toBe(true);
+    expect(a.nextBus).toEqual({ line: "M10", departsInMin: 7, source: "google", kind: "scheduled", at: NOW.toISOString() });
+    // No landmark photo from Google any more (owner: the whole city only, from Commons).
+    expect(calls.some((c) => c.url.includes("/media?"))).toBe(false);
 
     // The key travels only in the header, never in a URL.
     const googleCalls = calls.filter((c) => c.url.includes("googleapis.com"));
@@ -455,10 +483,10 @@ describe("snapshot with Google", () => {
     const t0 = Date.now();
     await getAmbient(await locate(new URLSearchParams("lat=52.55&lng=13.40"), new Headers()), "en", NOW);
     const count = (part: string) => calls.filter((c) => c.url.includes(part)).length;
-    expect([count("searchNearby"), count("searchText"), count("/media?"), count("currentConditions:lookup?location")]).toEqual([2, 3, 1, 1]);
+    expect([count("searchNearby"), count("searchText"), count("/media?"), count("currentConditions:lookup?location")]).toEqual([2, 2, 0, 1]);
     vi.spyOn(Date, "now").mockReturnValue(t0 + 11 * 60 * 1000);
     await getAmbient(await locate(new URLSearchParams("lat=52.55&lng=13.40"), new Headers()), "en", NOW);
-    expect([count("searchNearby"), count("searchText"), count("/media?"), count("currentConditions:lookup?location")]).toEqual([2, 3, 1, 2]);
+    expect([count("searchNearby"), count("searchText"), count("/media?"), count("currentConditions:lookup?location")]).toEqual([2, 2, 0, 2]);
   });
 });
 

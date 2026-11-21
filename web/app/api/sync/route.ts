@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const user = await linkingUser(req, "sync", 60);
   if (user instanceof Response) return user;
   try {
-    if (!(await listLinks(user.id)).length) return notLinked();
+    if (!(await listLinks(user.id)).length) return new Response(null, { status: 204 }); // nothing to sync: not an error
     return Response.json({ state: await loadCloudState(user.id) }, { headers: noStore });
   } catch (e) {
     return serverError("sync", e);

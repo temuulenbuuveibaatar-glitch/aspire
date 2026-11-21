@@ -109,8 +109,7 @@ describe("cloud sync", () => {
   it("sync requires a link (409)", async () => {
     const { GET, PUT } = await import("@/app/api/sync/route");
     const get = await GET(req("GET"));
-    expect(get.status).toBe(409);
-    expect(await get.json()).toEqual({ error: "not_linked" });
+    expect(get.status).toBe(204); // GET without a link: nothing to sync (no console error)
     expect((await PUT(req("PUT", { state: state() }))).status).toBe(409);
     expect(fake.table("user_state")).toEqual([]);
   });

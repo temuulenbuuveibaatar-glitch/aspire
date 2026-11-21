@@ -189,7 +189,7 @@ export function useUserState(userId: string | null | undefined) {
     if (!userId) return;
     try {
       const res = await fetch("/api/sync", { cache: "no-store" });
-      if (res.status === 409 || res.status === 401 || res.status === 503) return setMode("off");
+      if (res.status === 204 || res.status === 409 || res.status === 401 || res.status === 503) return setMode("off");
       if (!res.ok) return;
       setMode("linked");
       const body = (await res.json().catch(() => null)) as { state?: unknown } | null;

@@ -6,6 +6,7 @@ import type { AmbientPhoto } from "@/lib/ambient-types";
 import { googleLanguage, haversineKm, type LatLng } from "@/lib/geo";
 import type { Lang } from "@/lib/lang";
 import { validTimeZone } from "@/lib/tools/time";
+import { UA } from "@/lib/site";
 
 export class MapsError extends Error {
   constructor(message: string) {
@@ -601,6 +602,104 @@ export async function weatherDays(lat: number, lng: number, lang: Lang = "en", o
     text: d.daytimeForecast?.weatherCondition?.description?.text ?? "",
     precipChance: fin(d.daytimeForecast?.precipitation?.probability?.percent),
   }));
+}
+
+// ---- Hourly forecast (the hero's strip): Google first, Open-Meteo as the free fallback ------
+export const FORECAST_HOURS = 12;
+
+interface HourBase {
+  /** Start of the hour, ISO 8601 UTC. */
+  time: string;
+  tempC: number;
+  /** 0..100, null when unknown. */
+  precipChance: number | null;
+}
+/** `type`: Google WeatherCondition.Type (map with googleSky). */
+export type GoogleHour = HourBase & { type: string | null };
+/** `code`: the WMO weather_code (map with wmoSky). */
+export type OpenMeteoHour = HourBase & { code: number | null };
+
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/** Valid position, rounded to about 1 km: enough for a forecast, and the precise spot never leaves. */
+function coarsePoint(lat: number, lng: number): LatLng {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new MapsError("Invalid position");
+  return { lat: Math.round(lat * 100) / 100 || 0, lng: Math.round(lng * 100) / 100 || 0 };
+}
+
+/** RFC 3339 text or unix seconds -> ISO UTC; anything else (or out of Date range) -> null. */
+function isoTime(v: unknown): string | null {
+  const d = new Date(typeof v === "number" ? v * 1000 : typeof v === "string" && RFC3339.test(v) ? Date.parse(v) : NaN);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+const pct = (v: unknown): number | null => {
+  const n = fin(v);
+  return n !== null && n >= 0 && n <= 100 ? n : null;
+};
+
+/** Valid hours whose hour has not ended yet, in time order, at most FORECAST_HOURS. */
+function upcoming<H extends HourBase>(hours: Array<H | null>): H[] {
+  const from = Date.now() - 3_600_000;
+  return hours
+    .filter((h): h is H => h !== null && Date.parse(h.time) > from)
+    .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+    .slice(0, FORECAST_HOURS);
+}
+
+/** Google Weather forecast/hours (one call): the next 12 hours. */
+export async function googleHourly(lat: number, lng: number, opts: CallOpts = {}): Promise<GoogleHour[]> {
+  const p = coarsePoint(lat, lng);
+  const fc = await google<{ forecastHours?: unknown } | null>(
+    `https://weather.googleapis.com/v1/forecast/hours:lookup?${weatherWhere(p.lat, p.lng, "en")}&hours=${FORECAST_HOURS}&pageSize=${FORECAST_HOURS}`,
+    { background: opts.background },
+  );
+  type Row = {
+    interval?: { startTime?: unknown };
+    weatherCondition?: GCondition;
+    temperature?: { degrees?: unknown };
+    precipitation?: { probability?: { percent?: unknown } };
+  } | null;
+  return upcoming(
+    (list(fc?.forecastHours).slice(0, 48) as Row[]).map((h) => {
+      const time = isoTime(h?.interval?.startTime);
+      const tempC = fin(h?.temperature?.degrees);
+      return time && tempC !== null
+        ? { time, tempC, type: conditionType(h?.weatherCondition?.type), precipChance: pct(h?.precipitation?.probability?.percent) }
+        : null;
+    }),
+  );
+}
+
+/** Open-Meteo hourly (free, no key): the next 12 hours. Times asked as unix seconds, so no zone guessing. */
+export async function openMeteoHourly(lat: number, lng: number): Promise<OpenMeteoHour[]> {
+  const p = coarsePoint(lat, lng);
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}` +
+        `&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=${FORECAST_HOURS + 1}&timeformat=unixtime&timezone=GMT`,
+      { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) },
+    );
+  } catch {
+    throw new MapsError("Open-Meteo is unreachable");
+  }
+  if (!res.ok) throw new MapsError(`Open-Meteo error ${res.status}`);
+  const d = (await res.json().catch(() => null)) as { hourly?: Record<string, unknown> } | null;
+  const h = d?.hourly ?? {};
+  const [temps, codes, chances] = [list(h.temperature_2m), list(h.weather_code), list(h.precipitation_probability)];
+  return upcoming(
+    list(h.time).slice(0, 48).map((t, i) => {
+      const time = isoTime(t);
+      const tempC = fin(temps[i]);
+      const code = fin(codes[i]);
+      return time && tempC !== null
+        ? { time, tempC, code: code !== null && Number.isInteger(code) && code >= 0 && code <= 99 ? code : null, precipChance: pct(chances[i]) }
+        : null;
+    }),
+  );
 }
 
 /**

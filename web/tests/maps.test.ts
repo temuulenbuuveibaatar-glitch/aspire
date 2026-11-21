@@ -3,7 +3,9 @@ import {
   airQualityAt,
   computeRoute,
   currentWeather,
+  googleHourly,
   haversineKm,
+  openMeteoHourly,
   resetMapsUsage,
   searchPlaces,
   transitOptions,
@@ -238,5 +240,80 @@ describe("weather and air quality", () => {
 
     mockFetch({ indexes: [{ code: "uaqi", aqi: 60 }], pollutants: [{ code: "pm25", concentration: { value: 35.4 } }] });
     expect((await airQualityAt(1, 2)).usAqi).toBe(100);
+  });
+});
+
+describe("hourly forecast", () => {
+  const NOW = Date.parse("2026-11-21T10:20:00Z");
+  const hour = (h: number) => new Date(NOW - 20 * 60_000 + h * 3_600_000).toISOString();
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("Google forecast/hours: 12 upcoming hours, ISO UTC, bad rows dropped", async () => {
+    const forecastHours = [
+      { interval: { startTime: hour(-2) }, temperature: { degrees: -20 } }, // already over
+      { interval: { startTime: "2026-11-21T18:00:00+08:00" }, weatherCondition: { type: "LIGHT_SNOW" }, temperature: { degrees: -18.5 }, precipitation: { probability: { percent: 40 } } },
+      { interval: { startTime: "next tuesday" }, temperature: { degrees: 1 } },
+      { interval: { startTime: hour(1) }, weatherCondition: { type: "bad type!" }, temperature: {}, precipitation: { probability: { percent: 10 } } },
+      { interval: { startTime: hour(2) }, weatherCondition: { type: "CLEAR" }, temperature: { degrees: -17 }, precipitation: { probability: { percent: 140 } } },
+      ...Array.from({ length: 14 }, (_, i) => ({ interval: { startTime: hour(i + 3) }, temperature: { degrees: -16 + i } })),
+    ];
+    const calls = mockFetch({ forecastHours });
+    const hours = await googleHourly(49.03, 104.08, { background: true });
+    expect(hours).toHaveLength(12);
+    expect(hours[0]).toEqual({ time: "2026-11-21T10:00:00.000Z", tempC: -18.5, type: "LIGHT_SNOW", precipChance: 40 });
+    expect(hours[1]).toEqual({ time: hour(2), tempC: -17, type: "CLEAR", precipChance: null });
+    expect(hours[2]).toEqual({ time: hour(3), tempC: -16, type: null, precipChance: null });
+    expect(calls[0].url).toContain("https://weather.googleapis.com/v1/forecast/hours:lookup?location.latitude=49.03&location.longitude=104.08");
+    expect(calls[0].url).toContain("hours=12");
+    expect(calls[0].url).not.toContain("test-key");
+    expect(headers(calls[0])["X-Goog-Api-Key"]).toBe("test-key");
+  });
+
+  it("Open-Meteo hourly: unix times to ISO, WMO code and chance validated, no key sent", async () => {
+    const t = (h: number) => Date.parse(hour(h)) / 1000;
+    const calls = mockFetch({
+      hourly: {
+        time: [t(0), t(1), "x", t(2)],
+        temperature_2m: [-21.3, null, 5, -19],
+        weather_code: [71, 3, 0, 250],
+        precipitation_probability: [55, 0, 0, -1],
+      },
+    });
+    expect(await openMeteoHourly(49.03, 104.08)).toEqual([
+      { time: "2026-11-21T10:00:00.000Z", tempC: -21.3, code: 71, precipChance: 55 },
+      { time: hour(2), tempC: -19, code: null, precipChance: null },
+    ]);
+    expect(calls[0].url).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast\?latitude=49\.03&longitude=104\.08&hourly=/);
+    expect(calls[0].url).toContain("timeformat=unixtime");
+    expect(headers(calls[0])["X-Goog-Api-Key"]).toBeUndefined();
+    expect(headers(calls[0])["User-Agent"]).toMatch(/^Aspire\//);
+  });
+
+  it("works without a Google key, rejects bad positions, and reports HTTP errors", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", "");
+    mockFetch({ hourly: {} });
+    expect(await openMeteoHourly(0, 0)).toEqual([]);
+    await expect(googleHourly(49, 104)).rejects.toThrow("Maps is not set up");
+    await expect(openMeteoHourly(91, 0)).rejects.toThrow("Invalid position");
+    await expect(openMeteoHourly(Number.NaN, 0)).rejects.toThrow("Invalid position");
+    mockFetch({}, 503);
+    await expect(openMeteoHourly(1, 2)).rejects.toThrow("Open-Meteo error 503");
+  });
+
+  it("survives odd payloads and sends only a coarse position", async () => {
+    const calls = mockFetch({ hourly: { time: [1e20, Date.parse(hour(1)) / 1000], temperature_2m: { 0: 1 }, weather_code: "71" } });
+    expect(await openMeteoHourly(49.034567, 104.0876543)).toEqual([]);
+    expect(calls[0].url).toContain("latitude=49.03&longitude=104.09&");
+    mockFetch(null);
+    expect(await openMeteoHourly(0.0000001, 0)).toEqual([]);
+    const g = mockFetch({ forecastHours: [null, { interval: { startTime: hour(1) }, temperature: { degrees: "5" } }] });
+    expect(await googleHourly(-33.86882, 151.20929)).toEqual([]);
+    expect(g[0].url).toContain("location.latitude=-33.87&location.longitude=151.21&");
+    mockFetch({ forecastHours: { a: 1 } });
+    expect(await googleHourly(1, 2)).toEqual([]);
   });
 });

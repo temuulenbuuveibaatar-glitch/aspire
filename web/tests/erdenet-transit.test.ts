@@ -154,7 +154,8 @@ describe("erdenet-transit", () => {
     expect(calls.some((c) => c.url.includes("erdenet"))).toBe(true);
     const before = calls.length;
     await tripPlanner.run({ from: "A", to: "B" }, lagos);
-    expect(calls).toHaveLength(before); // no feed call outside Erdenet
+    // No Erdenet feed call outside Erdenet (worldwide transit may be asked instead).
+    expect(calls.slice(before).some((c) => c.url.includes("erdenet"))).toBe(false);
     // Only a Mongolian clock (could be Ulaanbaatar): an unknown stop is not answered with Erdenet's stop list.
     const mn = ctx({ timeZone: "Asia/Ulaanbaatar" });
     expect(await nextBus.run({ stop: "Sukhbaatar Square", route: "", to: "" }, mn)).toEqual({ error: expect.stringMatching(/city/) });

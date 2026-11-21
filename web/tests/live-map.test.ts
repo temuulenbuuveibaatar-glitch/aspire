@@ -60,7 +60,8 @@ describe("LiveMap", () => {
     expect(src).not.toMatch(/maps\.googleapis|GOOGLE_MAPS_BROWSER_KEY|google-maps-loader/);
     expect(src).toContain('import("maplibre-gl")');
     expect(src).not.toMatch(/^import (?!type )[^"]*from "maplibre-gl"/m); // only `import type` statically
-    expect(src).toContain("tiles.openfreemap.org/styles/dark");
+    expect(src).toContain("tiles.openfreemap.org/styles/fiord"); // legible streets ("dark" read as blank)
+    expect(src).toContain("position: \"absolute\", inset: 0"); // maplibre CSS would otherwise make the map 0 px tall
     expect(src).toContain("OpenStreetMap</a>");
   });
 
