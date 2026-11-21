@@ -135,6 +135,8 @@ describe("bot core (linked users)", () => {
   it("bot reminder upserts bot_reminders (namespaced id), cancel removes it", async () => {
     withDb();
     link();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z")); // the reminder is still ahead (late ones are not queued)
     ask.mockResolvedValueOnce(reply("Done.", [{ type: "reminder", id: "r1", text: "pills", at: "2026-11-21T01:00:00.000Z", repeatDaily: true }]));
     const { handleBotMessage } = await import("@/lib/bots/core");
     await handleBotMessage(msg("remind me daily at 9 to take pills"));
@@ -143,6 +145,7 @@ describe("bot core (linked users)", () => {
     ]);
     ask.mockResolvedValueOnce(reply("Cancelled.", [{ type: "cancel_reminder", id: "r1" }]));
     await handleBotMessage(msg("cancel it"));
+    vi.useRealTimers();
     expect(fake.table("bot_reminders")).toEqual([]);
   });
 

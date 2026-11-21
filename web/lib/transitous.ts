@@ -96,7 +96,10 @@ export function resetTransitous(): void {
 // ---- departures ---------------------------------------------------------------------------------
 type RawDeparture = Omit<Departure, "distanceM" | "minutes" | "time"> & { at: number; tz: unknown };
 
-/** The next departures within about 1 km of `p` (cancelled and gone ones dropped), soonest first. */
+/** Departures further off than this are no "next bus": a feed with a gap (Moscow's, by days) would say "in 2604 min". */
+export const AHEAD_MIN = 6 * 60;
+
+/** The next departures within about 1 km of `p` and AHEAD_MIN (cancelled and gone ones dropped), soonest first. */
 export async function departuresNear(p: LatLng, now: Date, opts: { timeZone?: string } = {}): Promise<Departure[]> {
   const c = ll(p, 2);
   const raw = await memo(`st:${c}`, 30_000, async () => {
@@ -115,7 +118,7 @@ export async function departuresNear(p: LatLng, now: Date, opts: { timeZone?: st
   });
   return raw
     .map(({ at, tz, ...d }) => ({ ...d, distanceM: Math.round(haversineKm(p, d) * 1000), minutes: minutesFrom(at, now), time: clock(at, tz, opts.timeZone) }))
-    .filter((d) => d.minutes >= 0 && d.distanceM <= 1500)
+    .filter((d) => d.minutes >= 0 && d.minutes <= AHEAD_MIN && d.distanceM <= 1500)
     .sort((a, b) => a.minutes - b.minutes || a.distanceM - b.distanceM);
 }
 

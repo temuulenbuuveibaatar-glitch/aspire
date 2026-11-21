@@ -1,5 +1,6 @@
 // Google Maps tools: directions (transit / walking / driving) and places, anywhere in the world.
 // Results are plain data; each one also puts an "Open in Google Maps" card on the screen.
+import { leaveBy, TRIP_TIME_PARAMS, tripTime } from "@/lib/leave-by";
 import { isGoogleMapsUrl } from "@/lib/links";
 import { computeRoute, mapsConfigured, NOT_SET_UP, searchPlaces, type TravelMode } from "@/lib/maps";
 import { bool, str, type Tool, type ToolContext } from "./types";
@@ -21,15 +22,16 @@ export const getDirections: Tool = {
   name: "get_directions",
   label: { mn: "Чиглэл", en: "Directions" },
   description:
-    "Route from A to B anywhere in the world with Google Maps: public transport (bus, tram, metro and train lines, stop names, departure and arrival times, number of stops), walking or driving. This is the way to answer 'which bus', 'next bus to X' and 'how do I get to X' in any city. Gives total minutes and up to 8 steps, and shows an 'Open in Google Maps' button. Places can be names or addresses (add the city, e.g. 'Central Station, Sydney') or 'lat,lng'.",
+    "Route from A to B anywhere in the world with Google Maps: public transport (bus, tram, metro and train lines, stop names, departure and arrival times, number of stops), walking or driving. This is the way to answer 'which bus', 'next bus to X' and 'how do I get to X' in any city. Gives total minutes and up to 8 steps, and shows an 'Open in Google Maps' button. Places can be names or addresses (add the city, e.g. 'Central Station, Sydney') or 'lat,lng'. For 'when must I leave to be there by 9' set arrive_by; for 'if I leave at 7 tomorrow' set depart_at.",
   parameters: {
     type: "object",
     properties: {
       origin: { type: "string", description: "Start place or address. Empty string = the person's current location (if they shared it)." },
       destination: { type: "string", description: "Destination place or address, with the city" },
       mode: { type: "string", description: "How to travel", enum: [...MODES] },
+      ...TRIP_TIME_PARAMS,
     },
-    required: ["origin", "destination", "mode"],
+    required: ["origin", "destination", "mode", "depart_at", "arrive_by"],
   },
   async run(input, ctx) {
     if (!mapsConfigured()) return { error: NOT_SET_UP };
@@ -44,10 +46,25 @@ export const getDirections: Tool = {
       origin = `${loc.lat},${loc.lng}`;
     }
     const mode = (MODES as readonly string[]).includes(str(input.mode, 10)) ? (str(input.mode, 10) as TravelMode) : "transit";
+    const t = tripTime(input.depart_at, input.arrive_by, mode, ctx.now, ctx.timeZone);
+    if ("error" in t) return t;
     try {
-      const route = await computeRoute({ origin, destination, mode, departureTime: ctx.now.toISOString(), lang: ctx.lang ?? "en", timeZone: ctx.timeZone });
+      const route = await computeRoute({
+        origin,
+        destination,
+        mode,
+        departureTime: t.departureTime,
+        arrivalTime: t.arrivalTime,
+        lang: ctx.lang ?? "en",
+        timeZone: ctx.timeZone,
+      });
       mapCard(ctx, destination, route.mapsUrl);
-      return { ...route, mode };
+      return {
+        ...route,
+        mode,
+        ...(t.arriveBy ? leaveBy(t.arriveBy, route.durationMin, ctx.now, t.zone) : {}),
+        ...(t.zoneUnknown && (t.arriveBy || t.arrivalTime || input.depart_at) ? { zoneNote: "Time zone unknown (UTC used): ask which city" } : {}),
+      };
     } catch (e) {
       return errorOf(e);
     }

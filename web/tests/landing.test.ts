@@ -3,7 +3,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { DESKTOP_URL, Landing, landingJsonLd, landingLang, landingMetadata, PRICES, SEO_TITLE } from "@/components/landing/Landing";
+import { DESKTOP_URL, Landing, landingJsonLd, landingLang, landingMetadata, SEO_TITLE } from "@/components/landing/Landing";
 import { LANDING_TEXT } from "@/components/landing/LandingCopy";
 import { ON_IT } from "@/lib/brain/shared";
 import { HTML_LANG, langFrom, LANGS, type Lang } from "@/lib/lang";
@@ -35,7 +35,9 @@ describe("Landing (server render)", () => {
       expect(html).toContain(`href="/terms#${lang}"`);
       expect(html).toContain(`aria-label="${t.legal}"`);
       expect(html.match(/<h1/g)).toHaveLength(1);
-      expect(html.match(/<details/g)).toHaveLength(3);
+      expect(html.match(/<details/g)).toHaveLength(4);
+      // Both privacy answers link to the full policy (plus the footer link).
+      expect(html.split(`href="/privacy#${lang}"`).length - 1).toBe(3);
       for (const f of t.features) expect(html).toContain(f.title);
       for (const x of LANGS) expect(html).toContain(`href="/?lang=${x}"`);
       expect(html).toMatch(new RegExp(`href="/\\?lang=${lang}"[^>]*aria-current="true"`));
@@ -66,32 +68,24 @@ describe("Landing (server render)", () => {
       const t = LANDING_TEXT[lang];
       expect(t.features[2].body).toContain(ON_IT.mr[lang].replace(/[.。]$/u, ""));
       for (const name of ["Anthropic", "DeepSeek", "Google", "Microsoft", "ElevenLabs", "Clerk"]) expect(t.faq[1].a).toContain(name);
-      expect(t.features[5].body).toContain("Clerk");
+      // Plain words on the feature card; provider names only in the FAQ answer.
+      expect(t.features[5].body).not.toContain("Clerk");
     }
   });
 
-  it("shows only the decided prices, as later prices, with the hackathon offer up front", () => {
-    expect(PRICES).toEqual([0, 19, 49]);
+  it("shows no prices or hackathon banner, and reads cleanly as text", () => {
     for (const lang of LANGS) {
       const t = LANDING_TEXT[lang];
-      // Prices live in one table, never in the copy.
-      expect(strings(t).join(" ")).not.toMatch(/[$€₮¥]\s?\d/);
-      expect(t.after).toContain("{price}");
       const html = render(lang);
-      expect(html).toContain('id="pricing"');
-      expect(html).toContain('href="#pricing"');
-      expect([...new Set(html.match(/\$\d+/g))]).toEqual(["$19", "$49"]);
-      expect(html).toContain(t.after.replace("{price}", "$19"));
-      expect(html).toMatch(new RegExp(`<a href="#pricing"[^>]*>${esc(t.hackathon)}</a>`)); // hero link
-      expect(html.split(t.hackathon).length - 1).toBeGreaterThanOrEqual(2); // + pricing banner (+ FAQ)
-      expect(html.split(t.freeNow).length - 1).toBe(2); // Pro and Ultra
-      for (const p of [...t.plans, t.own]) expect(html).toContain(p.name);
-      expect(html).toContain(t.own.price);
-      expect(t.plans[0].points[0]).toMatch(/20/);
-      expect(t.plans[1].points[0]).toMatch(/1[ ,.]?500/);
-      expect(t.plans[2].points[0]).toMatch(/5[ ,.]?000/);
+      expect(html).not.toContain('id="pricing"');
+      expect(html).not.toMatch(/[$€₮¥]s?d/);
+      // Text extraction (screen readers in browse mode, search engines): no run-together words.
+      const text = html.replace(/<[^>]+>/g, "");
+      expect(text).toContain(`Aspire ${t.title}`);
+      expect(text).toContain(`${t.mock.bus} ${t.mock.mins}`);
+      // Steps: one visible number each, no <ol> marker on top of it.
+      expect(html).not.toContain("<ol");
     }
-    expect(LANDING_TEXT.en.faq[0].a.startsWith("Free during the Orkhon Hackathon.")).toBe(true);
   });
 
   it("offers self-hosting and the desktop download in every language", () => {
@@ -99,10 +93,9 @@ describe("Landing (server render)", () => {
       const t = LANDING_TEXT[lang];
       const html = render(lang);
       expect(html).toContain('id="self-host"');
-      expect(html).toContain('href="#self-host"');
       expect(html).toContain(`href="${DESKTOP_URL}"`);
       expect(t.self[0].title).toMatch(/Windows.*macOS/);
-      expect(`${t.self[0].body} ${t.own.points.join(" ")}`).toContain("Qwen2.5");
+      expect(t.self[0].body).toContain("Qwen2.5");
     }
   });
 
@@ -177,10 +170,7 @@ describe("landing SEO", () => {
       name: "Aspire",
       applicationCategory: "LifestyleApplication",
     });
-    // Every plan is price 0 during the hackathon (own keys always).
-    expect(app.offers).toHaveLength(4);
-    for (const o of app.offers) expect(o).toMatchObject({ "@type": "Offer", price: "0", priceCurrency: "USD" });
-    expect(app.offers.map((o: { name: string }) => o.name)).toEqual([...LANDING_TEXT.de.plans, LANDING_TEXT.de.own].map((p) => p.name));
+    expect(app.offers).toEqual({ "@type": "Offer", price: "0", priceCurrency: "USD" });
     expect(app.operatingSystem).toBe("Web, Windows, macOS");
     expect(app.downloadUrl).toBe(DESKTOP_URL);
     expect(app.inLanguage).toEqual(LANGS.map((x) => HTML_LANG[x]));

@@ -17,6 +17,8 @@ const STOPTIMES = {
     { ...stop("Alexanderplatz/Memhardstr.", 52.5232, 13.4105, 2), mode: "TRAM", realTime: true, headsign: "Nordbahnhof", routeShortName: "M2" },
     { ...stop("S+U Alexanderplatz", 52.5215, 13.4115, 3), mode: "BUS", realTime: true, headsign: "Hermannplatz", routeShortName: "M48", cancelled: true },
     { ...stop("S+U Alexanderplatz", 52.5215, 13.4115, -2), mode: "BUS", realTime: true, headsign: "Gone", routeShortName: "200" },
+    // A feed with a gap: its next bus is days away (Moscow's did this), no "next bus".
+    { ...stop("S+U Alexanderplatz", 52.5215, 13.4115, 2604), mode: "BUS", realTime: false, headsign: "Later", routeShortName: "M7" },
     { place: { name: "No time", lat: 52.52, lon: 13.41 }, realTime: true, routeShortName: "X" },
     { ...stop("S+U Alexanderplatz", 52.5215, 13.4115, 5), realTime: true, routeShortName: "Y", pickupDropoffType: "NOT_ALLOWED" },
     { ...stop("", 52.5215, 13.4115, 5), realTime: true, routeShortName: "Z" },
@@ -97,7 +99,7 @@ afterEach(() => {
 });
 
 describe("transitous", () => {
-  it("lists departures near a point: live or scheduled, gone and cancelled ones dropped", async () => {
+  it("lists departures near a point: live or scheduled, gone, cancelled and days-away ones dropped", async () => {
     const d = await departuresNear(HERE, NOW);
     expect(d.map((x) => [x.route, x.minutes, x.live])).toEqual([["M2", 2, true], ["100", 6, false]]);
     expect(d[0]).toMatchObject({ stop: "Alexanderplatz/Memhardstr.", headsign: "Nordbahnhof", time: "11:02", mode: "TRAM", lat: 52.5232, lng: 13.4105 });

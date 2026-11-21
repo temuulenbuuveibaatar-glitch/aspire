@@ -6,6 +6,7 @@ import { renderToString } from "react-dom/server";
 import type { Ambient, AmbientSky, AmbientWeather } from "@/lib/ambient-types";
 import type { CityData } from "@/lib/erdenet-city";
 import { LANGS } from "@/lib/lang";
+import { NewsStrip } from "@/components/aspire/NewsStrip";
 import { AgentPanel } from "@/components/v6/AgentPanel";
 import { AirCard, aqiPosition } from "@/components/v6/AirCard";
 import { ageText, Card } from "@/components/v6/Card";
@@ -105,6 +106,17 @@ describe("HeroCard", () => {
     expect(out).toContain("No weather data yet");
   });
 
+  it("a provider's weather reads Forecast, never Estimated, also for the hourly strip from another provider", () => {
+    const hourly = [0, 1].map((i) => ({ time: new Date(NOW + i * 3600_000).toISOString(), tempC: 10, kind: "snow" as const, precipChance: 40 }));
+    const out = html(HeroCard, { ...base, weather: { ...weather, hourly, source: "google", hourlySource: "open-meteo" }, prov: { source: "Google", ageS: 240, kind: "estimated" } });
+    expect(out).toContain('data-prov="forecast"');
+    expect(out).not.toContain('data-prov="estimated"');
+    expect(out).toMatch(/Forecast.*4 min\. ago.*Google/);
+    expect(out).toContain("Hourly: Open-Meteo");
+    expect(out).not.toContain("Estimated");
+    for (const l of LANGS) expect(V6[l].forecast).not.toBe(V6[l].estimated);
+  });
+
   it("formats the place's clock and zone", () => {
     expect(placeClock(NOW, "Europe/London", "en").time).toBe("04:00");
     expect(placeClock(NOW, "Not/AZone", "en").time).toMatch(/^\d\d:\d\d$/);
@@ -152,6 +164,22 @@ describe("TrafficCard (replaces the taxi readout)", () => {
     expect(out).toContain("Орхон ТКХДТ");
     expect(out).toContain("Live cameras");
     expect(out).not.toMatch(/taxi/i);
+  });
+
+  it("busiest roads: long names wrap (never cut) and the figures sit in aligned columns", () => {
+    const long = "Оюутны гудамж ба Төв талбайн уулзвараас хойшхи хэсэг";
+    const traffic = { cameras: [{ ...cams[0], name: long }, cams[1]], summary: { level: "high" as const, busiest: [long, "Төв талбай"], updatedAt: ago(20) } };
+    const out = html(TrafficCard, { lang: "en", now: NOW, city: "Erdenet", traffic, credit: "Орхон ТКХДТ" });
+    // Phones: name, load, count (the age is on the source line); from sm: the age column too.
+    expect(out).toMatch(/data-rows="busiest" class="grid grid-cols-\[minmax\(0,1fr\)_auto_auto\] [^"]*sm:grid-cols-\[minmax\(0,1fr\)_auto_auto_auto\]/);
+    expect(out).toMatch(/<span class="[^"]*hidden[^"]*sm:block[^"]*">20 sec\. ago/);
+    expect((out.match(/grid-cols-subgrid/g) ?? []).length).toBe(2);
+    // Low vision (WCAG 1.4.4 / 1.4.10): the whole name stays readable at large text, no hover needed.
+    expect(out).toContain(`[overflow-wrap:anywhere]">${long}</span>`);
+    expect(out).not.toContain(`title="${long}"`);
+    expect(out.slice(out.indexOf('data-rows="busiest"'), out.indexOf("</ul>"))).not.toMatch(/\btruncate\b/);
+    // Every row has all four cells, so the columns never shift; the digit is read as "42 vehicles counted".
+    expect(out).toMatch(/Heavy<\/span><span[^>]*><data aria-hidden="true" value="42">42<\/data><span class="sr-only">42 vehicles counted<\/span><\/span><span[^>]*>20 sec\. ago/);
   });
 
   it("elsewhere: Google level labelled Estimated with its delay; the cameras button only with a place", () => {
@@ -353,6 +381,19 @@ describe("TopNav, AgentPanel, Card states", () => {
     expect(out).toMatch(/Weather<\/span><span[^>]*>Google/);
     expect(out).toMatch(/Traffic<\/span><span[^>]*>Google/);
     expect(out).toContain("Expand");
+    // The thread scrolls in its own region, padded and faded at the top so no half-cut line shows there.
+    expect(out).toMatch(/data-thread-scroll="true" class="[^"]*overflow-y-auto[^"]*pt-4[^"]*mask-image/);
+    expect(out.indexOf('id="orb"')).toBeLessThan(out.indexOf("data-thread-scroll"));
+  });
+
+  it("news uses the v6 card shell, not the old HUD panel", () => {
+    for (const lang of LANGS) {
+      const out = html(NewsStrip, { lang, country: "mn" });
+      expect(out).toContain("v6-card");
+      expect(out).not.toMatch(/class="hud|text-hud|text-body|text-label/);
+      expect(out).toContain("data-skeleton");
+      expect(out).not.toMatch(SYMBOLS);
+    }
   });
 
   it("loading, error with Retry, and offline with the data's age", () => {

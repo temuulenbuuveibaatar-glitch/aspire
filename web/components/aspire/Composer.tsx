@@ -5,7 +5,7 @@
 // speaking). Presentational only: the shell (Assistant.tsx) owns the draft, the phase and the
 // audio; this component just renders them and reports intent through callbacks.
 
-import { ArrowUp, LoaderCircle, Mic, Square } from "lucide-react";
+import { ArrowUp, Camera, LoaderCircle, Mic, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   useCallback,
@@ -18,6 +18,7 @@ import {
 } from "react";
 import { useStill } from "@/lib/display-prefs";
 import { LANG_NAMES, type Lang } from "@/lib/lang";
+import { downscalePhoto } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 
 export type ComposerPhase = "idle" | "listening" | "thinking" | "speaking";
@@ -38,6 +39,10 @@ export interface ComposerLabels {
   thinking: string;
   /** Shown in the read-only box while listening, before any interim words arrive. */
   listening: string;
+  /** aria-label of the camera button (photo of a medicine box, bill, letter, menu or sign). */
+  photo: string;
+  /** Sent with a photo when the draft is empty. */
+  photoPrompt: string;
 }
 
 export interface ComposerProps {
@@ -65,6 +70,11 @@ export interface ComposerProps {
   before?: ReactNode;
   /** Classes for the outer wrapper (positioning / width). Defaults to a centred max-w-3xl column. */
   className?: string;
+  /**
+   * Camera button: called with the draft (or a "read this" prompt) and the photo as a downscaled
+   * JPEG data URL without EXIF, or null when the browser could not read the file. Missing = no button.
+   */
+  onPhoto?: (text: string, image: string | null) => void;
 }
 
 const COPY: Record<Lang, ComposerLabels> = {
@@ -75,6 +85,8 @@ const COPY: Record<Lang, ComposerLabels> = {
     stop: "Зогсоох",
     thinking: "Бодож байна",
     listening: "Сонсож байна",
+    photo: "Зураг уншуулах",
+    photoPrompt: "Энэ зураг дээрх бичгийг уншиж өгнө үү.",
   },
   zh: {
     placeholder: "输入文字或点击麦克风",
@@ -83,6 +95,8 @@ const COPY: Record<Lang, ComposerLabels> = {
     stop: "停止",
     thinking: "正在思考",
     listening: "正在聆听",
+    photo: "拍照识字",
+    photoPrompt: "请读一下这张照片上的文字。",
   },
   en: {
     placeholder: "Type or tap the mic",
@@ -91,6 +105,8 @@ const COPY: Record<Lang, ComposerLabels> = {
     stop: "Stop",
     thinking: "Thinking",
     listening: "Listening",
+    photo: "Read a photo",
+    photoPrompt: "Please read the text in this photo.",
   },
   ru: {
     placeholder: "Напишите или нажмите на микрофон",
@@ -99,6 +115,8 @@ const COPY: Record<Lang, ComposerLabels> = {
     stop: "Остановить",
     thinking: "Думаю",
     listening: "Слушаю",
+    photo: "Прочитать фото",
+    photoPrompt: "Прочитай, пожалуйста, текст на этом фото.",
   },
   de: {
     placeholder: "Schreiben oder Mikrofon antippen",
@@ -107,6 +125,8 @@ const COPY: Record<Lang, ComposerLabels> = {
     stop: "Stopp",
     thinking: "Denke nach",
     listening: "Ich höre zu",
+    photo: "Foto vorlesen",
+    photoPrompt: "Bitte lies den Text auf diesem Foto vor.",
   },
 };
 
@@ -165,6 +185,7 @@ export function Composer({
   inputRef,
   before,
   className,
+  onPhoto,
 }: ComposerProps) {
   const still = useStill();
   const L = resolveLabels(lang, labels);
@@ -213,6 +234,13 @@ export function Composer({
     ro.observe(document.documentElement);
     return () => ro.disconnect();
   }, [fit]);
+
+  const file = useRef<HTMLInputElement | null>(null);
+  const pickPhoto = async (f: File | undefined) => {
+    if (!f || !onPhoto || phase !== "idle") return;
+    const text = draft.trim() || L.photoPrompt;
+    onPhoto(text, await downscalePhoto(f).catch(() => null));
+  };
 
   const submit = () => {
     const q = draft.trim();
@@ -277,7 +305,35 @@ export function Composer({
             )}
           />
 
+          {onPhoto && !listening && (
+            <>
+              {/* JPEG, PNG or WebP only: the server checks the bytes again (lib/photo.ts). */}
+              <input
+                ref={file}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  void pickPhoto(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => file.current?.click()}
+                disabled={phase !== "idle"}
+                aria-label={L.photo}
+                title={L.photo}
+                className="press grid size-14 shrink-0 place-items-center rounded-full border border-line-strong bg-panel-3 text-accent disabled:opacity-60"
+              >
+                <Camera aria-hidden className="size-6" />
+              </button>
+            </>
+          )}
+
           <button
+            id="aspire-mic"
             type={mode === "send" ? "submit" : "button"}
             onClick={mode === "send" ? undefined : press}
             aria-label={label}

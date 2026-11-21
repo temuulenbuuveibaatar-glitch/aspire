@@ -155,8 +155,11 @@ describe("cloud sync", () => {
 
   it("phone reminders reach bot_reminders through sync", async () => {
     linkA();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z")); // the reminder is still ahead (late ones are not queued)
     const { PUT } = await import("@/app/api/sync/route");
     await PUT(req("PUT", { state: state({ reminders: [{ id: "r9", text: "bus", at: "2026-11-21T00:30:00.000Z", repeatDaily: false, updatedAt: "2026-11-20T10:00:00.000Z" }] }) }));
+    vi.useRealTimers();
     expect(fake.table("bot_reminders")).toEqual([
       { id: "user_A:r9", user_id: "user_A", text: "bus", at: "2026-11-21T00:30:00.000Z", repeat_daily: false, sent_at: null },
     ]);

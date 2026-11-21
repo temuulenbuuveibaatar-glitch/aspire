@@ -1,6 +1,7 @@
 // Agent tool system: every AI provider sees the same tools.
 import type { SkyKind } from "@/lib/ambient-types";
 import type { Lang } from "@/lib/lang";
+import type { ListAction, ListItem } from "@/lib/lists";
 import type { CameraAction } from "./camera-types";
 
 export type { CameraAction } from "./camera-types";
@@ -38,8 +39,8 @@ export type ClientAction =
   | { type: "call"; number: string; label: string; known: boolean }
   /** Confirm card: nothing is sent until the person presses Send. */
   | { type: "message"; channel: Channel; to: string; subject: string; text: string }
-  /** start/end are ISO instants; url opens Google Calendar with the event filled in. */
-  | { type: "calendar"; title: string; start: string; end: string; details: string; url: string }
+  /** start/end are ISO instants; url opens Google Calendar with the event filled in. recurrence = an RRULE from lib/rrule.ts buildRRule. */
+  | { type: "calendar"; title: string; start: string; end: string; details: string; url: string; recurrence?: string }
   | ({ type: "routine" } & Routine)
   | { type: "delete_routine"; id: string }
   | ({ type: "lesson" } & Lesson)
@@ -57,7 +58,9 @@ export type ClientAction =
   | { type: "form"; title: string; fields: FormField[] }
   /** "Cameras near here": opens CameraSheet at lat/lng (3 decimals). Types and URL guards: camera-types.ts. */
   | CameraAction
-  | OpenAppAction;
+  | OpenAppAction
+  /** List tool edits (lib/lists.ts): applied to the device's lists, no card. */
+  | ListAction;
 
 /** "Open <app>" card: scheme/web come from lib/app-links.ts and are re-checked by the card. Never auto-opened. */
 export interface OpenAppAction {
@@ -135,6 +138,8 @@ export interface DeviceContext {
   connected?: Channel[];
   /** Only when the person turned on location sharing; rounded to 3 decimals (~100 m) by /api/ask. */
   location?: { lat: number; lng: number };
+  /** Shopping, to-do, spending and medicine lists (lib/lists.ts). Missing = none. */
+  lists?: ListItem[];
 }
 
 export interface ToolContext {

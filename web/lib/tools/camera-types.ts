@@ -23,7 +23,10 @@ export interface Camera {
   thumb?: string;
   /** Short mp4 clip (London JamCams) or the live HLS stream (Caltrans), played in a <video>. */
   clip?: string;
-  source: "erdenet" | "ulaanbaatar" | "tfl" | "lta-sg" | "td-hk" | "caltrans" | "nzta" | "youtube" | "osm";
+  source:
+    | "erdenet" | "ulaanbaatar" | "tfl" | "lta-sg" | "td-hk" | "caltrans" | "nzta"
+    | "digitraffic-fi" | "vegvesen-no" | "vegagerdin-is" | "qldtraffic" | "drivebc" | "wsdot" | "odot" | "iowadot" | "toronto" | "austin" | "quebec511" | "tdx-tw"
+    | "youtube" | "osm";
   /** Who runs the camera or owns the data; shown next to it. */
   credit: string;
   /** ISO instant of the picture, when the source says. */
@@ -37,6 +40,9 @@ const EMBED_HOSTS: Record<Exclude<CameraKind, "link">, readonly string[]> = {
   image: [
     "s3-eu-west-1.amazonaws.com", "images.data.gov.sg", "tdcctv.data.one.gov.hk",
     "cwwp2.dot.ca.gov", "wzmedia.dot.ca.gov", "www.trafficnz.info", "i.ytimg.com",
+    "weathercam.digitraffic.fi", "kamera.atlas.vegvesen.no", "www.vegagerdin.is", "cameras.qldtraffic.qld.gov.au",
+    "www.drivebc.ca", "images.wsdot.wa.gov", "tripcheck.com", "atmsqf.iowadot.gov", "opendata.toronto.ca",
+    "cctv.austinmobility.io", "cctvn.freeway.gov.tw",
   ],
 };
 /** Hosts that also serve other things: only their camera paths count (TfL's bucket is on a shared AWS host). */
@@ -44,6 +50,13 @@ const PATH_PREFIX: Record<string, string> = {
   "s3-eu-west-1.amazonaws.com": "/jamcams.tfl.gov.uk/",
   "cwwp2.dot.ca.gov": "/data/",
   "www.trafficnz.info": "/camera/",
+  "kamera.atlas.vegvesen.no": "/api/images/",
+  "www.vegagerdin.is": "/vgdata/vefmyndavelar/",
+  "www.drivebc.ca": "/images/",
+  "tripcheck.com": "/RoadCams/cams/",
+  "opendata.toronto.ca": "/transportation/tmc/rescucameraimages/CameraImages/",
+  "cctv.austinmobility.io": "/image/",
+  "cctvn.freeway.gov.tw": "/abs2mjpg/",
 };
 
 /**

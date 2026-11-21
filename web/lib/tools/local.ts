@@ -336,6 +336,10 @@ export const TIME_ZONE_PARAM = {
   description: "IANA time zone of the person, e.g. 'Europe/Berlin'. Empty string = their own zone (from the note).",
 };
 
+/** Honest about delivery: the app speaks reminders only while it is open, unless push is on (off by default). */
+export const ALARM_NOTE =
+  "It rings only while Aspire is open, unless reminder notifications are on in Settings. If it is for waking up or critical medicine, add one short sentence telling them to also set their phone alarm.";
+
 export const setReminder: Tool = {
   name: "set_reminder",
   label: { mn: "Сануулга", en: "Reminder" },
@@ -367,7 +371,7 @@ export const setReminder: Tool = {
     const id = `r${at.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const repeatDaily = bool(input.repeat_daily);
     ctx.actions.push({ type: "reminder", id, text, at: at.toISOString(), repeatDaily });
-    return { ok: true, id, date, time: clockIn(at, zone), timezone: zone, repeatDaily };
+    return { ok: true, id, date, time: clockIn(at, zone), timezone: zone, repeatDaily, note: ALARM_NOTE };
   },
 };
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createECDH, generateKeyPairSync } from "node:crypto";
 import { createFakeSupabase } from "./fake-supabase";
 
 let fake = createFakeSupabase();
@@ -121,5 +122,41 @@ describe("POST /api/cron/reminders", () => {
     expect(stateReminders()[0].deleted).toBeUndefined();
     respond = () => Response.json({ ok: true, result: {} });
     expect(await (await run()).json()).toEqual({ sent: 1, failed: 0 });
+  });
+});
+
+describe("POST /api/cron/reminders with Web Push", () => {
+  const vapid = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const jwk = vapid.privateKey.export({ format: "jwk" });
+  const pub = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x!, "base64url"), Buffer.from(jwk.y!, "base64url")]).toString("base64url");
+  const ua = createECDH("prime256v1");
+  ua.generateKeys();
+  const seedPushOnly = () => {
+    fake.table("push_subscriptions").push({ user_id: "user_P", endpoint: "https://fcm.googleapis.com/fcm/send/p1", p256dh: ua.getPublicKey().toString("base64url"), auth: Buffer.alloc(16, 7).toString("base64url"), lang: "en", hide_text: false });
+    fake.table("user_state").push({ user_id: "user_P", state: { memory: {}, reminders: [{ id: "r9", text: "Pills", at: "2026-11-20T01:00:00.000Z", repeatDaily: false, updatedAt: "2026-11-19T00:00:00.000Z" }], routines: [], lessons: [], settings: { updatedAt: "1970-01-01T00:00:00.000Z" } } });
+    fake.table("bot_reminders").push({ id: "user_P:r9", user_id: "user_P", text: "Pills", at: "2026-11-20T01:00:00.000Z", repeat_daily: false, sent_at: null });
+  };
+  const pushes: string[] = [];
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", pub);
+    vi.stubEnv("VAPID_PRIVATE_KEY", jwk.d!);
+    pushes.length = 0;
+  });
+
+  it("a reminder with no linked chat is delivered by push alone", async () => {
+    seedPushOnly();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (pushes.push(String(url)), new Response(null, { status: 201 }))));
+    expect(await (await run()).json()).toEqual({ sent: 1, failed: 0 });
+    expect(pushes).toEqual(["https://fcm.googleapis.com/fcm/send/p1"]);
+    // Mirrored to the phone's copy as done (and so dropped from bot_reminders).
+    const st = fake.table("user_state").find((r) => r.user_id === "user_P")!.state as { reminders: { deleted?: boolean }[] };
+    expect(st.reminders[0].deleted).toBe(true);
+  });
+
+  it("push down and no chat: counted as failed and handed back for a retry", async () => {
+    seedPushOnly();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 503 })));
+    expect(await (await run()).json()).toEqual({ sent: 0, failed: 1 });
+    expect(fake.table("bot_reminders")[0].sent_at).toBeNull();
   });
 });

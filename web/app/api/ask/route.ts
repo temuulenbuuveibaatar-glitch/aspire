@@ -1,7 +1,10 @@
 import { ask, NoBrainConfigured, type Turn } from "@/lib/brain";
 import { detectTextLanguage, isLang, type Lang } from "@/lib/lang";
 import { requireUser, signedOut } from "@/lib/auth";
+import { readText } from "@/lib/body";
 import { googleAccessToken } from "@/lib/google-token";
+import { cleanListItems } from "@/lib/lists";
+import { parsePhoto, type Photo } from "@/lib/photo";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import type { DeviceContext, Reminder } from "@/lib/tools";
 import { type Channel, CHANNELS, type Lesson, LESSON_LEVELS, type Routine, type Title } from "@/lib/tools/types";
@@ -9,7 +12,9 @@ import { whereFrom } from "@/lib/where";
 
 export const maxDuration = 60;
 
-// POST { text, lang?, history?, device?, tz?, city? } -> { lang, reply, brain, actions, steps, sources }
+// POST { text, lang?, history?, device?, tz?, city?, image? } -> { lang, reply, brain, actions, steps, sources }
+// `image` = one JPEG, PNG or WebP photo (data: URL or base64), checked by lib/photo.ts parsePhoto,
+// passed to a vision AI for this answer only and never stored or logged.
 // `tz` (IANA, from the browser) and `city` (from the device) are optional; without them the
 // Vercel network headers (x-vercel-ip-timezone / -city / -country / -latitude / -longitude) are used.
 // `device` = what the person's device remembers (memory, reminders, routines, lessons,
@@ -23,7 +28,15 @@ export async function POST(req: Request) {
   const perUser = rateLimitKey(`ask-user:${user.id}`, 20); // one account cannot rotate IPs to run up the bill
   if (perUser) return perUser;
 
-  const body = (await req.json().catch(() => null)) as {
+  // A photo makes the body large: refuse anything bigger than one photo plus the usual fields before parsing.
+  const raw = await readText(req, MAX_BODY_BYTES);
+  let parsed: unknown = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+  const body = parsed as {
     text?: unknown;
     lang?: unknown;
     history?: unknown;
@@ -31,9 +44,22 @@ export async function POST(req: Request) {
     tz?: unknown;
     timeZone?: unknown;
     city?: unknown;
+    image?: unknown;
+    images?: unknown;
   } | null;
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
   if (!text) return Response.json({ error: "text is required" }, { status: 400 });
+
+  let photo: Photo | undefined;
+  if (body?.images !== undefined) return Response.json({ error: "one photo per message" }, { status: 400 });
+  if (body?.image !== undefined) {
+    const p = parsePhoto(body.image);
+    if ("error" in p) return Response.json({ error: p.error }, { status: 400 });
+    // Vision calls cost more: a tighter per-person bucket for photos.
+    const photoLimited = rateLimitKey(`ask-photo:${user.id}`, 5);
+    if (photoLimited) return photoLimited;
+    photo = p;
+  }
 
   const lang: Lang = isLang(body?.lang) ? body.lang : detectTextLanguage(text);
   const history: Turn[] = Array.isArray(body?.history)
@@ -54,7 +80,7 @@ export async function POST(req: Request) {
       // A direct, signed-in request: the only kind that may queue jobs on their paired computer.
       userId: user.id,
       source: "web",
-    });
+    }, photo);
     return Response.json({ lang, ...result });
   } catch (e) {
     if (e instanceof NoBrainConfigured) return Response.json({ lang, error: "brain_not_configured" }, { status: 503 });
@@ -71,7 +97,11 @@ interface RawDevice {
   lessons?: unknown;
   connected?: unknown;
   location?: unknown;
+  lists?: unknown;
 }
+
+/** One photo (3 MB as base64 is about 4 MB) plus history and device context. Vercel stops at 4.5 MB anyway. */
+const MAX_BODY_BYTES = 4_400_000;
 
 const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object";
 const clampInt = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : min);
@@ -117,7 +147,8 @@ function cleanDevice(raw: RawDevice | undefined): DeviceContext {
     ? CHANNELS.filter((c) => (raw.connected as unknown[]).includes(c))
     : [];
   const location = cleanLocation(raw?.location);
-  return { memory, reminders, settings, routines, lessons, connected, ...(location ? { location } : {}) };
+  const lists = cleanListItems(raw?.lists);
+  return { memory, reminders, settings, routines, lessons, connected, lists, ...(location ? { location } : {}) };
 }
 
 /** Rounded to 3 decimals (about 100 m): enough for directions and nearby places, no more. */

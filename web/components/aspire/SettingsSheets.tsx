@@ -6,10 +6,11 @@
 import { SignOutButton } from "@clerk/nextjs";
 import { Brain, Cable, Check, ChevronRight, Download, LocateFixed, LogOut, MapPin, Plus, Repeat, Settings, Sunrise, Trash2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { BotLinks } from "@/components/aspire/BotLinks";
 import { DesktopLink } from "@/components/aspire/DesktopLink";
 import { GmailConnect } from "@/components/aspire/GmailConnect";
+import { dropPush, PushToggle } from "@/components/aspire/PushToggle";
 import type { DisplayPrefs, TextSize, UnitsPref } from "@/lib/display-prefs";
 import { applyActions } from "@/lib/device-store";
 import { HTML_LANG, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
@@ -136,10 +137,12 @@ export function SettingsBody(p: {
 }) {
   const { t, settings, prefs, setPrefs, update } = p;
   const title: Title = settings.title ?? "mr";
+  // Each choice group is named by the heading just above it (aria-labelledby), not a second copy of it.
+  const id = useId();
   return (
     <>
-      <Section title={t.voice}>
-        <Choices>
+      <Section title={t.voice} id={`${id}voice`}>
+        <Choices labelledBy={`${id}voice`}>
           {(["jarvis", "friday"] as const).map((v) => (
             <Choice
               key={v}
@@ -154,9 +157,12 @@ export function SettingsBody(p: {
             </Choice>
           ))}
         </Choices>
+        <div className="mt-4">
+          <Toggle label={t.screenReaderMode} help={t.screenReaderHelp} checked={prefs.screenReader} t={t} onChange={(on) => setPrefs({ screenReader: on })} />
+        </div>
       </Section>
-      <Section title={t.address}>
-        <Choices>
+      <Section title={t.address} id={`${id}address`}>
+        <Choices labelledBy={`${id}address`}>
           {(["mr", "mrs", ""] as Title[]).map((v) => (
             <Choice key={v || "none"} pressed={title === v} onClick={() => setSetting(update, { title: v })}>
               {v === "mr" ? t.addressMr : v === "mrs" ? t.addressMrs : t.addressNone}
@@ -170,9 +176,14 @@ export function SettingsBody(p: {
         <CityField t={t} value={settings.city ?? ""} onSave={(city) => setSetting(update, { city: city || undefined })} />
         <p className="mt-1 text-small text-ink-muted">{t.hud.cityHelp}</p>
       </Section>
+      <Section title={t.reminders}>
+        <PushToggle lang={p.lang} />
+      </Section>
       <Section title={t.display}>
-        <h4 className="mb-2 text-body font-medium text-ink">{t.textSize}</h4>
-        <Choices>
+        <h4 id={`${id}size`} className="mb-2 text-body font-medium text-ink">
+          {t.textSize}
+        </h4>
+        <Choices labelledBy={`${id}size`}>
           {(
             [
               ["md", t.textNormal],
@@ -189,8 +200,10 @@ export function SettingsBody(p: {
           <Toggle label={t.skyEffects} help={t.skyEffectsHelp} checked={prefs.skyEffects} t={t} onChange={(on) => setPrefs({ skyEffects: on })} />
           <Toggle label={t.calmMode} help={t.calmHelp} checked={prefs.calm} t={t} onChange={(on) => setPrefs({ calm: on })} />
         </div>
-        <h4 className="mt-4 mb-2 text-body font-medium text-ink">{t.units}</h4>
-        <Choices>
+        <h4 id={`${id}units`} className="mt-4 mb-2 text-body font-medium text-ink">
+          {t.units}
+        </h4>
+        <Choices labelledBy={`${id}units`}>
           {(
             [
               ["auto", t.unitsAuto],
@@ -204,8 +217,8 @@ export function SettingsBody(p: {
           ))}
         </Choices>
       </Section>
-      <Section title={t.language}>
-        <Choices>
+      <Section title={t.language} id={`${id}language`}>
+        <Choices labelledBy={`${id}language`}>
           {LANGS.map((l) => (
             <Choice key={l} pressed={p.lang === l} onClick={() => p.chooseLang(l)}>
               <span lang={HTML_LANG[l]}>{LANG_NAMES[l].native}</span>
@@ -222,8 +235,9 @@ export function SettingsBody(p: {
         <span className="mt-1 block">{t.desktopDownloadHelp}</span>
       </p>
       <div className="mt-6">
+        {/* Clerk awaits the button's onClick (dropPush) before signing out. */}
         <SignOutButton redirectUrl="/login">
-          <button type="button" className={cn(rowBtn, "w-auto px-5")}>
+          <button type="button" onClick={dropPush} className={cn(rowBtn, "w-auto px-5")}>
             <LogOut className="size-5" aria-hidden />
             {t.signOut}
           </button>
@@ -274,6 +288,7 @@ export function MemoryBody({ t, lang, device, update }: { t: T; lang: Lang; devi
           t={t}
           items={Object.entries(device.memory).map(([k, v]) => ({
             key: k,
+            name: k,
             body: (
               <>
                 <b className="font-semibold">{k}:</b> {v}
@@ -288,6 +303,7 @@ export function MemoryBody({ t, lang, device, update }: { t: T; lang: Lang; devi
           t={t}
           items={device.reminders.map((r) => ({
             key: r.id,
+            name: r.text,
             body: (
               <>
                 <b className="inline-flex items-center gap-1.5 font-semibold">
@@ -311,6 +327,7 @@ export function MemoryBody({ t, lang, device, update }: { t: T; lang: Lang; devi
           t={t}
           items={(device.routines ?? []).map((r) => ({
             key: r.id,
+            name: r.trigger,
             body: (
               <span className="inline-flex flex-wrap items-center gap-1.5">
                 <b className="font-semibold">“{r.trigger}”</b>
@@ -358,17 +375,25 @@ function MenuRow({ icon: Icon, label, onClick }: { icon: LucideIcon; label: stri
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
     <section className="mt-6 first:mt-0">
-      <h3 className="mb-2 text-label tracking-[0.08em] text-accent uppercase">{title}</h3>
+      {/* tabIndex -1: where focus lands when the last row of a list is removed (shown to keyboard users). */}
+      <h3 tabIndex={-1} id={id} className="mb-2 text-label tracking-[0.08em] text-accent uppercase outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+        {title}
+      </h3>
       {children}
     </section>
   );
 }
 
-function Choices({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap gap-2">{children}</div>;
+/** A group named by its heading, so a screen reader says what the choices are for ("Text size, group"). */
+function Choices({ labelledBy, children }: { labelledBy: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-labelledby={labelledBy} className="flex flex-wrap gap-2">
+      {children}
+    </div>
+  );
 }
 
 function Choice({ pressed, disabled, onClick, children }: { pressed: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -415,7 +440,16 @@ function Toggle({ label, help, icon: Icon, checked, t, onChange }: { label: stri
   );
 }
 
-function List({ items, t }: { items: { key: string; body: React.ReactNode; remove?: () => void }[]; t: T }) {
+/** A removed row takes its focused button with it: focus moves to the next row's (else the previous
+ * row's) Remove first, or to the section heading when the list empties. */
+function focusAfterRemove(button: HTMLElement) {
+  const li = button.closest("li");
+  const row = li?.nextElementSibling ?? li?.previousElementSibling;
+  const target = row?.querySelector<HTMLElement>("button") ?? button.closest("section")?.querySelector<HTMLElement>("h3");
+  target?.focus();
+}
+
+function List({ items, t }: { items: { key: string; name?: string; body: React.ReactNode; remove?: () => void }[]; t: T }) {
   if (!items.length) return <p className="text-body text-ink-muted">{t.nothingSaved}</p>;
   return (
     <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-panel-2">
@@ -425,8 +459,11 @@ function List({ items, t }: { items: { key: string; body: React.ReactNode; remov
           {it.remove && (
             <button
               type="button"
-              onClick={it.remove}
-              aria-label={t.remove}
+              onClick={(e) => {
+                focusAfterRemove(e.currentTarget);
+                it.remove?.();
+              }}
+              aria-label={it.name ? `${t.remove}: ${it.name}` : t.remove}
               title={t.remove}
               className="press grid size-12 shrink-0 place-items-center rounded-full text-ink-muted hover:bg-panel-3 hover:text-danger"
             >

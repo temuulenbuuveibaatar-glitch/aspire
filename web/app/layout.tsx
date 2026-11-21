@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/ui/themes";
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_SC, Tektur } from "next/font/google";
+import { ServiceWorker } from "@/components/aspire/PushToggle";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -130,6 +131,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
         </ClerkProvider>
+        <ServiceWorker />
       </body>
     </html>
   );

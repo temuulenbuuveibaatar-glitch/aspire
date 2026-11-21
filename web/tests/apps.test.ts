@@ -5,6 +5,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { OpenAppCard } from "@/components/aspire/OpenAppCard";
 import { APPS, appById, buildAppLink, checkAppAction, closeApps, detectPlatform, encodeTarget, normalizeAppQuery, resolveApp } from "@/lib/app-links";
+import { desktopOpenAction } from "@/lib/desktop-bridge";
 import { LANGS } from "@/lib/lang";
 import type { OpenAppAction } from "@/lib/tools/types";
 import { appTools, openApp } from "@/lib/tools/apps";
@@ -32,7 +33,9 @@ describe("catalog", () => {
 
   it("never uses a dangerous scheme; web fallbacks are https", () => {
     for (const a of APPS) {
-      for (const s of [a.scheme, a.mac, a.target?.scheme].filter(Boolean) as string[]) {
+      // An https app link is allowed only as the app's own web link (a universal / app link).
+      const own = [a.scheme === a.web && a.scheme, a.target && a.target.scheme === a.target.web && a.target.scheme];
+      for (const s of [a.scheme, a.mac, a.target?.scheme].filter((x) => x && !own.includes(x)) as string[]) {
         const proto = SCHEME.exec(s)?.[1].toLowerCase();
         expect(proto, s).toBeTruthy();
         expect(["javascript", "data", "vbscript", "file", "blob", "http", "https", "about"]).not.toContain(proto);
@@ -69,6 +72,20 @@ describe("resolveApp", () => {
     ["claude code", "claude"],
     ["twitter", "x"],
     ["Apple Music", "apple-music"],
+    ["打开高德地图", "amap"],
+    ["gaode", "amap"],
+    ["百度地图", "baidu-maps"],
+    ["Baidu Maps", "baidu-maps"],
+    ["支付宝", "alipay"],
+    ["открой алипей", "alipay"],
+    ["Google Maps", "google-maps"],
+    ["Netflix", "netflix"],
+    ["open netflix", "netflix"],
+    ["Нетфликс нээ", "netflix"],
+    ["открой нетфликс", "netflix"],
+    ["打开网飞", "netflix"],
+    ["奈飞", "netflix"],
+    ["Netflix öffnen", "netflix"],
   ])("%s -> %s", (q, id) => {
     expect(resolveApp(q, "en")?.app.id).toBe(id);
   });
@@ -122,6 +139,35 @@ describe("targets", () => {
     expect(bad.targetError).toMatch(/not a valid username/);
     expect(buildAppLink(appById("calculator")!, "2+2").targetError).toMatch(/does not take a target/);
     expect(buildAppLink(appById("settings")!, "bluetooth").scheme).toBe("ms-settings:bluetooth");
+  });
+
+  it("China map apps: search text is encoded, so it cannot add or override URL parameters", () => {
+    const amap = buildAppLink(appById("amap")!, "火锅&callnative=0&keyword=x");
+    expect(amap.targetUsed).toBe(true);
+    expect(amap.web).toBe(`https://uri.amap.com/search?src=aspire&callnative=1&keyword=${encodeURIComponent("火锅&callnative=0&keyword=x")}`);
+    expect(amap.scheme.startsWith("iosamap://poi?sourceApplication=Aspire&name=")).toBe(true);
+    const baidu = buildAppLink(appById("baidu-maps")!, "海底捞 上海");
+    expect(baidu.scheme).toBe("baidumap://map/place/search?src=webapp.aspire.city&query=%E6%B5%B7%E5%BA%95%E6%8D%9E%20%E4%B8%8A%E6%B5%B7");
+    expect(baidu.web.startsWith("https://api.map.baidu.com/place/search?")).toBe(true);
+    expect(buildAppLink(appById("alipay")!, "100 yuan to Li").targetError).toMatch(/does not take a target/);
+    expect(appById("alipay")!.scheme).toBe("alipays://");
+  });
+
+  it("Netflix: official https links only, a title is encoded into q and cannot add parameters", () => {
+    const n = appById("netflix")!;
+    expect(n.platforms).toEqual(["windows", "mac", "linux", "android", "ios"]);
+    expect(buildAppLink(n)).toEqual({ scheme: "https://www.netflix.com/", web: "https://www.netflix.com/", targetUsed: false });
+    expect(buildAppLink(n, "Stranger Things")).toEqual({
+      scheme: "https://www.netflix.com/search?q=Stranger%20Things",
+      web: "https://www.netflix.com/search?q=Stranger%20Things",
+      targetUsed: true,
+    });
+    const evil = buildAppLink(n, "x&jbv=1#/login?next=https://evil.example");
+    expect(evil.web).toBe(`https://www.netflix.com/search?q=${encodeURIComponent("x&jbv=1#/login?next=https://evil.example")}`);
+    expect(new URL(evil.web).searchParams.size).toBe(1);
+    expect(buildAppLink(n, "Аватар").targetUsed).toBe(true);
+    expect(buildAppLink(n, "a".repeat(201)).targetUsed).toBe(false); // title capped
+    for (const u of [n.scheme, n.web, n.target!.scheme, n.target!.web]) expect(new URL(u.replace("{q}", "x")).host).toBe("www.netflix.com");
   });
 
   it("rejects email addresses that could add mailto headers", () => {
@@ -179,6 +225,15 @@ describe("checkAppAction (client re-check)", () => {
     ["non-canonical encoding", { scheme: "spotify:search:%61", web: "" }],
     ["web carries a different target", { scheme: "spotify:search:queen", web: "https://open.spotify.com/search/abba" }],
     ["web carries a target the app link hides", { scheme: "spotify:", web: "https://open.spotify.com/search/abba" }],
+    ["Amap web with an injected parameter", { id: "amap", scheme: "iosamap://poi?sourceApplication=Aspire&name=a", web: "https://uri.amap.com/search?src=aspire&callnative=1&keyword=a&src=evil" }],
+    ["Amap scheme with an injected parameter", { id: "amap", scheme: "iosamap://poi?sourceApplication=Aspire&name=a&dev=1", web: "" }],
+    ["Baidu web on another path", { id: "baidu-maps", scheme: "baidumap://", web: "https://api.map.baidu.com/direction?origin=a" }],
+    ["Alipay payment deep link", { id: "alipay", scheme: "alipays://platformapi/startapp?appId=20000056", web: "" }],
+    ["Netflix on another host", { id: "netflix", scheme: "https://www.netflix.com.evil.example/", web: "" }],
+    ["Netflix account page", { id: "netflix", scheme: "https://www.netflix.com/YourAccount", web: "" }],
+    ["Netflix made-up scheme", { id: "netflix", scheme: "nflx://www.netflix.com/browse", web: "" }],
+    ["Netflix search with an injected parameter", { id: "netflix", scheme: "https://www.netflix.com/search?q=a&jbv=1", web: "https://www.netflix.com/search?q=a&jbv=1" }],
+    ["Netflix web with a different title", { id: "netflix", scheme: "https://www.netflix.com/search?q=a", web: "https://www.netflix.com/search?q=b" }],
   ])("rejects %s", (_, o) => {
     expect(checkAppAction(act(o))).toBeNull();
   });
@@ -205,6 +260,18 @@ describe("open_app tool", () => {
     expect(out.app).toBe("Telegram");
     expect(String(out.note)).toMatch(/do not say it is open/);
     expect(checkAppAction(actions[0])).not.toBeNull();
+  });
+
+  it("Netflix: opens the site or searches a title; on the desktop it goes through the https link", async () => {
+    const { out, actions } = await run("Нетфликс", "The Crown", "mn");
+    expect(actions).toEqual([
+      { type: "open_app", id: "netflix", name: "Netflix", scheme: "https://www.netflix.com/search?q=The%20Crown", web: "https://www.netflix.com/search?q=The%20Crown" },
+    ]);
+    expect(out.target).toBe("included");
+    expect(checkAppAction(actions[0])?.target).toBe("The Crown");
+    // Aspire Desktop: a web-only link opens as a checked https URL (not_desktop outside the app).
+    await expect(desktopOpenAction(actions[0])).resolves.toEqual({ ok: false, message: "not_desktop" });
+    expect(openApp.description).toMatch(/Netflix has no public API/);
   });
 
   it("uses the message language for the name", async () => {

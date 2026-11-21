@@ -111,7 +111,7 @@ export function CityPanel({ lang, city, cityName, now, tab: initial }: CityPanel
           <ul className="divide-y divide-line">
             {p.lots.map((l) => (
               <li key={l.id} className="flex min-h-11 items-center gap-3 py-1.5">
-                <span lang="mn" className="min-w-0 flex-1 truncate text-copy text-ink" title={l.name}>
+                <span lang="mn" className="min-w-0 flex-1 text-copy text-ink [overflow-wrap:anywhere]">
                   {l.name}
                 </span>
                 {distanceText(l.distanceM, lang) && <span className="num shrink-0 text-meta text-ink-faint">{distanceText(l.distanceM, lang)}</span>}
@@ -136,13 +136,13 @@ export function CityPanel({ lang, city, cityName, now, tab: initial }: CityPanel
           {f.stations.map((s) => (
             <li key={s.id} className="flex flex-col gap-1.5 py-2.5">
               <p className="flex items-baseline gap-2">
-                <span lang="mn" className="min-w-0 flex-1 truncate text-copy font-medium text-ink" title={s.name}>
+                <span lang="mn" className="min-w-0 flex-1 text-copy font-medium text-ink [overflow-wrap:anywhere]">
                   {s.name}
                 </span>
                 {distanceText(s.distanceM, lang) && <span className="num shrink-0 text-meta text-ink-faint">{distanceText(s.distanceM, lang)}</span>}
               </p>
               {s.org && (
-                <p lang="mn" className="truncate text-meta text-ink-muted">
+                <p lang="mn" className="text-meta text-ink-muted [overflow-wrap:anywhere]">
                   {s.org}
                 </p>
               )}

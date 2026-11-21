@@ -126,7 +126,7 @@ export function TransitCard({ lang, now, coverage, departures, stopName, walkMin
       }
     >
       {!bare.length && (stopName || walk != null) && (
-        <p className="truncate text-meta text-ink-muted" title={stopName ?? undefined}>
+        <p className="text-meta text-ink-muted [overflow-wrap:anywhere]">
           {stopName}
           {stopName && walk != null && " · "}
           {walk != null && fill(t.walk, { n: walk })}
@@ -136,7 +136,7 @@ export function TransitCard({ lang, now, coverage, departures, stopName, walkMin
         <ul className="divide-y divide-line">
           {bare.map((s) => (
             <li key={`${s.name}-${s.distanceM}`} className="flex min-h-11 items-center gap-3 py-1.5" data-kind="static">
-              <span className="min-w-0 flex-1 truncate text-copy text-ink" title={s.name}>
+              <span className="min-w-0 flex-1 text-copy text-ink [overflow-wrap:anywhere]">
                 {s.name}
               </span>
               {distanceText(s.distanceM, lang) && <span className="num shrink-0 text-meta text-ink-faint">{distanceText(s.distanceM, lang)}</span>}
@@ -160,7 +160,7 @@ export function TransitCard({ lang, now, coverage, departures, stopName, walkMin
                 >
                   {d.route}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-copy text-ink" title={d.headsign ?? undefined}>
+                <span className="min-w-0 flex-1 text-copy text-ink [overflow-wrap:anywhere]">
                   {d.headsign ?? ""}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5 text-right">

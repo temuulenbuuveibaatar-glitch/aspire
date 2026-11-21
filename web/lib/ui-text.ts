@@ -56,6 +56,8 @@ export const UI: Record<
   {
     repeat: string;
     voiceOffline: string;
+    /** Said when speech-to-text is down (nothing was understood, so no answer exists yet). */
+    voiceInputOffline: string;
     brainOffline: string;
     noMic: string;
     notHeard: string;
@@ -152,6 +154,7 @@ export const UI: Record<
     botCancel: string;
     // v3 main screen (components/Assistant.tsx)
     skipToConversation: string;
+    skipToMic: string;
     location: string;
     display: string;
     textSize: string;
@@ -160,6 +163,10 @@ export const UI: Record<
     textLargest: string;
     calmMode: string;
     calmHelp: string;
+    screenReaderMode: string;
+    screenReaderHelp: string;
+    /** Said when the browser blocked playback (no tap yet): the next tap on the orb plays it. */
+    tapToHear: string;
     skyEffects: string;
     skyEffectsHelp: string;
     on: string;
@@ -182,7 +189,8 @@ export const UI: Record<
 > = {
   mn: {
     repeat: "Дахин сонсох",
-    voiceOffline: "Дуу хоолойн систем одоогоор унтраалттай байна. Хариултыг дэлгэцнээс уншина уу.",
+    voiceOffline: "Дуу хоолой одоогоор ажиллахгүй байна. Хариулт ярианд байгаа бөгөөд дэлгэц уншигч үүнийг уншиж чадна.",
+    voiceInputOffline: "Дуут оролт одоогоор ажиллахгүй байна. Асуултаа бичнэ үү.",
     brainOffline: "Туслах одоогоор холбогдоогүй байна.",
     noMic: "Микрофон ашиглах зөвшөөрөл өгнө үү.",
     notHeard: "Сонсогдсонгүй. Дахин дараад ярина уу.",
@@ -275,6 +283,7 @@ export const UI: Record<
     botCopied: "Хуулагдлаа",
     botCancel: "Болих",
     skipToConversation: "Яриа руу шилжих",
+    skipToMic: "Микрофон руу шилжих",
     location: "Байршил",
     display: "Дэлгэц",
     textSize: "Үсгийн хэмжээ",
@@ -283,6 +292,9 @@ export const UI: Record<
     textLargest: "Хамгийн том",
     calmMode: "Тайван горим",
     calmHelp: "Тэнгэр болон бөмбөлөг хөдөлгөөнгүй, анивчилтгүй, самбар тод.",
+    screenReaderMode: "Дэлгэц уншигчийн горим",
+    screenReaderHelp: "Хариулт бүрийг таны дэлгэц уншигч уншина. Aspire-ийн өөрийн дуу хоолой чимээгүй байна.",
+    tapToHear: "Дуу тоглуулахыг хөтөч хаасан байна. Тоглуулахын тулд бөмбөлөг дээр дарна уу.",
     skyEffects: "Тэнгэрийн эффект",
     skyEffectsHelp: "Бодит цаг агаарыг дагах бороо, цас, үүл. Унтраавал хөдөлгөөнгүй өнгө харагдана.",
     on: "Асаалттай",
@@ -303,7 +315,8 @@ export const UI: Record<
   },
   zh: {
     repeat: "再听一次",
-    voiceOffline: "语音系统暂时离线，请看屏幕上的回答。",
+    voiceOffline: "语音暂时离线。回答在对话中，您的屏幕阅读器可以朗读。",
+    voiceInputOffline: "语音输入暂时离线。请输入您的问题。",
     brainOffline: "助手暂时未连接。",
     noMic: "请允许使用麦克风。",
     notHeard: "没听清，请再按一次说话。",
@@ -396,6 +409,7 @@ export const UI: Record<
     botCopied: "已复制",
     botCancel: "取消",
     skipToConversation: "跳到对话",
+    skipToMic: "跳到麦克风",
     location: "位置",
     display: "显示",
     textSize: "字体大小",
@@ -404,6 +418,9 @@ export const UI: Record<
     textLargest: "特大",
     calmMode: "平静模式",
     calmHelp: "天空和光球保持静止，没有闪光，面板不透明。",
+    screenReaderMode: "屏幕阅读器模式",
+    screenReaderHelp: "由您的屏幕阅读器朗读每条回答，Aspire 自己的语音保持安静。",
+    tapToHear: "浏览器阻止了播放。轻点光球即可播放。",
     skyEffects: "天空效果",
     skyEffectsHelp: "雨、雪和云会随实时天气变化。关闭后显示静态渐变。",
     on: "开",
@@ -424,7 +441,8 @@ export const UI: Record<
   },
   en: {
     repeat: "Hear again",
-    voiceOffline: "The voice engine is offline right now. Please read the answer on screen.",
+    voiceOffline: "The voice is offline right now. The answer is in the conversation, and your screen reader can read it.",
+    voiceInputOffline: "Voice input is offline right now. Please type your question.",
     brainOffline: "The assistant is not connected yet.",
     noMic: "Please allow the microphone.",
     notHeard: "I didn't hear anything. Press and speak again.",
@@ -517,6 +535,7 @@ export const UI: Record<
     botCopied: "Copied",
     botCancel: "Cancel",
     skipToConversation: "Skip to conversation",
+    skipToMic: "Skip to the microphone",
     location: "Location",
     display: "Display",
     textSize: "Text size",
@@ -525,6 +544,9 @@ export const UI: Record<
     textLargest: "Largest",
     calmMode: "Calm mode",
     calmHelp: "Still sky and orb, no flashes, solid panels.",
+    screenReaderMode: "Screen reader mode",
+    screenReaderHelp: "Your screen reader reads each answer. Aspire's own voice stays quiet.",
+    tapToHear: "Playback was blocked. Tap the orb to play it.",
     skyEffects: "Sky effects",
     skyEffectsHelp: "Rain, snow and clouds that follow the live weather. Off shows a still gradient.",
     on: "On",
@@ -545,7 +567,8 @@ export const UI: Record<
   },
   ru: {
     repeat: "Повторить",
-    voiceOffline: "Голосовая система сейчас недоступна. Ответ на экране.",
+    voiceOffline: "Голос сейчас недоступен. Ответ есть в разговоре, и ваша программа чтения с экрана может его прочитать.",
+    voiceInputOffline: "Голосовой ввод сейчас недоступен. Пожалуйста, напечатайте вопрос.",
     brainOffline: "Помощник пока не подключён.",
     noMic: "Разрешите доступ к микрофону.",
     notHeard: "Не расслышал. Нажмите и скажите ещё раз.",
@@ -638,6 +661,7 @@ export const UI: Record<
     botCopied: "Скопировано",
     botCancel: "Отмена",
     skipToConversation: "Перейти к разговору",
+    skipToMic: "Перейти к микрофону",
     location: "Местоположение",
     display: "Экран",
     textSize: "Размер текста",
@@ -646,6 +670,9 @@ export const UI: Record<
     textLargest: "Самый крупный",
     calmMode: "Спокойный режим",
     calmHelp: "Небо и сфера неподвижны, без вспышек, плотные панели.",
+    screenReaderMode: "Режим программы чтения с экрана",
+    screenReaderHelp: "Каждый ответ читает ваша программа чтения с экрана. Собственный голос Aspire молчит.",
+    tapToHear: "Воспроизведение заблокировано. Нажмите на сферу, чтобы воспроизвести.",
     skyEffects: "Эффекты неба",
     skyEffectsHelp: "Дождь, снег и облака по текущей погоде. Если выключить, будет неподвижный градиент.",
     on: "Вкл.",
@@ -666,7 +693,8 @@ export const UI: Record<
   },
   de: {
     repeat: "Nochmal hören",
-    voiceOffline: "Die Sprachausgabe ist gerade offline. Die Antwort steht auf dem Bildschirm.",
+    voiceOffline: "Die Stimme ist gerade offline. Die Antwort steht im Gespräch, und Ihr Screenreader kann sie vorlesen.",
+    voiceInputOffline: "Die Spracheingabe ist gerade offline. Bitte tippen Sie Ihre Frage.",
     brainOffline: "Der Assistent ist noch nicht verbunden.",
     noMic: "Bitte erlauben Sie das Mikrofon.",
     notHeard: "Ich habe nichts gehört. Bitte drücken und noch einmal sprechen.",
@@ -759,6 +787,7 @@ export const UI: Record<
     botCopied: "Kopiert",
     botCancel: "Abbrechen",
     skipToConversation: "Zum Gespräch springen",
+    skipToMic: "Zum Mikrofon springen",
     location: "Standort",
     display: "Anzeige",
     textSize: "Textgröße",
@@ -767,6 +796,9 @@ export const UI: Record<
     textLargest: "Sehr groß",
     calmMode: "Ruhemodus",
     calmHelp: "Ruhiger Himmel und ruhige Kugel, keine Blitze, feste Flächen.",
+    screenReaderMode: "Screenreader-Modus",
+    screenReaderHelp: "Ihr Screenreader liest jede Antwort vor. Die eigene Stimme von Aspire bleibt still.",
+    tapToHear: "Die Wiedergabe wurde blockiert. Tippen Sie auf die Kugel, um sie abzuspielen.",
     skyEffects: "Himmelseffekte",
     skyEffectsHelp: "Regen, Schnee und Wolken nach dem aktuellen Wetter. Aus zeigt einen ruhigen Farbverlauf.",
     on: "An",

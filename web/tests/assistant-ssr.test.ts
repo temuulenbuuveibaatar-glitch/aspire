@@ -80,7 +80,7 @@ describe("Assistant (server render)", () => {
   it("renders the empty state without crashing and without emojis", async () => {
     const { default: Assistant } = await import("@/components/Assistant");
     const html = renderToString(createElement(Assistant));
-    expect(html).toContain(">aspire<");
+    expect(html).toContain(">Aspire<");
     expect(html).toContain("aspire-core");
     expect(html).toContain("Skip to conversation");
     // The v6 layout: hero, the four cards and the agent panel; no taxi readout anywhere.

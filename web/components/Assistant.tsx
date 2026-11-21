@@ -52,7 +52,8 @@ import { isImperial, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
 import type { CityData } from "@/lib/erdenet-city";
 import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
-import { detectTextLanguage, HTML_LANG, isLang, type Lang } from "@/lib/lang";
+import { detectTextLanguage, HTML_LANG, isLang, type Lang, speechLang } from "@/lib/lang";
+import { PHOTO_IN_HISTORY } from "@/lib/photo";
 import { buildSuggestions } from "@/lib/suggestions";
 import type { CameraAction, Channel, ClientAction, OpenAppAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
@@ -354,11 +355,23 @@ export default function Assistant() {
     [],
   );
 
+  // ---- screen reader mode: Aspire's own voice stays quiet; the one live region (below the status
+  // region, outside the inert root) says replies, errors and the briefing instead ----
+  const srRef = useRef(prefs.screenReader);
+  useEffect(() => {
+    srRef.current = prefs.screenReader;
+  }, [prefs.screenReader]);
+  const [said, setSaid] = useState<{ id: string; text: string; lang: Lang } | null>(null);
+
   // ---- morning briefing: first open of the day ----
   const { briefing, refresh: refreshBriefing } = useDailyBriefing({
     lang,
     reminders: device.reminders,
-    speak: (text: string, l: Lang) => speak(text, l),
+    speak: (text: string, l: Lang) => {
+      if (!srRef.current) return speak(text, l);
+      setSaid({ id: uid(), text, lang: l });
+      return true;
+    },
     lastDate: settings.lastBriefingDate,
     setLastDate: (date) => update((d) => ({ ...d, settings: { ...d.settings, lastBriefingDate: date } })),
     title,
@@ -368,13 +381,20 @@ export default function Assistant() {
     location: settings.shareLocation === true ? roundedPosition : undefined,
   });
 
+  // Who opened a sheet, for focus to return to. Nothing focused (a spoken question): the orb.
+  const rememberOpener = useCallback(() => {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : document.getElementById("aspire-core");
+  }, []);
+
   // ---- thinking ----
   const ambientRef = useRef(ambient);
   useEffect(() => {
     ambientRef.current = ambient;
   }, [ambient]);
   const askBrain = useCallback(
-    async (text: string, l: Lang) => {
+    /** `image`: a downscaled photo (data URL). Sent once; history and the chat keep only PHOTO_IN_HISTORY. */
+    async (text: string, l: Lang, image?: string) => {
       setNotice("");
       chooseLang(l);
       setPhase("thinking");
@@ -382,7 +402,7 @@ export default function Assistant() {
         .filter((m) => !m.error)
         .slice(-8)
         .map((m) => ({ role: m.role, text: m.text }));
-      setMessages((m) => [...m, { id: uid(), role: "user", text, lang: l }]);
+      setMessages((m) => [...m, { id: uid(), role: "user", text: image ? `${PHOTO_IN_HISTORY} ${text}` : text, lang: l }]);
       const d = deviceRef.current;
       const hooks = d.settings?.webhooks ?? {};
       const connected: Channel[] = ["sms", "email"];
@@ -404,6 +424,7 @@ export default function Assistant() {
           text,
           lang: l,
           history,
+          ...(image ? { image } : {}),
           ...(tz ? { tz } : {}),
           ...(city ? { city } : {}),
           // Channel URLs stay on the device; only names of connected apps are sent.
@@ -412,6 +433,7 @@ export default function Assistant() {
             reminders: d.reminders,
             routines: d.routines ?? [],
             lessons: d.lessons ?? [],
+            lists: d.lists ?? [],
             connected,
             settings: {
               voice: d.settings?.voice,
@@ -435,6 +457,9 @@ export default function Assistant() {
         setMessages((m) => [...m, { id: uid(), role: "assistant", text: msg, lang: l, error: true }]);
         setPhase("idle");
         flashError();
+        // Eyes-free: the failure is said, not only shown in red.
+        if (srRef.current) setSaid({ id: uid(), text: msg, lang: l });
+        else void speak(msg, l);
         return;
       }
       const actions = data.actions ?? [];
@@ -442,15 +467,24 @@ export default function Assistant() {
       const cards = actions.filter((a) => isCard(a) || a.type === "video" || a.type === "spotify" || a.type === "code" || a.type === "form" || a.type === "open_app" || a.type === "cameras");
       // find_cameras says the panel is open: open it (the reply keeps a button to open it again).
       const cam = actions.find((a): a is CameraAction => a.type === "cameras" && Number.isFinite(a.lat) && Number.isFinite(a.lng));
-      if (cam) setCameraAt({ lat: cam.lat, lng: cam.lng });
+      if (cam) {
+        rememberOpener();
+        setCameraAt({ lat: cam.lat, lng: cam.lng });
+      }
       // Aspire Desktop: "open YouTube" opens once the person allows it in the desktop's own dialog;
       // the card stays as the way to open it again (and is the link in a normal browser).
       const app = actions.find((a): a is OpenAppAction => a.type === "open_app");
       if (app && inDesktopApp()) void desktopOpenAction(app);
       setMessages((m) => [...m, { id: uid(), role: "assistant", text: data.reply!, lang: l, steps: data.steps ?? [], cards, sources: data.sources ?? [] }]);
-      await speak(data.reply, l);
+      const replyLang = speechLang(data.reply, l);
+      if (!srRef.current) {
+        await speak(data.reply, replyLang);
+        return;
+      }
+      setSaid({ id: uid(), text: data.reply, lang: replyLang });
+      setPhase("idle");
     },
-    [messages, speak, setPhase, update, chooseLang, flashError],
+    [messages, speak, setPhase, update, chooseLang, flashError, rememberOpener],
   );
 
   // ---- reminders: checked every 15 s, spoken when due (shown only while the mic or the brain is busy) ----
@@ -464,7 +498,8 @@ export default function Assistant() {
       if (!due.length) return;
       update(() => next);
       setAlarm(due[0]);
-      if (phaseRef.current === "listening" || phaseRef.current === "thinking") return;
+      // Screen reader mode: the banner (role="alert") is what says it.
+      if (srRef.current || phaseRef.current === "listening" || phaseRef.current === "thinking") return;
       void speak(due[0].text, detectTextLanguage(due[0].text));
     }, 15_000);
     return () => clearInterval(id);
@@ -487,12 +522,16 @@ export default function Assistant() {
     setDraft("");
     void askBrain(q, detectTextLanguage(q, lang));
   };
+  const sendPhoto = (text: string, image: string | null) => {
+    if (phase !== "idle") return;
+    if (!image) return setNotice(t.error);
+    voice.unlock();
+    acceptConsent();
+    setDraft("");
+    void askBrain(text, detectTextLanguage(text, lang), image);
+  };
 
   // ---- sheets: remember the opener ourselves (the app root turns inert while a sheet is open) ----
-  const rememberOpener = () => {
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body) opener.current = active;
-  };
   const refocus = () => {
     const back = opener.current;
     requestAnimationFrame(() => back?.isConnected && back.focus());
@@ -607,25 +646,49 @@ export default function Assistant() {
     };
   }, [desktop]);
 
-  // Keys: Cmd/Ctrl+K searches cities; Space on an unscrollable page with nothing focused is the core.
+  // Keys: Cmd/Ctrl+K searches cities; Space on an unscrollable page with nothing focused (or only a
+  // container focused, e.g. after a click in a card) is the core; Escape drops a recording unsent or
+  // stops speaking. None of them reaches a control that is hidden or behind a sheet.
   const sheetRef = useRef(sheet);
   useEffect(() => {
     sheetRef.current = sheet;
   }, [sheet]);
+  const cancelRef = useRef(voice.cancel);
   useEffect(() => {
+    cancelRef.current = voice.cancel;
+  }, [voice.cancel]);
+  useEffect(() => {
+    const usable = (id: string) => {
+      const el = document.getElementById(id);
+      return el && !el.closest("[inert],[hidden],.hidden") ? el : null;
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || sheetRef.current) return;
+      if (e.key === "Escape") {
+        if ((phaseRef.current === "speaking" || phaseRef.current === "listening") && !document.querySelector("[aria-modal]")) {
+          e.preventDefault();
+          cancelRef.current();
+        }
+        return;
+      }
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+        const search = usable("aspire-search");
+        if (!search) return;
         e.preventDefault();
-        document.getElementById("aspire-search")?.click();
+        search.click();
         return;
       }
       if (e.code !== "Space") return;
-      if (e.target !== document.body && e.target !== document.documentElement) return;
+      // Containers that take focus only from script (tabIndex -1) also take it on a click inside them.
+      const el = e.target;
+      const container = el instanceof HTMLElement && el.tabIndex === -1 && !el.matches("a,button,input,textarea,select,summary,[contenteditable],[role]");
+      if (el !== document.body && el !== document.documentElement && !container) return;
       const root = document.scrollingElement;
       if (root && root.scrollHeight > window.innerHeight + 1) return;
+      const core = usable("aspire-core");
+      if (!core) return;
       e.preventDefault();
-      document.getElementById("aspire-core")?.click();
+      core.click();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -668,7 +731,6 @@ export default function Assistant() {
   const busy = phase !== "idle";
   const orbState: VoiceOrbState = orbError && phase === "idle" ? "error" : phase;
   const word = voiceOrbWord(orbState, lang);
-  const coreLabel = phase === "idle" ? t.startListening : phase === "listening" ? t.stopListening : phase === "speaking" ? t.stopSpeaking : word;
   const deviceHour = minute == null ? null : new Date(minute * 60_000).getHours();
   const override = useMemo(() => skyOverride(search), [search]);
   const sky: AmbientSky = override
@@ -753,7 +815,8 @@ export default function Assistant() {
   }, [ambient, lang]);
 
   // Only once the screen language is known, so the first request is not wasted on the "en" default.
-  const news = langReady ? <NewsStrip lang={lang} country={erdenet ? "mn" : null} max={desktop ? 8 : 3} /> : null;
+  // The shown place's country (a typed "Tokyo" reads Japan's news); none -> the server uses the network's.
+  const news = langReady ? <NewsStrip lang={lang} country={erdenet ? "mn" : (ambient?.country ?? null)} max={desktop ? 8 : 3} /> : null;
 
   const map = (full: boolean, className?: string) => (
     <LiveMap
@@ -777,6 +840,7 @@ export default function Assistant() {
       onDraft={setDraft}
       onSubmit={send}
       onMic={onCore}
+      onPhoto={sendPhoto}
       level={voice.level}
       lang={lang}
       inputRef={input}
@@ -878,7 +942,9 @@ export default function Assistant() {
       className={cn("lg:min-h-0 lg:flex-1", tabs && rail !== "agent" && "hidden")}
       orb={
         <div className="flex flex-col items-center gap-2">
-          <button id="aspire-core" type="button" onClick={onCore} aria-label={coreLabel} className="press grid place-items-center rounded-full">
+          {/* A name that never changes while focused (a new name would be read over the open mic); the
+              state is aria-pressed, the tones and the status region. */}
+          <button id="aspire-core" type="button" onClick={onCore} aria-label={t.voice} aria-pressed={phase === "listening" || phase === "speaking"} aria-keyshortcuts="Space Escape" className="press grid place-items-center rounded-full">
             <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={empty ? 96 : 72} weather={orbWeather} lang={lang} label={word} />
           </button>
           <p aria-hidden className={cn("min-h-6 text-meta tracking-[0.12em] text-ink-muted uppercase", !pill && "invisible")}>
@@ -897,7 +963,12 @@ export default function Assistant() {
                   <li key={s.kind}>
                     <button
                       type="button"
-                      onClick={() => !busy && send(s.label)}
+                      // The starters unmount once sent: focus moves to the conversation, not to <body>.
+                      onClick={() => {
+                        if (busy) return;
+                        send(s.label);
+                        document.getElementById("aspire-thread")?.focus({ preventScroll: true });
+                      }}
                       aria-disabled={busy || undefined}
                       className="press min-h-11 w-full rounded-[var(--radius-md)] bg-surface-2 px-4 py-3 text-left text-copy text-ink aria-disabled:opacity-60"
                     >
@@ -933,6 +1004,7 @@ export default function Assistant() {
             alarm={alarm}
             onDismissAlarm={() => setAlarm(null)}
             reducedMotion={prefs.calm || undefined}
+            announceReplies={false}
           />
         </>
       }
@@ -942,16 +1014,27 @@ export default function Assistant() {
   );
 
   const covered = sheet !== null || whereOpen || mapFull || cityTab !== null || cameraAt !== null;
+  // Skip links: the agent panel is hidden while the Map or News tab shows, so it comes back first.
+  const skipTo = (id: string) => (e: { preventDefault(): void }) => {
+    if (!tabs || rail === "agent") return;
+    e.preventDefault();
+    setRail("agent");
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  };
   return (
     <MotionConfig reducedMotion={prefs.calm ? "always" : "user"}>
       <div lang={HTML_LANG[lang]} className="min-h-dvh bg-bg">
-        <a href="#aspire-thread" className="skip-link">
+        <a href="#aspire-thread" inert={covered} onClick={skipTo("aspire-thread")} className="skip-link">
           {t.skipToConversation}
+        </a>
+        {/* Desktop: the orb. Phones: the composer's mic in the dock. */}
+        <a href={desktop ? "#aspire-core" : "#aspire-mic"} inert={covered} onClick={skipTo("aspire-core")} className="skip-link">
+          {t.skipToMic}
         </a>
 
         {/* Under the full-screen map: inert, and on phones not rendered at all (no hidden canvas loops). The
             whole width is used: no side margins beyond the gutters. */}
-        <div inert={covered} hidden={mapFull && !desktop} className="w-full pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-[max(16px,env(safe-area-inset-top))] pb-[calc(var(--dock-h,200px)+16px)] md:px-6 lg:pb-6">
+        <div inert={covered} hidden={mapFull && !desktop} className="w-full pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-[max(16px,env(safe-area-inset-top))] pb-[calc(var(--dock-h,200px)+16px)] md:px-6 lg:pb-6 [@media(max-height:30rem)]:pb-4">
           <TopNav
             lang={lang}
             view={tabs && rail === "map" ? "map" : "overview"}
@@ -966,7 +1049,7 @@ export default function Assistant() {
             style={{ "--agent-w": agentWide ? "clamp(480px,40vw,760px)" : "clamp(360px,28vw,520px)" } as CSSProperties}
             className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_var(--agent-w)] min-[1800px]:grid-cols-[minmax(0,1fr)_clamp(380px,22vw,600px)_var(--agent-w)]"
           >
-            <main className="@container flex min-w-0 flex-col gap-5">
+            <main tabIndex={-1} className="@container flex min-w-0 flex-col gap-5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               <HeroCard
                 lang={lang}
                 place={place}
@@ -1057,14 +1140,22 @@ export default function Assistant() {
             ref={dock}
             inert={covered}
             hidden={mapFull}
-            className="pointer-events-none fixed inset-x-0 z-20 bg-gradient-to-t from-bg via-bg/90 to-transparent pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-6"
+            className="pointer-events-none fixed inset-x-0 z-20 [@media(max-height:30rem)]:static bg-gradient-to-t from-bg via-bg/90 to-transparent pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-6"
             style={{ bottom: "var(--kb, 0px)", paddingBottom: "var(--kb-pad, max(8px, env(safe-area-inset-bottom)))" }}
           >
             {composer("pointer-events-auto w-full pb-0")}
             <nav aria-label={v6.tabBar} className="v6-dock-nav pointer-events-auto mt-2 grid grid-cols-4 gap-1">
               {(
                 [
-                  ["overview", v6.overview, LayoutDashboard, () => window.scrollTo({ top: 0, behavior: smooth })],
+                  [
+                    "overview",
+                    v6.overview,
+                    LayoutDashboard,
+                    () => {
+                      window.scrollTo({ top: 0, behavior: smooth });
+                      document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
+                    },
+                  ],
                   ["map", v6.tabMap, MapIcon, openFullMap],
                   ["saved", v6.tabSaved, Bookmark, () => openSheet("memory")],
                   ["agent", t.hud.agent, MessageCircle, toAgent],
@@ -1078,7 +1169,7 @@ export default function Assistant() {
                   className="press flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] text-meta text-ink-muted hover:text-ink"
                 >
                   <Icon aria-hidden className="size-5" />
-                  <span className="max-w-full truncate">{label}</span>
+                  <span className="max-w-full text-center leading-tight [overflow-wrap:anywhere]">{label}</span>
                 </button>
               ))}
             </nav>
@@ -1089,8 +1180,18 @@ export default function Assistant() {
 
         {/* The single status region, outside the inert root so it also speaks while a sheet is open. */}
         <p role="status" className="sr-only">
-          <span>{pill}</span> <span>{sheetWord}</span> <span>{conditionsNote}</span>
+          {/* Not "Listening": said as the mic opens, it would talk over the person. */}
+          <span>{orbState === "listening" ? "" : pill}</span> <span>{sheetWord}</span> <span>{conditionsNote}</span>
         </p>
+        {/* Screen reader mode: the reply region, here so it still speaks while the agent panel is hidden
+            behind the Map or News tab or the app root is inert under a sheet. Keyed: each reply is new. */}
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {said && (
+            <p key={said.id} lang={HTML_LANG[said.lang]}>
+              {said.text}
+            </p>
+          )}
+        </div>
 
         {cameraAt && <CameraSheet lat={cameraAt.lat} lng={cameraAt.lng} lang={lang} onClose={closeCameras} />}
         <CitySheet open={cityTab !== null} onClose={closeCity} lang={lang} city={city} cityName={ambient?.place} now={now} tab={cityTab ?? undefined} />

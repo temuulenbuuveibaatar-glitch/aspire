@@ -9,10 +9,13 @@ import { desktopTools, desktopToolsFor } from "./desktop";
 import { jarvisTools } from "./jarvis";
 import { checkEmail } from "./email";
 import { deleteRoutine, listRoutines, saveProgress, saveRoutine, startLesson } from "./learning";
+import { listTools } from "./lists";
 import { cancelReminder, forget, listReminders, localTime, nextBus, remember, setReminder, tripPlanner } from "./local";
 import { findPlaces, getDirections } from "./maps";
 import { playMusic, playVideo } from "./media";
 import { newsTools } from "./news";
+import { outdoorTools } from "./outdoor";
+import { poisonTools } from "./poison";
 import { taskTools } from "./tasks";
 import type { Tool, ToolContext } from "./types";
 import { calculator, currency, encyclopedia, weather } from "./world";
@@ -54,6 +57,9 @@ export const TOOLS: Tool[] = [
   ...appTools,
   ...cameraTools,
   ...jarvisTools,
+  ...outdoorTools,
+  ...poisonTools,
+  ...listTools,
 ];
 
 /**

@@ -2,6 +2,7 @@
 // linked bots) can be merged item by item: memory per key, reminders/routines/lessons per id,
 // settings as one object. The newer `updatedAt` wins; deletions are kept as tombstones for 30
 // days so an old copy cannot bring a deleted item back. Pure functions, safe on server and client.
+import { applyListActions, capItems, keepPrivate, type ListItem, MAX_ITEMS, MAX_LISTS, parseListItem, withoutPrivate } from "@/lib/lists";
 import {
   LESSON_LEVELS,
   type ClientAction,
@@ -21,6 +22,8 @@ export interface UserState {
   reminders: (Reminder & Stamp)[];
   routines: (Routine & Stamp)[];
   lessons: (Lesson & Stamp)[];
+  /** List items (lib/lists.ts), merged by id like reminders. Missing in older copies = none. */
+  lists?: (ListItem & Stamp)[];
   settings: StampedSettings;
 }
 
@@ -51,6 +54,7 @@ function tombstone<T extends { id: string } & Stamp>(list: T[], id: string, when
 export function applyActions(s: UserState, actions: ClientAction[], now: Date): UserState {
   const when = now.toISOString();
   let { memory, reminders, routines, lessons } = s;
+  let lists = s.lists ?? [];
   let changed = false;
   for (const a of actions) {
     switch (a.type) {
@@ -76,13 +80,18 @@ export function applyActions(s: UserState, actions: ClientAction[], now: Date): 
       case "lesson":
         lessons = upsert(lessons, { id: a.id, topic: a.topic, level: a.level, step: a.step, score: a.score, updatedAt: when });
         break;
+      case "list_add":
+      case "list_remove":
+      case "list_clear":
+        lists = applyListActions(lists, [a], now);
+        break;
       default:
         continue; // call / message / calendar are cards, not state
     }
     changed = true;
   }
   if (!changed) return s;
-  return { ...s, memory, reminders: [...reminders].sort(byAt), routines, lessons };
+  return { ...s, memory, reminders: [...reminders].sort(byAt), routines, lessons, lists };
 }
 
 const plainReminder = ({ id, text, at, repeatDaily }: Reminder): Reminder => ({ id, text, at, repeatDaily });
@@ -149,6 +158,7 @@ export function mergeState(a: UserState, b: UserState, now: Date): UserState {
     reminders: sortId(mergeById(a.reminders, b.reminders, cutoff)).sort(byAt),
     routines: sortId(mergeById(a.routines, b.routines, cutoff)),
     lessons: sortId(mergeById(a.lessons, b.lessons, cutoff)),
+    lists: sortId(mergeById(a.lists ?? [], b.lists ?? [], cutoff)),
     settings: newer(a.settings, b.settings),
   };
 }
@@ -162,14 +172,18 @@ export function toDevice(s: UserState): DeviceContext {
   for (const [k, v] of Object.entries(s.memory)) if (!v.deleted) memory[k] = v.value;
   const { updatedAt: _u, ...settings } = s.settings;
   void _u;
+  const lists = (s.lists ?? []).filter((x) => !x.deleted).map(plainItem);
   return {
     memory,
     reminders: s.reminders.filter((r) => !r.deleted).map(plainReminder),
     routines: s.routines.filter((r) => !r.deleted).map(({ id, trigger, steps }) => ({ id, trigger, steps })),
     lessons: s.lessons.filter((l) => !l.deleted).map(({ id, topic, level, step, score }) => ({ id, topic, level, step, score })),
+    ...(lists.length ? { lists } : {}),
     settings,
   };
 }
+
+const plainItem = ({ id, list, text, amount, at, private: p }: ListItem): ListItem => ({ id, list, text, ...(amount !== undefined ? { amount } : {}), at, ...(p ? { private: p } : {}) });
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -220,6 +234,8 @@ export function fromDevice(prev: UserState, d: DeviceContext, now: Date): UserSt
     d.lessons === undefined
       ? prev.lessons
       : diffById(prev.lessons, d.lessons, when, ({ id, topic, level, step, score }: Lesson) => ({ id, topic, level, step, score }));
+  const prevLists = prev.lists ?? [];
+  const lists = d.lists === undefined ? prevLists : diffById(prevLists, d.lists, when, plainItem);
   const { updatedAt: _u, ...oldSettings } = prev.settings;
   void _u;
   const settingsChanged = !same(oldSettings, d.settings ?? {});
@@ -229,16 +245,17 @@ export function fromDevice(prev: UserState, d: DeviceContext, now: Date): UserSt
     settingsChanged ||
     !same(reminders, prev.reminders) ||
     !same(routines, prev.routines) ||
-    !same(lessons, prev.lessons);
+    !same(lessons, prev.lessons) ||
+    !same(lists, prevLists);
   if (!changed) return prev;
-  return { memory, reminders, routines, lessons, settings };
+  return { memory, reminders, routines, lessons, lists, settings };
 }
 
-/** The copy that may leave the device: no Gmail refresh token, no webhook URLs. */
+/** The copy that may leave the device: no Gmail refresh token, no webhook URLs, no medicine items; lists capped to fit a sync body. */
 export function stripLocalOnly(s: UserState): UserState {
   const settings = { ...s.settings };
   for (const k of LOCAL_ONLY_SETTINGS) delete settings[k];
-  return { ...s, settings };
+  return { ...s, settings, lists: capItems(withoutPrivate(s.lists ?? [])) };
 }
 
 /** Put the device-only settings of `local` back onto a merged state. */
@@ -248,7 +265,8 @@ export function keepLocalOnly(merged: UserState, local: UserState): UserState {
     if (local.settings[k] !== undefined) (settings as Record<string, unknown>)[k] = local.settings[k];
     else delete settings[k];
   }
-  return same(settings, merged.settings) ? merged : { ...merged, settings };
+  const lists = keepPrivate(merged.lists ?? [], local.lists ?? []);
+  return same(settings, merged.settings) && same(lists, merged.lists ?? []) ? merged : { ...merged, settings, lists };
 }
 
 // ---------------------------------------------------------------------------
@@ -335,5 +353,12 @@ export function parseState(raw: unknown): UserState | null {
     const level = (LESSON_LEVELS as readonly unknown[]).includes(l.level) ? (l.level as string) : "beginner";
     return { id, topic, level, step: clampInt(l.step, 1, 1000), score: clampInt(l.score, 0, 100), ...st };
   });
-  return { memory, reminders, routines, lessons, settings: parseSettings(raw.settings) };
+  const lists = capItems(
+    parseList(raw.lists, MAX_LISTS * MAX_ITEMS, (x) => {
+      const st = stamp(x);
+      const item = parseListItem(x);
+      return st && item ? { ...item, ...st } : null;
+    }),
+  );
+  return { memory, reminders, routines, lessons, lists, settings: parseSettings(raw.settings) };
 }

@@ -90,7 +90,11 @@ export const APPS: readonly AppLink[] = [
   app("youtube", "YouTube", "youtube://", "https://www.youtube.com", MOBILE, ["ютуб", "ютюб", "油管"], {
     target: { kind: "query", scheme: "youtube://results?search_query={q}", web: "https://www.youtube.com/results?search_query={q}" },
   }),
-  app("netflix", "Netflix", "nflx://", "https://www.netflix.com", MOBILE, ["нетфликс", "网飞"]),
+  // No public API, so "connect" = open the site or search a title. The official https links double
+  // as app links: on Android and iOS they open the installed app. Search text is encoded into q.
+  app("netflix", "Netflix", "https://www.netflix.com/", "https://www.netflix.com/", ALL, ["нетфликс", "нэтфликс", "网飞", "奈飞"], {
+    target: { kind: "query", scheme: "https://www.netflix.com/search?q={q}", web: "https://www.netflix.com/search?q={q}" },
+  }),
   app("twitch", "Twitch", "twitch://", "https://www.twitch.tv", MOBILE, ["твич"]),
   app("instagram", "Instagram", "instagram://", "https://www.instagram.com", MOBILE, ["insta", "ig", "инстаграм", "инста"]),
   app("facebook", "Facebook", "fb://", "https://www.facebook.com", MOBILE, ["fb", "фэйсбүүк", "фейсбук", "фэйсбук", "脸书"]),
@@ -102,6 +106,19 @@ export const APPS: readonly AppLink[] = [
   app("google-maps", "Google Maps", "comgooglemaps://", "https://www.google.com/maps", ["ios"], ["maps", "гугл карт", "google карты", "谷歌地图"], {
     target: { kind: "query", scheme: "comgooglemaps://?q={q}", web: "https://www.google.com/maps/search/?api=1&query={q}" },
   }),
+  // Mainland China, where Google links may fail. URIs from the official docs: Amap (lbs.amap.com
+  // iOS "poi" + uri.amap.com/search; callnative=1 hands over to the app on Android too) and Baidu
+  // (lbsyun.baidu.com place/search; src is the caller id). {q} stays last so the re-check holds.
+  app("amap", "Amap", "iosamap://", "https://www.amap.com", ["ios"], ["gaode", "gaode maps", "高德", "高德地图", "гаодэ", "гаоде", "амап"], {
+    local: { zh: "高德地图" },
+    target: { kind: "query", scheme: "iosamap://poi?sourceApplication=Aspire&name={q}", web: "https://uri.amap.com/search?src=aspire&callnative=1&keyword={q}" },
+  }),
+  app("baidu-maps", "Baidu Maps", "baidumap://", "https://map.baidu.com", MOBILE, ["baidu", "baidu map", "百度地图", "百度", "байду", "байду карты"], {
+    local: { zh: "百度地图" },
+    target: { kind: "query", scheme: "baidumap://map/place/search?src=webapp.aspire.city&query={q}", web: "https://api.map.baidu.com/place/search?output=html&src=webapp.aspire.city&query={q}" },
+  }),
+  // Opens the app only; no amount or payee is ever put in the link.
+  app("alipay", "Alipay", "alipays://", "https://www.alipay.com", MOBILE, ["支付宝", "zhifubao", "алипэй", "алипей", "али пэй"], { local: { zh: "支付宝" } }),
 ];
 
 const BY_ID = new Map(APPS.map((a) => [a.id, a]));

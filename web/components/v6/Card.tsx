@@ -8,7 +8,8 @@ import { HTML_LANG, type Lang } from "@/lib/lang";
 import { cn, httpsUrl } from "@/lib/utils";
 import { fill, textFor } from "@/components/v6/text";
 
-export type ProvKind = "live" | "scheduled" | "estimated" | "static" | "calculated" | "none";
+/** "forecast": a provider's weather (Google, Open-Meteo); "estimated" only for values that truly are (bus ETAs). */
+export type ProvKind = "live" | "scheduled" | "estimated" | "forecast" | "static" | "calculated" | "none";
 
 export interface Provenance {
   source: string;
@@ -141,7 +142,15 @@ export function Card({ title, icon, lang, state = "ready", emptyText, prov, onRe
       <div className="flex flex-col items-start gap-3">
         {note(t.error, "alert")}
         {onRetry && (
-          <button type="button" onClick={onRetry} className="press v6-chip min-h-11 gap-2 px-4">
+          <button
+            type="button"
+            // The button is replaced by the skeleton: focus moves to the card first so it is not lost.
+            onClick={(e) => {
+              e.currentTarget.closest("section")?.focus();
+              onRetry();
+            }}
+            className="press v6-chip min-h-11 gap-2 px-4"
+          >
             <RefreshCw aria-hidden className="size-4" />
             {t.retry}
           </button>
@@ -154,6 +163,7 @@ export function Card({ title, icon, lang, state = "ready", emptyText, prov, onRe
     <section
       aria-busy={state === "loading" || undefined}
       data-state={state}
+      tabIndex={-1}
       className={cn("v6-card v6-enter flex min-w-0 flex-col gap-3 p-5", className)}
       style={{ ["--i" as string]: index }}
     >

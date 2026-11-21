@@ -1,6 +1,7 @@
 // Claude (Anthropic): the default brain, with web search + web fetch and the shared toolbox.
 import Anthropic from "@anthropic-ai/sdk";
 import type { Lang } from "@/lib/lang";
+import { claudeImage } from "@/lib/photo";
 import { addSource, type AgentRun, type Brain, contextNote, fallbackLine, forSpeech, MAX_STEPS, runTool, SYSTEM, toolSpecs } from "./shared";
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
@@ -36,7 +37,10 @@ export const claude: Brain = {
   configured: () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
 
   async ask(text, lang: Lang, history, run) {
-    const messages: Anthropic.Beta.BetaMessageParam[] = [...history.map((t) => ({ role: t.role, content: t.text })), { role: "user", content: text }];
+    const messages: Anthropic.Beta.BetaMessageParam[] = [...history.map((t) => ({ role: t.role, content: t.text })), {
+      role: "user",
+      content: run.photo ? [claudeImage(run.photo), { type: "text", text }] : text,
+    }];
     // The per-message note goes after the cached instructions, not after the question: as the last
     // message it was sometimes answered instead of the question ("No." to "Nothing saved in memory").
     const system: Anthropic.Beta.BetaTextBlockParam[] = [

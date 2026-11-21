@@ -4,7 +4,6 @@
 // <Landing lang={...} /> when there is no session (?lang=, else Accept-Language).
 import {
   Bus,
-  Check,
   ChevronDown,
   Download,
   Globe,
@@ -29,8 +28,6 @@ const OG_LOCALE: Record<Lang, string> = { mn: "mn_MN", zh: "zh_CN", en: "en_US",
 const FEATURE_ICONS = [Radio, Languages, WandSparkles, Sparkles, MessagesSquare, ShieldCheck];
 const SELF_ICONS = [Laptop, KeyRound, Server];
 
-/** Monthly USD price of Free, Pro and Ultra after the Orkhon Hackathon. All of them are free while it runs. */
-export const PRICES = [0, 19, 49] as const;
 export const DESKTOP_URL = "https://github.com/temuulenbuuveibaatar-glitch/aspire/releases";
 
 /** `?lang=` is untrusted: take the first value, cap it, keep only a supported base tag. English otherwise. */
@@ -111,8 +108,8 @@ export function landingJsonLd(lang?: unknown) {
         operatingSystem: "Web, Windows, macOS",
         downloadUrl: DESKTOP_URL,
         featureList: ["Voice assistant", "Live buses", "Traffic", "Weather", "Air quality", "Street cameras", "News", "Chat bots", "Open apps", "Desktop actions"],
-        // Price 0 for every plan: the cloud plans are free during the Orkhon Hackathon, own keys always.
-        offers: [...t.plans, t.own].map(({ name }) => ({ "@type": "Offer", name, price: "0", priceCurrency: "USD" })),
+        // Free: during the Orkhon Hackathon, and always with your own keys.
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       },
     ],
   };
@@ -179,7 +176,7 @@ export function Landing({ lang }: { lang?: Lang }) {
             <p className="text-label text-accent">{t.eyebrow}</p>
             {/* The brand sits in the h1 so "Aspire" + keyword searches match title, h1 and body. */}
             <h1 id="hero-title" className="mt-3 text-city text-ink">
-              <span className="block font-display text-wordmark text-accent uppercase">Aspire</span>
+              <span className="block font-display text-wordmark text-accent uppercase">Aspire</span>{" "}
               {t.title}
             </h1>
             <p className="mt-5 max-w-[38rem] text-lead text-ink-muted">{t.lead}</p>
@@ -191,9 +188,6 @@ export function Landing({ lang }: { lang?: Lang }) {
                 {t.how}
               </a>
             </div>
-            <a href="#pricing" className="mt-4 inline-flex min-h-11 items-center text-body font-semibold text-accent underline underline-offset-4">
-              {t.hackathon}
-            </a>
           </div>
           <HudMock t={t} />
         </section>
@@ -224,10 +218,10 @@ export function Landing({ lang }: { lang?: Lang }) {
           <h2 id="how-title" className={H2}>
             {t.howTitle}
           </h2>
-          <ol className="mt-6 grid gap-4 md:grid-cols-3">
+          <ul className="mt-6 grid gap-4 md:grid-cols-3">
             {t.steps.map((s, i) => (
               <li key={s.title} className="v6-card flex gap-4 p-5">
-                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-body font-semibold text-on-accent" aria-hidden>
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-body font-semibold text-on-accent">
                   {i + 1}
                 </span>
                 <div>
@@ -236,7 +230,7 @@ export function Landing({ lang }: { lang?: Lang }) {
                 </div>
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
 
         {/* 4. Cities */}
@@ -260,43 +254,7 @@ export function Landing({ lang }: { lang?: Lang }) {
           </div>
         </section>
 
-        {/* 5. Pricing: three cloud plans (all free during the hackathon) and own keys (free forever). */}
-        <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-6 py-10">
-          <h2 id="pricing-title" className={H2}>
-            {t.pricingTitle}
-          </h2>
-          <p className="mt-3 max-w-[44rem] text-body text-ink-muted">{t.pricingLead}</p>
-          <div className="mt-6 rounded-[var(--radius-lg)] border-2 border-accent bg-surface-2 p-5">
-            <p className="text-reply font-semibold text-accent">{t.hackathon}</p>
-            <p className="mt-1 text-small text-ink-muted">{t.hackathonBody}</p>
-          </div>
-          <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[...t.plans, t.own].map((p, i) => {
-              const own = i === 3;
-              const price = own ? t.own.price : i ? t.freeNow : t.freePrice;
-              return (
-                <li key={p.name} className={`v6-card flex flex-col p-5 ${own ? "border-accent" : ""}`}>
-                  <h3 className="text-body font-semibold text-ink">{p.name}</h3>
-                  <p className="mt-3 text-greeting text-accent">{price}</p>
-                  {!own && PRICES[i] > 0 && <p className="mt-1 text-small text-ink-muted">{t.after.replace("{price}", `$${PRICES[i]}`)}</p>}
-                  <ul className="mt-4 flex-1 space-y-2 text-small text-ink">
-                    {p.points.map((x) => (
-                      <li key={x} className="flex gap-2">
-                        <Check className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />
-                        {x}
-                      </li>
-                    ))}
-                  </ul>
-                  <a href={own ? "#self-host" : "/login"} className={`${own ? PRIMARY : SECONDARY} mt-6 no-underline`}>
-                    {own ? t.own.cta : t.cta}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        {/* 6. Run it yourself: Aspire Desktop, own keys, own server. */}
+        {/* 5. Run it yourself: Aspire Desktop, own keys, own server. */}
         <section id="self-host" aria-labelledby="self-title" className="scroll-mt-6 py-10">
           <h2 id="self-title" className={H2}>
             {t.selfTitle}
@@ -324,7 +282,7 @@ export function Landing({ lang }: { lang?: Lang }) {
           </div>
         </section>
 
-        {/* 7. FAQ */}
+        {/* 6. FAQ */}
         <section id="faq" aria-labelledby="faq-title" className="scroll-mt-6 py-10">
           <h2 id="faq-title" className={H2}>
             {t.faqTitle}
@@ -338,7 +296,7 @@ export function Landing({ lang }: { lang?: Lang }) {
                 </summary>
                 <p className="px-5 pb-5 text-small text-ink-muted">
                   {item.a}
-                  {i === 1 && (
+                  {/* The two privacy answers end with a link to the full policy. */ (i === 1 || i === 3) && (
                     <>
                       {" "}
                       <a href={`/privacy#${l}`} className="text-accent underline">
@@ -358,7 +316,7 @@ export function Landing({ lang }: { lang?: Lang }) {
         </section>
       </main>
 
-      {/* 8. Footer */}
+      {/* 7. Footer */}
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-8 pb-[max(2rem,env(safe-area-inset-bottom))] text-small text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <nav aria-label={t.legal} className="flex gap-2">
@@ -393,9 +351,9 @@ function HudMock({ t }: { t: LandingText }) {
               ))}
             </div>
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgb(11_19_17/0.55)_0%,transparent_45%,rgb(11_19_17/0.7)_100%)]" />
-            <span className="absolute top-4 left-4 text-card text-ink">{m.city}</span>
+            <span className="absolute top-4 left-4 text-card text-ink">{m.city}</span>{" "}
             <div className="absolute bottom-4 left-4">
-              <span className="block text-[3.25rem] leading-none font-light tracking-tight text-ink">{"−12°"}</span>
+              <span className="block text-[3.25rem] leading-none font-light tracking-tight text-ink">{"−12°"}</span>{" "}
               <span className="text-copy text-ink-muted">{m.sky}</span>
             </div>
           </div>
@@ -404,7 +362,7 @@ function HudMock({ t }: { t: LandingText }) {
               <span className="inline-flex size-9 items-center justify-center rounded-full bg-surface-3 text-accent">
                 <Bus className="size-4" />
               </span>
-              <span className="flex-1 text-card text-ink">{m.bus}</span>
+              <span className="flex-1 text-card text-ink">{m.bus}</span>{" "}
               <span className="font-mono text-value-sm text-sched">{m.mins}</span>
             </div>
             <div className="ml-auto w-fit max-w-[85%] rounded-[1rem] rounded-br-sm bg-surface-2 px-3 py-2 text-copy text-ink">{m.ask}</div>

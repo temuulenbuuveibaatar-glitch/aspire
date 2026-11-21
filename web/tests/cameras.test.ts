@@ -83,6 +83,122 @@ const nzXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><response>
 const SAN_FRANCISCO = { lat: 37.7793, lng: -122.4193 };
 const AUCKLAND = { lat: -36.8485, lng: 174.7633 };
 
+// Regional open-data lists, trimmed from the real answers (2026-11-21): one good camera each, plus
+// rows that must be dropped (switched off, wrong host, http, bad id).
+interface Region { source: string; host: string; at: { lat: number; lng: number }; body: unknown; ids: string[]; first: Record<string, unknown> }
+const REGIONS: Region[] = [
+  {
+    source: "digitraffic-fi", host: "tie.digitraffic.fi", at: { lat: 60.05, lng: 24.0 },
+    body: { type: "FeatureCollection", features: [
+      { type: "Feature", id: "C01503", geometry: { type: "Point", coordinates: [23.99616, 60.05374, 0] }, properties: { id: "C01503", name: "kt51_Inkoo", collectionStatus: "GATHERING", presets: [{ id: "C0150301", inCollection: true }, { id: "C0150302", inCollection: true }] } },
+      { type: "Feature", id: "C01504", geometry: { type: "Point", coordinates: [24.0, 60.06, 0] }, properties: { id: "C01504", name: "removed", collectionStatus: "REMOVED_TEMPORARILY", presets: [{ id: "C0150401", inCollection: true }] } },
+      { type: "Feature", id: "C01505", geometry: { type: "Point", coordinates: [24.0, 60.06, 0] }, properties: { id: "C01505", name: "bad preset", collectionStatus: "GATHERING", presets: [{ id: "../x", inCollection: true }] } },
+    ] },
+    ids: ["fi-C0150301"],
+    first: { name: "kt51 Inkoo", url: "https://weathercam.digitraffic.fi/C0150301.jpg", credit: "Fintraffic / digitraffic.fi, CC BY 4.0" },
+  },
+  {
+    source: "vegvesen-no", host: "ogckart-sn1.atlas.vegvesen.no", at: { lat: 60.39, lng: 5.32 },
+    body: { type: "FeatureCollection", features: [
+      { type: "Feature", geometry: { type: "Point", coordinates: [5.237528, 60.2922] }, properties: { CAMERA_ID: "1229019_1", DESCRIPTION: "Flyplassveien", ORIENTATION_DESCRIPTION: "Sentrum", ROAD_NUMBER: "R580", STATUS_STILL_IMAGE_AVAILABILITY: "videoOrImagesAvailable", STILL_IMAGE_URL: "https://kamera.atlas.vegvesen.no/api/images/1229019_1" } },
+      { type: "Feature", geometry: { type: "Point", coordinates: [5.3, 60.3] }, properties: { CAMERA_ID: "3001032_1", DESCRIPTION: "Fault", STATUS_STILL_IMAGE_AVAILABILITY: "videoOrImagesUnavailableDueToCameraFault", STILL_IMAGE_URL: "https://kamera.atlas.vegvesen.no/api/images/3001032_1" } },
+      { type: "Feature", geometry: { type: "Point", coordinates: [5.3, 60.3] }, properties: { CAMERA_ID: "9", DESCRIPTION: "Other path", STATUS_STILL_IMAGE_AVAILABILITY: "videoOrImagesAvailable", STILL_IMAGE_URL: "https://kamera.atlas.vegvesen.no/admin/9" } },
+    ] },
+    ids: ["no-1229019_1"],
+    first: { name: "Flyplassveien, R580, Sentrum", url: "https://kamera.atlas.vegvesen.no/api/images/1229019_1", credit: "Statens vegvesen (NLOD)" },
+  },
+  {
+    source: "vegagerdin-is", host: "gagnaveita.vegagerdin.is", at: { lat: 64.1466, lng: -21.9426 },
+    body: [
+      { Maelist_nr: 7001, Myndavel: "Hellisheiði", Vegheiti: "Hringvegur", NrVegur: "1", Skyring: "Hellisheiði séð til vesturs", Slod: "https://www.vegagerdin.is/vgdata/vefmyndavelar/hellisheidi_1.jpg", Breidd: 64.018296, Lengd: -21.342636 },
+      { Maelist_nr: 7002, Myndavel: "Plain http", Slod: "http://www.vegagerdin.is/vgdata/vefmyndavelar/x_1.jpg", Breidd: 64.1, Lengd: -21.9 },
+    ],
+    ids: ["is-hellisheidi_1"],
+    first: { name: "Hellisheiði séð til vesturs", url: "https://www.vegagerdin.is/vgdata/vefmyndavelar/hellisheidi_1.jpg", credit: expect.stringContaining("Icelandic Road and Coastal Administration (IRCA)") },
+  },
+  {
+    source: "drivebc", host: "www.drivebc.ca", at: { lat: 49.28, lng: -123.12 },
+    body: [
+      { id: 723, name: "Pitt River Road - E", caption: "Highway 7B (Mary Hill Bypass), at Pitt River Road, looking east.", links: { imageDisplay: "/images/723.jpg?t=1795249076" }, is_on: true, marked_stale: false, should_appear: true, location: { type: "Point", coordinates: [-122.76914, 49.234922] } },
+      { id: 724, name: "Stale", links: { imageDisplay: "/images/724.jpg" }, is_on: true, marked_stale: true, should_appear: true, location: { type: "Point", coordinates: [-122.8, 49.2] } },
+      { id: 725, name: "Off", links: { imageDisplay: "/images/725.jpg" }, is_on: false, marked_stale: false, should_appear: true, location: { type: "Point", coordinates: [-122.8, 49.2] } },
+      { id: 726, name: "Elsewhere", links: { imageDisplay: "//evil.example/726.jpg" }, is_on: true, location: { type: "Point", coordinates: [-122.8, 49.2] } },
+    ],
+    ids: ["bc-723"],
+    first: { name: "Pitt River Road - E: Highway 7B (Mary Hill Bypass), at Pitt River Road, looking east.", url: "https://www.drivebc.ca/images/723.jpg", credit: "DriveBC.ca" },
+  },
+  {
+    source: "wsdot", host: "data.wsdot.wa.gov", at: { lat: 47.61, lng: -122.33 },
+    body: { cameras: { items: [
+      { id: 9001, url: "https://images.wsdot.wa.gov/nw/005vc16540.jpg", title: "I-5 at Madison St", roadName: "I-5", direction: "N", lat: 47.6085, lon: -122.3295, video: 0 },
+      { id: 9002, url: "https://www.seattle.gov/trafficcams/images/x.jpg", title: "City camera, other host", roadName: "City", lat: 47.61, lon: -122.33, video: 0 },
+    ] } },
+    ids: ["wa-9001"],
+    first: { name: "I-5 at Madison St", url: "https://images.wsdot.wa.gov/nw/005vc16540.jpg", credit: "WSDOT" },
+  },
+  {
+    source: "odot", host: "tripcheck.com", at: { lat: 46.19, lng: -123.83 },
+    body: { features: [
+      { attributes: { cameraId: 277, publishedImageId: 392, filename: "AstoriaUS101MeglerBrNB_pid392.jpg", latitude: 46.18785, longitude: -123.85347, route: "US101 ", title: "US101 at Astoria - ODOT District Office" } },
+      { attributes: { cameraId: 277, publishedImageId: 654, filename: "Snake River_pid654.JPG", latitude: 46.25, longitude: -123.84, title: "Spaces in the name" } },
+      { attributes: { cameraId: 1, publishedImageId: 1, filename: "../../etc/x.jpg", latitude: 46.2, longitude: -123.84, title: "Path trick" } },
+    ] },
+    ids: ["or-392", "or-654"], // one camera, two pictures
+    first: { name: "US101 at Astoria - ODOT District Office", url: "https://tripcheck.com/RoadCams/cams/AstoriaUS101MeglerBrNB_pid392.jpg", credit: "ODOT TripCheck" },
+  },
+  {
+    source: "iowadot", host: "services.arcgis.com", at: { lat: 41.59, lng: -93.62 },
+    body: { features: [
+      { attributes: { device_id: 59660426, Desc_: "DM - I-235 @ MM 14.2 (I-80 East Mix)", ImageURL: "https://atmsqf.iowadot.gov/SNAPSHOTS/PUBLIC/Metro/dmtv099hd.jpeg", VideoURL: "https://video4.iowadot.gov:8888/ankeny/dmtv099lb/playlist.m3u8", latitude: 41.650262, longitude: -93.575439 } },
+      { attributes: { device_id: 59660556, Desc_: "Unavailable", ImageURL: "https://public.carsprogram.org/cameras/IA/cameraunavailable.png", latitude: 41.6, longitude: -93.6 } },
+    ] },
+    ids: ["ia-dmtv099hd"],
+    first: { name: "DM - I-235 @ MM 14.2 (I-80 East Mix)", url: "https://atmsqf.iowadot.gov/SNAPSHOTS/PUBLIC/Metro/dmtv099hd.jpeg", credit: "Iowa DOT" },
+  },
+  {
+    source: "toronto", host: "ckan0.cf.opendata.inter.prod-toronto.ca", at: { lat: 43.65, lng: -79.38 },
+    body: { type: "FeatureCollection", features: [
+      { type: "Feature", properties: { REC_ID: 8001, IMAGEURL: "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8001.jpg", MAINROAD: "YORK ST", CROSSROAD: "BREMNER BLVD / RAPTORS WAY", REFURL1: "http://opendata.toronto.ca/transportation/tmc/rescucameraimages/ComparisonImages/loc8001n.jpg" }, geometry: { type: "MultiPoint", coordinates: [[-79.3813860009273, 43.6431200069527]] } },
+      { type: "Feature", properties: { REC_ID: 8002, IMAGEURL: "http://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8002.jpg", MAINROAD: "HTTP" }, geometry: { type: "MultiPoint", coordinates: [[-79.38, 43.65]] } },
+    ] },
+    ids: ["to-8001"],
+    first: { name: "YORK ST / BREMNER BLVD / RAPTORS WAY", url: "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8001.jpg", credit: "City of Toronto, Open Government Licence - Toronto" },
+  },
+  {
+    source: "austin", host: "data.austintexas.gov", at: { lat: 30.27, lng: -97.74 },
+    body: [
+      { camera_id: "1", location_name: "830 BLK W RUNDBERG LN (Little Walnut Creek Library, HEB)", camera_status: "TURNED_ON", screenshot_address: "https://cctv.austinmobility.io/image/1.jpg", location: { type: "Point", coordinates: [-97.698158, 30.363686] } },
+      { camera_id: "2", location_name: "Off", camera_status: "TURNED_OFF", screenshot_address: "https://cctv.austinmobility.io/image/2.jpg", location: { type: "Point", coordinates: [-97.7, 30.3] } },
+    ],
+    ids: ["au-1"],
+    first: { name: "830 BLK W RUNDBERG LN (Little Walnut Creek Library, HEB)", url: "https://cctv.austinmobility.io/image/1.jpg", credit: "City of Austin Transportation" },
+  },
+  {
+    source: "quebec511", host: "ws.mapserver.transports.gouv.qc.ca", at: { lat: 46.81, lng: -71.21 },
+    body: { type: "FeatureCollection", features: [
+      { type: "Feature", id: 3998, properties: { IDEcamera: "3998", DescriptionLocalisationFr: "Aut. 540 (direction ouest) à la hauteur du boul. Wilfrid-Hamel", DescriptionLocalisationEn: "Aut. 540 (westward) at boul. Wilfrid-Hamel", URL_FLUX_DONNEE: "https://www.quebec511.info/Carte/Fenetres/FenetreVideo.html?id=3998" }, geometry: { type: "Point", coordinates: [-71.35488, 46.78853] } },
+      { type: "Feature", id: 3999, properties: { IDEcamera: "3999", DescriptionLocalisationEn: "Other host", URL_FLUX_DONNEE: "https://www.quebec511.info.evil.example/x" }, geometry: { type: "Point", coordinates: [-71.3, 46.8] } },
+    ] },
+    ids: ["qc-3998"],
+    first: { kind: "link", name: "Aut. 540 (westward) at boul. Wilfrid-Hamel", url: "https://www.quebec511.info/Carte/Fenetres/FenetreVideo.html?id=3998", credit: expect.stringContaining("Québec 511") },
+  },
+  {
+    source: "tdx-tw", host: "tdx.transportdata.tw", at: { lat: 25.13, lng: 121.74 },
+    body: { UpdateTime: "2026-11-21T01:17:52+08:00", CCTVs: [
+      { CCTVID: "CCTV-N1-S-0.000-M", VideoStreamURL: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", PositionLon: 121.735695, PositionLat: 25.1229931, RoadName: "國道1號", RoadDirection: "S", LocationMile: "0K+000" },
+      { CCTVID: "CCTV-N1-N-0.500-M", VideoStreamURL: "http://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10001", PositionLon: 121.73, PositionLat: 25.12, RoadName: "國道1號" },
+    ] },
+    ids: ["tw-CCTV-N1-S-0.000-M"],
+    first: { name: "國道1號 0K+000 S", url: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", credit: expect.stringContaining("Freeway Bureau") },
+  },
+];
+const QLD_BODY = { type: "FeatureCollection", features: [
+  { type: "Feature", geometry: { type: "Point", crs: { type: "name", properties: { name: "EPSG:7844" } }, coordinates: [153.0086975, -27.5551796] }, properties: { id: 1, description: "Archerfield - Ipswich Motorway & Granard Rd - North", image_url: "https://cameras.qldtraffic.qld.gov.au/Metropolitan/Archerfield_Ipswich_Mwy_sth.jpg" } },
+  { type: "Feature", geometry: { type: "Point", coordinates: [153.0, -27.5] }, properties: { id: 2, description: "Other host", image_url: "https://evil.example/x.jpg" } },
+] };
+const BRISBANE = { lat: -27.47, lng: 153.03 };
+const regionBody = (host: string) => (host === "api.qldtraffic.qld.gov.au" ? QLD_BODY : REGIONS.find((r) => r.host === host)?.body);
+
 const ytSearch = { items: [
   { id: { videoId: "AAAAAAAAAAA" }, snippet: { title: "City &amp; harbour live", channelTitle: "Harbour Cam", thumbnails: { medium: { url: "https://i.ytimg.com/vi/AAAAAAAAAAA/mqdefault.jpg" } } } },
   { id: { videoId: "BBBBBBBBBBB" }, snippet: { title: "No position given", channelTitle: "Somebody" } },
@@ -118,6 +234,9 @@ beforeEach(() => {
     if (u.pathname === "/youtube/v3/search") return Response.json(ytSearch);
     if (u.pathname === "/youtube/v3/videos") return Response.json(ytVideos(at));
     if (u.host === "overpass-api.de") return Response.json(osmBody(at));
+    if (u.host === "tdx.transportdata.tw" && u.pathname.startsWith("/auth/")) return Response.json({ access_token: "tdx_test_token_abcdef", expires_in: 86400 });
+    const region = regionBody(u.host);
+    if (region !== undefined) return Response.json(region);
     return new Response("unexpected", { status: 404 });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -413,6 +532,169 @@ describe("findCameras sources", () => {
     const r = await findCameras(OCEAN);
     expect(r.cameras).toEqual([]);
     expect(r.credit).toEqual([]);
+  });
+});
+
+describe("findCameras regional open-data lists", () => {
+  it.each(REGIONS.map((r) => [r.source, r] as const))("%s: allowed cameras only, nearest first, credited, timed out and cached a day", async (_, r) => {
+    at = r.at;
+    const res = await findCameras(r.at);
+    const cams = res.cameras.filter((c) => c.source === r.source);
+    expect(cams.map((c) => c.id)).toEqual(r.ids);
+    expect(cams[0]).toMatchObject({ kind: "image", ...r.first });
+    expect(cams[0].distanceKm).toBeLessThanOrEqual(60);
+    expect(cams[0].updatedAt).toBeUndefined(); // rewritten in place: the list time is not the picture's
+    if (cams[0].kind === "image") expect(cams[0].thumb).toBe(cams[0].url);
+    expect(res.credit).toContain(cams[0].credit);
+    expect(res.unavailable).toEqual([]);
+    const [, init] = hits(r.host)[0];
+    expect(init?.signal).toBeInstanceOf(AbortSignal); // the shared per-source timeout
+    expect(init?.redirect).toBe("error");
+    await findCameras({ lat: r.at.lat + 0.01, lng: r.at.lng });
+    expect(hits(r.host)).toHaveLength(1);
+  });
+
+  it("Digitraffic: names the client and asks for gzip, as Fintraffic requests", async () => {
+    await findCameras({ lat: 60.17, lng: 24.94 });
+    const headers = hits("tie.digitraffic.fi")[0][1]?.headers as Record<string, string>;
+    expect(headers["Digitraffic-User"]).toBe("Aspire/1.0");
+    expect(headers["Accept-Encoding"]).toBe("gzip");
+  });
+
+  it("each list is fetched only near its own region", async () => {
+    await findCameras({ lat: 60.17, lng: 24.94 }); // Helsinki: Finland, not Norway's southern box
+    expect(hits("ogckart-sn1.atlas.vegvesen.no")).toHaveLength(0);
+    await findCameras(ERDENET);
+    for (const r of REGIONS.filter((x) => x.source !== "digitraffic-fi")) expect(hits(r.host)).toHaveLength(0);
+  });
+
+  it("Austin: only cameras turned on are asked for", async () => {
+    await findCameras({ lat: 30.27, lng: -97.74 });
+    expect(new URL(hits("data.austintexas.gov")[0][0]).searchParams.get("camera_status")).toBe("TURNED_ON");
+  });
+
+  it("a regional list that fails is named, the rest still show", async () => {
+    at = { lat: 49.28, lng: -123.12 };
+    fail = new Set(["www.drivebc.ca"]);
+    const r = await findCameras(at);
+    expect(r.unavailable).toEqual(["drivebc"]);
+  });
+
+  it("QLDTraffic: skipped silently without QLDTRAFFIC_API_KEY", async () => {
+    at = BRISBANE;
+    const r = await findCameras(BRISBANE);
+    expect(hits("api.qldtraffic.qld.gov.au")).toHaveLength(0);
+    expect(r.unavailable).toEqual([]);
+  });
+
+  it("QLDTraffic: with the key, its own image host only, and the key never in an error", async () => {
+    vi.stubEnv("QLDTRAFFIC_API_KEY", "qld_test_key_456");
+    at = BRISBANE;
+    const r = await findCameras(BRISBANE);
+    expect(r.cameras.filter((c) => c.source === "qldtraffic")).toEqual([expect.objectContaining({
+      id: "qld-1", name: "Archerfield - Ipswich Motorway & Granard Rd - North", kind: "image",
+      url: "https://cameras.qldtraffic.qld.gov.au/Metropolitan/Archerfield_Ipswich_Mwy_sth.jpg", credit: expect.stringContaining("QLDTraffic"),
+    })]);
+    expect(new URL(hits("api.qldtraffic.qld.gov.au")[0][0]).searchParams.get("apikey")).toBe("qld_test_key_456");
+    clearCameraCache();
+    fail = new Set(["api.qldtraffic.qld.gov.au"]);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await findCameras(BRISBANE)).unavailable).toEqual(["qldtraffic"]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("qld_test_key_456");
+  });
+
+  it("TDX: anonymous by default; with a client, a bearer token from the secret sent in the POST body only", async () => {
+    at = { lat: 25.13, lng: 121.74 };
+    await findCameras(at);
+    expect((hits("tdx.transportdata.tw")[0][1]?.headers as Record<string, string>).Authorization).toBeUndefined();
+    clearCameraCache();
+    fetchMock.mockClear();
+    vi.stubEnv("TDX_CLIENT_ID", "tdx-id");
+    vi.stubEnv("TDX_CLIENT_SECRET", "tdx_secret_789");
+    const r = await findCameras(at);
+    const [tokenCall, listCall] = hits("tdx.transportdata.tw");
+    expect(new URL(tokenCall[0]).pathname).toBe("/auth/realms/TDXConnect/protocol/openid-connect/token");
+    expect(tokenCall[0]).not.toContain("tdx_secret_789");
+    expect(String(tokenCall[1]?.body)).toContain("client_secret=tdx_secret_789");
+    expect(listCall[0]).not.toContain("tdx_secret_789");
+    expect((listCall[1]?.headers as Record<string, string>).Authorization).toBe("Bearer tdx_test_token_abcdef");
+    expect(r.cameras.some((c) => c.source === "tdx-tw")).toBe(true);
+  });
+
+  it("allow-list: each new image host, camera paths only", () => {
+    for (const u of [
+      "https://weathercam.digitraffic.fi/C0150301.jpg", "https://kamera.atlas.vegvesen.no/api/images/1229019_1",
+      "https://www.vegagerdin.is/vgdata/vefmyndavelar/hellisheidi_1.jpg", "https://cameras.qldtraffic.qld.gov.au/Metropolitan/a.jpg",
+      "https://www.drivebc.ca/images/723.jpg", "https://images.wsdot.wa.gov/nw/a.jpg", "https://tripcheck.com/RoadCams/cams/a.jpg",
+      "https://atmsqf.iowadot.gov/SNAPSHOTS/PUBLIC/Metro/a.jpeg", "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8001.jpg",
+      "https://cctv.austinmobility.io/image/1.jpg", "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000",
+    ]) expect(safeCameraUrl("image", u)).toBe(u);
+    for (const u of [
+      "https://kamera.atlas.vegvesen.no/other", "https://www.vegagerdin.is/", "https://www.drivebc.ca/api/webcams/",
+      "https://tripcheck.com/Scripts/map/data/cctvinventory.js", "https://opendata.toronto.ca/other/x.jpg", "https://cctv.austinmobility.io/admin",
+      "https://cctvn.freeway.gov.tw/other", "http://images.wsdot.wa.gov/nw/a.jpg", "https://video4.iowadot.gov:8888/ankeny/x/playlist.m3u8",
+    ]) expect(safeCameraUrl("image", u)).toBeNull();
+    expect(safeCameraUrl("embed", "https://weathercam.digitraffic.fi/C0150301.jpg")).toBeNull();
+  });
+});
+
+describe("YouTube: game streams are not cameras", () => {
+  const ID = "CCCCCCCCCCC";
+  const run = async (snippet: Record<string, unknown>, search: Record<string, unknown> = { title: snippet.title }) => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/youtube/v3/search") return Response.json({ items: [{ id: { videoId: ID }, snippet: { channelTitle: "Someone", ...search } }] });
+      if (u.pathname === "/youtube/v3/videos") return Response.json({ items: [{ id: ID, snippet, recordingDetails: { location: { latitude: ERDENET.lat, longitude: ERDENET.lng } } }] });
+      return Response.json({ elements: [] });
+    });
+    return (await findCameras(ERDENET)).cameras.filter((c) => c.source === "youtube");
+  };
+
+  it("asks videos.list for the snippet and the position in one call", async () => {
+    await findCameras(ERDENET);
+    const videos = fetchMock.mock.calls.filter(([u]) => new URL(u).pathname === "/youtube/v3/videos");
+    expect(videos).toHaveLength(1);
+    expect(new URL(videos[0][0]).searchParams.get("part")).toBe("snippet,recordingDetails");
+  });
+
+  it.each([
+    ["GTA RP roleplay", { title: "GTA 5 RP | Los Santos City Life | NoPixel 4.0 LIVE", categoryId: "20" }],
+    ["GTA, not tagged as Gaming", { title: "Los Santos traffic cam LIVE 24/7", description: "Grand Theft Auto V roleplay server, street view", categoryId: "22" }],
+    ["FiveM in the tags", { title: "Downtown city streets live", tags: ["FiveM", "police"], categoryId: "24" }],
+    ["#gtarp hashtag", { title: "Live city patrol #gtarp", categoryId: "24" }],
+    ["Euro Truck Simulator", { title: "ETS2 live - driving through the city", categoryId: "22" }],
+    ["Cities: Skylines", { title: "Cities: Skylines traffic fix livestream", categoryId: "24" }],
+    ["Minecraft city", { title: "Minecraft city build live", categoryId: "28" }],
+    ["Microsoft Flight Simulator", { title: "MSFS 2024 live over the city", categoryId: "19" }],
+    ["Let's Play", { title: "Let's Play: Watch Dogs Legion street chaos", categoryId: "24" }],
+    ["channel name", { title: "City walk live", channelTitle: "Fortnite Daily", categoryId: "19" }],
+    ["Russian", { title: "Стрим: игра GTA 5 - город камера", categoryId: "24" }],
+    ["Russian, word only", { title: "Прямой эфир: летсплей, город ночью, камера", categoryId: "24" }],
+    ["Chinese", { title: "城市 直播 游戏 镜头", categoryId: "24" }],
+    ["Traditional Chinese", { title: "遊戲直播 街景攝像", categoryId: "24" }],
+    ["German", { title: "Spiel live: Stadt Kamera", categoryId: "24" }],
+    ["Mongolian", { title: "Тоглоом шууд: хотын камер", categoryId: "24" }],
+    ["no camera word", { title: "Late night talk show LIVE", categoryId: "24" }],
+  ])("drops %s", async (_, snippet) => {
+    expect(await run(snippet)).toEqual([]);
+  });
+
+  it.each([
+    ["Shibuya crossing", { title: "【LIVE】Shibuya Scramble Crossing Live Camera 渋谷スクランブル交差点", categoryId: "19" }],
+    ["harbour webcam", { title: "Sydney Harbour Live Webcam 4K", description: "24/7 live view of the harbour", categoryId: "19" }],
+    ["Times Square", { title: "Times Square NYC 24/7 Live Stream", description: "Live street cam from Times Square", categoryId: "22" }],
+    ["traffic", { title: "I-95 traffic live", categoryId: "2" }],
+    ["Russian webcam", { title: "Москва, Красная площадь: веб-камера онлайн", categoryId: "19" }],
+    ["German webcam", { title: "Hamburg Hafen live: Webcam am Elbufer", categoryId: "19" }],
+    ["Chinese", { title: "台北101 即時影像 直播 鏡頭", categoryId: "19" }],
+    ["description only", { title: "Venice live", description: "Live cam on the Grand Canal", categoryId: "19" }],
+    ["Beispiel is not Spiel", { title: "Stadt Kamera live, zum Beispiel der Marktplatz", categoryId: "19" }],
+  ])("keeps %s", async (_, snippet) => {
+    expect(await run(snippet)).toHaveLength(1);
+  });
+
+  it("the full videos.list snippet decides, over the short search one", async () => {
+    expect(await run({ title: "City live cam", description: "Playing GTA Online with friends", categoryId: "22" }, { title: "City live cam" })).toEqual([]);
   });
 });
 

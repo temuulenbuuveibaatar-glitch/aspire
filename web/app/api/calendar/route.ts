@@ -2,12 +2,14 @@ import { requireUser, signedOut } from "@/lib/auth";
 import { GoogleAuthError } from "@/lib/google";
 import { insertEvent } from "@/lib/google-calendar";
 import { googleAccessToken } from "@/lib/google-token";
+import { isRRule } from "@/lib/rrule";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { zoneOr } from "@/lib/tools/time";
 
 export const maxDuration = 30;
 
-// POST { title, start, end, details?, location?, tz? } -> { ok: true, link }
+// POST { title, start, end, details?, location?, tz?, recurrence? } -> { ok: true, link }
+// recurrence: only a rule lib/rrule.ts buildRRule can make (checked with isRRule).
 // Called only after the person pressed "Add to Google Calendar" on a calendar card. Saves one
 // event to their primary calendar with their Clerk-held Google token. Nothing is stored or logged.
 // 403 { error: "not_connected" } when Calendar access was never granted or was revoked: the card
@@ -35,6 +37,8 @@ export async function POST(req: Request) {
   if (!title) return Response.json({ error: "bad_title" }, { status: 400 });
   if (details === null || location === null) return Response.json({ error: "bad_text" }, { status: 400 });
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return Response.json({ error: "bad_time" }, { status: 400 });
+  const recurrence = body?.recurrence ?? undefined;
+  if (recurrence !== undefined && !isRRule(recurrence)) return Response.json({ error: "bad_recurrence" }, { status: 400 });
 
   const token = await googleAccessToken(user.id);
   if (!token) return Response.json({ error: "not_connected" }, { status: 403 });
@@ -46,6 +50,7 @@ export async function POST(req: Request) {
       tz: zoneOr(body?.tz),
       location,
       details,
+      recurrence,
     });
     return Response.json({ ok: true, link: htmlLink.startsWith("https://") ? htmlLink : "" });
   } catch (e) {

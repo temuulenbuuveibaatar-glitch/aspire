@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/ambient/route";
-import { cityParam, getAmbient, googleSky, locate, photoVariant, placeName, resetAmbientCache, skyText, trafficLevel, wmoSky, cityPhoto } from "@/lib/ambient";
+import { cityParam, getAmbient, googleSky, locate, photoScore, photoVariants, placeName, resetAmbientCache, skyText, trafficLevel, wmoSky, cityPhoto } from "@/lib/ambient";
 import { resetAirDetail } from "@/lib/tools/air";
 import { drivingTraffic, haversineKm, resetMapsUsage } from "@/lib/maps";
 import { resetTransitous } from "@/lib/transitous";
@@ -156,9 +156,53 @@ describe("location precedence", () => {
       const loc = await locate(new URLSearchParams("city=%20Erdenet%20"), vercel);
       expect(loc).toEqual({ coords: { lat: 49.0278, lng: 104.0444 }, locatedBy: "city", city: "Erdenet", english: "Erdenet", country: null, timeZone: null });
     }
-    expect(calls).toHaveLength(1);
+    // Google once a day; GeoNames (down here) once, its miss kept an hour.
+    expect(calls.map((c) => new URL(c.url).host)).toEqual(["places.googleapis.com", "geocoding-api.open-meteo.com"]);
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ textQuery: "Erdenet" });
     expect(calls[0].url).not.toContain("test-key");
+  });
+
+  it("puts a typed city at its GeoNames centre, with its country and time zone, when it agrees with Google", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", "test-key");
+    const geonames = (latitude: number, longitude: number) => ({ results: [{ name: "Singapore", latitude, longitude, country_code: "SG", timezone: "Asia/Singapore" }] });
+    // Google gives the middle of the island; GeoNames the city centre 7.7 km away.
+    mockFetch([
+      ["places:searchText", { places: [{ formattedAddress: "Singapore", location: { latitude: 1.3521, longitude: 103.8198 } }] }],
+      ["geocoding-api.open-meteo.com", geonames(1.28967, 103.85007)],
+    ]);
+    expect(await locate(new URLSearchParams("city=Singapore"), vercel)).toEqual({
+      coords: { lat: 1.2897, lng: 103.8501 }, locatedBy: "city", city: "Singapore", english: "Singapore", country: "SG", timeZone: "Asia/Singapore",
+    });
+    // Within 3 km Google's precise point stays; the country and time zone still come from GeoNames.
+    resetAmbientCache();
+    mockFetch([
+      ["places:searchText", { places: [{ formattedAddress: "Singapore", location: { latitude: 1.3521, longitude: 103.8198 } }] }],
+      ["geocoding-api.open-meteo.com", geonames(1.36, 103.83)],
+    ]);
+    expect(await locate(new URLSearchParams("city=Singapore"), vercel)).toMatchObject({ coords: { lat: 1.3521, lng: 103.8198 }, country: "SG", timeZone: "Asia/Singapore" });
+    // Another place of the same name (over 40 km off): Google's answer, nothing borrowed from it.
+    resetAmbientCache();
+    mockFetch([
+      ["places:searchText", { places: [{ formattedAddress: "Singapore", location: { latitude: 1.3521, longitude: 103.8198 } }] }],
+      ["geocoding-api.open-meteo.com", geonames(40.1, -75.2)],
+    ]);
+    expect(await locate(new URLSearchParams("city=Singapore"), vercel)).toMatchObject({ coords: { lat: 1.3521, lng: 103.8198 }, country: null, timeZone: null });
+    // Untrusted answers: a bad country code or time zone is dropped, a bad position ignored.
+    resetAmbientCache();
+    mockFetch([
+      ["places:searchText", { places: [{ formattedAddress: "Singapore", location: { latitude: 1.3521, longitude: 103.8198 } }] }],
+      ["geocoding-api.open-meteo.com", { results: [{ latitude: 1.29, longitude: 103.85, country_code: "<b>", timezone: "Not a zone" }] }],
+    ]);
+    expect(await locate(new URLSearchParams("city=Singapore"), vercel)).toMatchObject({ coords: { lat: 1.29, lng: 103.85 }, country: null, timeZone: null });
+  });
+
+  it("names the typed city's country in the snapshot, for the place line and the news card", async () => {
+    mockFetch([
+      ["geocoding-api.open-meteo.com", { results: [{ name: "Tokyo", country: "Japan", country_code: "JP", timezone: "Asia/Tokyo", latitude: 35.6895, longitude: 139.69171 }] }],
+      ["api.open-meteo.com/v1/forecast", { ...OPEN_METEO, timezone: "Asia/Tokyo" }],
+    ]);
+    const a = await getAmbient(await locate(new URLSearchParams("city=Tokyo"), vercel), "en", NOW);
+    expect(a).toMatchObject({ place: "Tokyo, Japan", country: "JP", timeZone: "Asia/Tokyo", localHour: 19 });
   });
 
   it("geocodes a typed city with Open-Meteo when there is no Maps key", async () => {
@@ -724,44 +768,117 @@ describe("Erdenet feed edge cases", () => {
 });
 
 describe("cityPhoto (whole-city Commons photo)", () => {
-  const page = (title: string, index: number, w = 1920, h = 1080) => ({
+  const page = (title: string, index: number, w = 1920, h = 1080, desc = "", cats = "") => ({
     title, index,
     imageinfo: [{ thumburl: `https://thumb.wikimedia.org/t/${index}.jpg`, thumbwidth: w, thumbheight: h, descriptionurl: "https://commons.wikimedia.org/wiki/F",
-      extmetadata: { Artist: { value: "<a>Ann</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
+      extmetadata: { Artist: { value: "<a>Ann</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" }, ImageDescription: { value: desc }, Categories: { value: cats } } }],
   });
-  it("takes the first wide photo whose title names the city as a whole word", async () => {
-    mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: {
-      a: page("File:Muruntau mine.jpg", 1),
-      b: page("File:Murun portrait.jpg", 2, 1000, 1500),
-      c: page("File:Murun city view 2019.jpg", 3),
-    } } }]]);
+  const commons = (pages: Record<string, unknown>) => mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages } }]]);
+  const searches = (calls: Array<{ url: string }>) => calls.map((c) => new URL(c.url).searchParams.get("gsrsearch"));
+
+  it("takes the wide photo whose title names the city as a whole word", async () => {
+    commons({ a: page("File:Muruntau mine.jpg", 1), b: page("File:Murun portrait.jpg", 2, 1000, 1500), c: page("File:Murun city view 2019.jpg", 3) });
     expect(await cityPhoto("Murun, Mongolia")).toEqual({
       url: "https://thumb.wikimedia.org/t/3.jpg",
       attribution: { name: "Ann / CC BY-SA 4.0 (Wikimedia Commons)", uri: "https://commons.wikimedia.org/wiki/F" },
     });
   });
+
   it("returns null for an empty city", async () => {
     expect(await cityPhoto("")).toBeNull();
   });
-  it("a variant searches for it and needs it in the title", async () => {
-    const calls = mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: {
-      a: page("File:Erdenet skyline.jpg", 1),
+
+  it("never shows a shot from a plane, one building, a map or a logo: no photo beats a wrong one", async () => {
+    const wrong = {
+      a: page("File:Erdenet from airplane window.jpg", 1),
+      b: page("File:Erdenet town aerial view.jpg", 2, 1920, 1280, "Erdenet town and its area from the air onboard MIAT Boeing 787-9"),
+      c: page("File:Erdenet Thermal Power Plant.jpg", 3),
+      d: page("File:Map of Erdenet.jpg", 4),
+      e: page("File:Erdenet logo.jpg", 5),
+      f: page("File:Erdenet 04.jpg", 6, 1920, 1440, "City Erdenet in Mongolia", "Buildings in Erdenet"),
+      g: page("File:Erdenet panorama.png", 7),
+    };
+    commons(wrong);
+    expect(await cityPhoto("Erdenet", null, "Mongolia")).toBeNull();
+    resetAmbientCache();
+    commons({ ...wrong, h: page("File:Erdenet city in winter - panoramio.jpg", 40, 1920, 444, "Erdenet city in winter") });
+    expect((await cityPhoto("Erdenet", null, "Mongolia"))?.url).toBe("https://thumb.wikimedia.org/t/40.jpg");
+  });
+
+  it("rejects 'from airplane window' style files and scores panoramas of the city highest", () => {
+    const c = (title: string, text = "", w = 1920, h = 1080) => ({ title, text, cats: "", w, h });
+    expect(photoScore(c("File:Erdenet from airplane window.jpg"), "Erdenet", null)).toBeNull();
+    expect(photoScore(c("File:Erdenet from the plane.jpg"), "Erdenet", null)).toBeNull();
+    expect(photoScore(c("File:Erdenet 2023.jpg", "View through the window during the flight to Frankfurt"), "Erdenet", null)).toBeNull();
+    expect(photoScore(c("File:Erdenet, Mongolia - panoramio.jpg"), "Erdenet", null)).toBeNull();
+    const pano = photoScore(c("File:Erdenet in summer - panoramio.jpg", "", 1920, 553), "Erdenet", null)!;
+    const plain = photoScore(c("File:Erdenet 01.jpg", "Mongolian city Erdenet", 1920, 987), "Erdenet", null)!;
+    expect(pano).toBeGreaterThan(plain);
+    expect(plain).toBeGreaterThan(0);
+  });
+
+  it("adds the country to every search, and only when they find nothing searches the name alone", async () => {
+    const calls = commons({});
+    await cityPhoto("Darkhan", ["winter"], "Mongolia");
+    expect(searches(calls).sort()).toEqual([
+      "Darkhan Mongolia filetype:bitmap",
+      "Darkhan Mongolia panorama filetype:bitmap",
+      "Darkhan Mongolia skyline filetype:bitmap",
+      "Darkhan Mongolia winter filetype:bitmap",
+      "Darkhan filetype:bitmap",
+    ]);
+  });
+
+  it("the name-alone search can still find the city (the whole-word name check applies)", async () => {
+    const calls = mockFetch([[
+      "commons.wikimedia.org/w/api.php",
+      (url: string) => ({ query: { pages: new URL(url).searchParams.get("gsrsearch") === "Zuunmod filetype:bitmap" ? { a: page("File:Zuunmodon view.jpg", 1), b: page("File:Zuunmod city view.jpg", 2) } : {} } }),
+    ]]);
+    expect((await cityPhoto("Zuunmod", null, "Mongolia"))?.url).toBe("https://thumb.wikimedia.org/t/2.jpg");
+    expect(calls).toHaveLength(4);
+    resetAmbientCache();
+    const found = commons({ a: page("File:Zuunmod city view.jpg", 1) });
+    await cityPhoto("Zuunmod", null, "Mongolia");
+    expect(found).toHaveLength(3);
+  });
+
+  it("prefers the night or winter view the sky shows, and the plain view otherwise", async () => {
+    commons({
+      a: page("File:Erdenet in summer - panoramio.jpg", 1, 1920, 553),
       b: page("File:Erdenet Winter Palace.jpg", 2),
       c: page("File:Erdenet city in winter 2020.jpg", 3),
-    } } }]]);
-    expect((await cityPhoto("Erdenet", "winter"))?.url).toBe("https://thumb.wikimedia.org/t/3.jpg");
-    expect(new URL(calls[0].url).searchParams.get("gsrsearch")).toBe("Erdenet city winter filetype:bitmap");
-    mockFetch([["commons.wikimedia.org/w/api.php", { query: { pages: { a: page("File:Erdenet skyline.jpg", 1) } } }]]);
-    expect(await cityPhoto("Erdenet", "night")).toBeNull();
+    });
+    expect((await cityPhoto("Erdenet", ["winter"], "Mongolia"))?.url).toBe("https://thumb.wikimedia.org/t/3.jpg");
+    expect((await cityPhoto("Erdenet", [], "Mongolia"))?.url).toBe("https://thumb.wikimedia.org/t/1.jpg");
   });
-  it("picks night after dark, winter in snow or deep cold, else the plain photo", () => {
+
+  it("keeps a miss or a failure an hour, so a refresh does not search again", async () => {
+    const t0 = Date.now();
+    let calls = mockFetch([]);
+    expect(await cityPhoto("Erdenet", null, "Mongolia")).toBeNull();
+    expect(calls).toHaveLength(4);
+    calls = commons({});
+    vi.spyOn(Date, "now").mockReturnValue(t0 + 30 * 60_000);
+    expect(await cityPhoto("Erdenet", null, "Mongolia")).toBeNull();
+    expect(calls).toHaveLength(0);
+    vi.spyOn(Date, "now").mockReturnValue(t0 + 61 * 60_000);
+    expect(await cityPhoto("Erdenet", null, "Mongolia")).toBeNull();
+    expect(calls).toHaveLength(4);
+    // Nothing found is kept an hour too.
+    vi.spyOn(Date, "now").mockReturnValue(t0 + 90 * 60_000);
+    expect(await cityPhoto("Erdenet", null, "Mongolia")).toBeNull();
+    expect(calls).toHaveLength(4);
+  });
+
+  it("asks for night after dark, winter in snow or deep cold, both, or neither", () => {
     const sky = (kind: "clear" | "snow", isDay: boolean, known?: boolean) => ({ kind, intensity: 0, isDay, windKph: null, cloudCover: null, ...(known === false ? { known } : {}) });
-    expect(photoVariant(sky("clear", false), 10)).toBe("night");
-    expect(photoVariant(sky("snow", true), 0)).toBe("winter");
-    expect(photoVariant(sky("clear", true), -12)).toBe("winter");
-    expect(photoVariant(sky("clear", true), 4)).toBeNull();
-    expect(photoVariant(sky("clear", false, false), -12)).toBeNull();
-    expect(photoVariant(null, -12)).toBeNull();
+    expect(photoVariants(sky("clear", false), 10)).toEqual(["night"]);
+    expect(photoVariants(sky("snow", true), 0)).toEqual(["winter"]);
+    expect(photoVariants(sky("clear", true), -12)).toEqual(["winter"]);
+    expect(photoVariants(sky("snow", false), -12)).toEqual(["night", "winter"]);
+    expect(photoVariants(sky("clear", true), 4)).toEqual([]);
+    expect(photoVariants(sky("clear", false, false), -12)).toBeNull();
+    expect(photoVariants(null, -12)).toBeNull();
   });
 });
 
@@ -801,6 +918,21 @@ describe("weather-aware city photo in the snapshot", () => {
     const calls = routes({ ...OPEN_METEO, current: { ...OPEN_METEO.current, temperature_2m: 12, weather_code: 1 } });
     expect((await getAmbient(await darkhan(), "en", NOW)).photo?.url).toBe("https://thumb.wikimedia.org/t/1.jpg");
     expect(calls.some((c) => /winter|night/.test(c.url))).toBe(false);
+  });
+  it("names a device position without a locality by reverse geocoding (English, city zoom, the ~1 km cell)", async () => {
+    const calls = mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+      ["nominatim.openstreetmap.org/reverse", { address: { city: "Darkhan", country: "Mongolia" } }],
+      ["commons.wikimedia.org/w/api.php", (u: string) => commons(u)],
+    ]);
+    const a = await getAmbient(await locate(new URLSearchParams("lat=49.4867&lng=105.9228"), new Headers()), "mn", NOW);
+    expect(a.photo?.url).toBe("https://thumb.wikimedia.org/t/2.jpg");
+    const rev = calls.filter((c) => c.url.includes("nominatim") && c.url.includes("zoom=10")).map((c) => new URL(c.url).searchParams);
+    expect(rev).toHaveLength(1);
+    expect([rev[0].get("lat"), rev[0].get("lon"), rev[0].get("accept-language")]).toEqual(["49.49", "105.92", "en"]);
+    const q = calls.filter((c) => c.url.includes("commons")).map((c) => new URL(c.url).searchParams.get("gsrsearch"));
+    expect(q.every((s) => s?.startsWith("Darkhan Mongolia"))).toBe(true);
   });
 });
 

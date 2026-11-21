@@ -10,7 +10,7 @@ export const openApp: Tool = {
   description:
     "Show a button that opens an app installed on the person's device (or its web version). Use when they ask to open or launch an app. " +
     `Known apps: ${APPS.map((a) => a.name).join(", ")}. ` +
-    "It does NOT open the app by itself: say the button is ready, never that the app is open. Unknown apps return close matches; offer those, do not guess.",
+    "It does NOT open the app by itself: say the button is ready, never that the app is open. Netflix has no public API: it can open Netflix or search a title, never sign in, play or read their account. Unknown apps return close matches; offer those, do not guess.",
   parameters: {
     type: "object",
     properties: {
@@ -18,7 +18,7 @@ export const openApp: Tool = {
       target: {
         type: "string",
         description:
-          "Optional, empty string if none: search text (Spotify, YouTube, Google Maps), an email address (Mail), a phone number (Phone, WhatsApp), " +
+          "Optional, empty string if none: search text (Spotify, YouTube, Google Maps, Amap, Baidu Maps), a film or show title (Netflix), an email address (Mail), a phone number (Phone, WhatsApp), " +
           `a @username (Telegram) or a Windows settings page (${Object.keys(SETTINGS_PAGES).join(", ")})`,
       },
     },

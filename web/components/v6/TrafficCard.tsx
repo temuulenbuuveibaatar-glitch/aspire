@@ -110,17 +110,28 @@ export function TrafficCard({ lang, now, city, traffic, credit, down = false, go
         {busiest.length > 0 && (
           <div className="min-w-0 flex-1">
             <h3 className="mt-3 text-meta text-ink-faint xl:mt-0">{t.busiest}</h3>
-            <ul className="divide-y divide-line">
+            {/* One grid for all rows (each row a subgrid): load, count and age line up in columns; the
+                road name takes what is left and wraps (never cut, so large text and zoom keep it whole). Phones
+                drop the age column (the card's source line carries it) so the name keeps its room. */}
+            <ul data-rows="busiest" className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 divide-y divide-line sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               {busiest.map((c) => {
                 const a = ageS(c.detectedAt, now);
                 return (
-                  <li key={c.id} className="flex min-h-10 items-center gap-2 py-1">
-                    <span lang="mn" className="min-w-0 flex-1 truncate text-copy text-ink" title={c.name}>
+                  <li key={c.id} className="col-span-3 grid sm:col-span-4 min-h-10 grid-cols-subgrid items-center py-1">
+                    <span lang="mn" className="min-w-0 text-copy text-ink [overflow-wrap:anywhere]">
                       {c.name}
                     </span>
-                    {c.load && <span className="shrink-0 text-meta text-ink-muted">{t.load[c.load]}</span>}
-                    {c.vehicles != null && <data value={c.vehicles} className="num shrink-0 text-copy text-ink">{c.vehicles}</data>}
-                    {a != null && <span className="num shrink-0 text-meta text-ink-faint">{ageText(a, lang)}</span>}
+                    <span className="text-meta whitespace-nowrap text-ink-muted">{c.load ? t.load[c.load] : ""}</span>
+                    {c.vehicles != null ? (
+                      // The bare digit is shown; screen readers hear the phrase ("12 vehicles counted").
+                      <span className="num text-right text-copy text-ink">
+                        <data aria-hidden value={c.vehicles}>{c.vehicles}</data>
+                        <span className="sr-only">{fill(t.vehicles, { n: c.vehicles }, lang)}</span>
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="num hidden text-right text-meta whitespace-nowrap text-ink-faint sm:block">{a != null ? ageText(a, lang) : ""}</span>
                   </li>
                 );
               })}

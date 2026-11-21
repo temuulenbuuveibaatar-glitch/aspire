@@ -1,6 +1,7 @@
 // Any AI can be the brain. Providers are tried in BRAIN_ORDER; unconfigured ones
 // are skipped, and if one fails (outage, rate limit) the next one answers.
 import type { Lang } from "@/lib/lang";
+import { type Photo, PHOTO_UNAVAILABLE, VISION_BRAINS } from "@/lib/photo";
 import type { ClientAction, DeviceContext, ToolContext, ToolStep } from "@/lib/tools";
 import { claude } from "./claude";
 import { gemini } from "./gemini";
@@ -49,9 +50,14 @@ export async function ask(
    * the person is (time zone, city, country, network position), validated by the route.
    */
   extra: AskExtra = {},
+  /** A checked photo (lib/photo.ts parsePhoto). Only vision providers see it; never stored or logged. */
+  photo?: Photo,
 ): Promise<AskResult> {
-  const brains = activeBrains();
-  if (brains.length === 0) throw new NoBrainConfigured();
+  const all = activeBrains();
+  if (all.length === 0) throw new NoBrainConfigured();
+  const brains = photo ? all.filter((b) => VISION_BRAINS.has(b.name)) : all;
+  const unreadable = (): AskResult => ({ reply: PHOTO_UNAVAILABLE[lang], brain: "none", actions: [], steps: [], sources: [] });
+  if (brains.length === 0) return unreadable();
 
   // Every provider wants the conversation to start with the person, not with an earlier reply,
   // and Claude rejects empty turns (a failed answer saved as "").
@@ -61,7 +67,7 @@ export async function ask(
   let lastError: unknown;
   for (const brain of brains) {
     // Fresh run per provider so a failed attempt leaves no half-done actions behind.
-    const run: AgentRun = { ctx: { now, device, actions: [], lang, ...extra }, steps: [], sources: [] };
+    const run: AgentRun = { ctx: { now, device, actions: [], lang, ...extra }, steps: [], sources: [], photo };
     try {
       const reply = await brain.ask(text, lang, recent, run);
       return { reply, brain: brain.name, actions: run.ctx.actions, steps: run.steps, sources: run.sources };
@@ -70,5 +76,7 @@ export async function ask(
       console.error(`[brain:${brain.name}] failed, trying next`, e instanceof Error ? e.message.slice(0, 300) : e);
     }
   }
+  // Never guess what a photo says: a plain "unavailable" line instead of an error.
+  if (photo) return unreadable();
   throw lastError;
 }

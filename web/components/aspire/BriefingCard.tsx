@@ -3,7 +3,7 @@
 import { Newspaper, RotateCw, Sunrise, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deviceTimeZone, localDate, shouldBrief } from "@/lib/briefing-day";
-import type { Lang } from "@/lib/lang";
+import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
 import type { Headline } from "@/lib/news";
 import type { Reminder, Title } from "@/lib/tools/types";
 import type { UI } from "@/lib/ui-text";
@@ -35,9 +35,15 @@ export function BriefingCard({
   gmailError,
   onReconnect,
   headlines = [],
+  lang = "en",
+  newTab = "opens in a new tab",
 }: {
   text: string;
   t: T;
+  /** The briefing's language: the hint for each headline's own language. */
+  lang?: Lang;
+  /** Said after each headline link ("opens in a new tab"), in the app's language. */
+  newTab?: string;
   onReplay: () => void;
   headlines?: Headline[];
   /** Optional: show a "Reconnect Gmail" button (e.g. open Settings, then Connections). */
@@ -69,8 +75,11 @@ export function BriefingCard({
               <a href={h.url} target="_blank" rel="noopener noreferrer" className="press flex min-h-12 items-start gap-2 py-2 hover:text-hud focus-visible:text-hud">
                 <Newspaper aria-hidden className="mt-1 size-4 shrink-0 text-hud" />
                 <span className="min-w-0">
-                  <span className="line-clamp-2 text-body text-ink">{h.title}</span>
+                  <span lang={HTML_LANG[detectTextLanguage(h.title, lang)]} className="line-clamp-2 text-body text-ink">
+                    {h.title}
+                  </span>
                   <span className="block font-mono text-label text-ink-faint">{h.source}</span>
+                  <span className="sr-only">, {newTab}</span>
                 </span>
               </a>
             </li>
@@ -150,8 +159,10 @@ export function useDailyBriefing({
     const data = (await res.json().catch(() => null)) as Omit<Briefing, "lang"> | null;
     if (!data || typeof data.text !== "string" || !data.text) return;
     setBriefing({ text: data.text, mailCount: data.mailCount ?? null, gmailError: data.gmailError === true, lang: l, headlines: cleanHeadlines(data.headlines) });
-    latest.current.setLastDate(localDate(new Date()));
-    await latest.current.speak(data.text, l);
+    // Only a play the browser blocked (no tap yet) leaves the day for the next open. Played, failed
+    // (the voice is down: its notice was already said) or nothing returned (a live region) all count.
+    const result = await latest.current.speak(data.text, l);
+    if (result !== "blocked") latest.current.setLastDate(localDate(new Date()));
   }, []);
 
   useEffect(() => {

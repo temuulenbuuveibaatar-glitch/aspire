@@ -1,7 +1,8 @@
 import "server-only";
 // Google Maps Platform client (server only: the key comes from GOOGLE_MAPS_API_KEY and is
 // sent only in the X-Goog-Api-Key header, never in URLs, logs or error messages).
-// APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby, photo media), Weather API, Air Quality API.
+// APIs used: Routes API (computeRoutes), Places API (New) (searchText, searchNearby, photo media), Weather API, Air Quality API,
+// Geocoding API (reverse, for the town the city photo is searched by).
 import { googleLanguage, haversineKm, type LatLng } from "@/lib/geo";
 import type { Lang } from "@/lib/lang";
 import { validTimeZone } from "@/lib/tools/time";
@@ -194,6 +195,8 @@ async function requestRoutes(opts: {
   destination: string;
   mode: TravelMode;
   departureTime?: string;
+  /** Transit only: arrive by this ISO instant (the Routes API refuses both times at once). */
+  arrivalTime?: string;
   lang: Lang;
   alternatives?: boolean;
   /** The person's IANA zone: used for clock times when Google sends none. */
@@ -206,7 +209,8 @@ async function requestRoutes(opts: {
     travelMode: ROUTES_MODE[opts.mode],
     languageCode: googleLanguage(opts.lang),
   };
-  if (opts.departureTime && opts.mode !== "walk") body.departureTime = opts.departureTime;
+  if (opts.arrivalTime && opts.mode === "transit") body.arrivalTime = opts.arrivalTime;
+  else if (opts.departureTime && opts.mode !== "walk") body.departureTime = opts.departureTime;
   if (opts.alternatives) body.computeAlternativeRoutes = true;
   const data = await google<{ routes?: GRoute[] }>(ROUTES_URL, { body, fieldMask: ROUTE_FIELDS, background: opts.background });
   return data.routes ?? [];
@@ -262,6 +266,7 @@ export async function computeRoute(opts: {
   destination: string;
   mode: TravelMode;
   departureTime?: string;
+  arrivalTime?: string;
   lang: Lang;
   timeZone?: string;
 }): Promise<RouteResult> {
@@ -725,6 +730,18 @@ export async function cityCentre(near: LatLng, city: string | null, lang: Lang =
   if (typeof lat !== "number" || typeof lng !== "number") return null;
   const locality = p?.addressComponents?.find((a) => a.types?.includes("locality"))?.longText;
   return { lat, lng, city: locality || city || null };
+}
+
+/** The town and country at a position, in English (Geocoding API v4 reverse lookup); null parts when Google has none. */
+export async function reverseLocality(p: LatLng, opts: CallOpts = {}): Promise<{ city: string | null; country: string | null }> {
+  const q = new URLSearchParams({ "location.latitude": String(p.lat), "location.longitude": String(p.lng), languageCode: "en" });
+  const data = await google<{ results?: Array<{ addressComponents?: Array<{ longText?: string; types?: string[] }> }> }>(
+    `https://geocode.googleapis.com/v4beta/geocode/location?${q}`,
+    { background: opts.background },
+  );
+  const parts = (data.results ?? []).flatMap((r) => r.addressComponents ?? []);
+  const find = (type: string) => parts.find((a) => a.types?.includes(type))?.longText?.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 80) || null;
+  return { city: find("locality") ?? find("postal_town"), country: find("country") };
 }
 
 /** Live vs free-flow driving time between two points (Routes API, TRAFFIC_AWARE), in seconds. */

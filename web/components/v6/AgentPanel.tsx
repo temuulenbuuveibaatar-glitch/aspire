@@ -34,7 +34,7 @@ export function AgentPanel({ lang, name = "Aspire", orb, opener, messages, compo
   const t = textFor(lang);
   return (
     <aside aria-label={`${name}, ${t.agentRole}`} className={cn("v6-card flex min-h-0 flex-col gap-4 p-5", className)}>
-      <header className="flex items-center gap-2">
+      <header className="flex shrink-0 items-center gap-2">
         <span aria-hidden className="size-1.5 rounded-full bg-accent" />
         <h2 className="text-meta font-semibold tracking-[0.14em] text-ink uppercase">{name}</h2>
         <span className="truncate rounded-md bg-surface-3 px-2 py-0.5 text-meta text-ink-muted">{t.agentRole}</span>
@@ -44,11 +44,17 @@ export function AgentPanel({ lang, name = "Aspire", orb, opener, messages, compo
           </button>
         )}
       </header>
-      <div className="grid place-items-center text-accent">{orb}</div>
-      {opener && <div className="text-[1.5rem] leading-tight font-medium text-ink">{opener}</div>}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{messages}</div>
+      <div className="grid shrink-0 place-items-center text-accent">{orb}</div>
+      {opener && <div className="shrink-0 text-[1.5rem] leading-tight font-medium text-ink">{opener}</div>}
+      {/* Desktop: the thread scrolls in its own region under the orb. Top padding plus a fade taller than a
+          line means a line scrolled past the top melts away instead of showing half cut; scroll-padding keeps
+          a focused or followed message clear of that fade. Phones scroll the page, so no mask there (it
+          would also trap the fixed jump-to-latest button in the thread's stacking layer). */}
+      <div data-thread-scroll className="relative -mx-2 min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 lg:scroll-pt-10 lg:pt-4 lg:[mask-image:linear-gradient(to_bottom,transparent,#000_2.5rem)]">
+        {messages}
+      </div>
       {sources.length > 0 && (
-        <ul aria-label={t.sources} className="flex flex-wrap gap-1.5">
+        <ul aria-label={t.sources} className="flex shrink-0 flex-wrap gap-1.5">
           {sources.map((s) => (
             <li key={s.label} className="v6-chip max-w-full gap-1.5 px-2.5 py-1 text-meta" title={`${s.label} · ${s.source}`}>
               {s.kind === "live" && <LiveDot />}
@@ -59,8 +65,8 @@ export function AgentPanel({ lang, name = "Aspire", orb, opener, messages, compo
           ))}
         </ul>
       )}
-      {model && <p className="border-t border-line pt-3 text-meta text-ink-faint">{model}</p>}
-      {composer}
+      {model && <p className="shrink-0 border-t border-line pt-3 text-meta text-ink-faint">{model}</p>}
+      {composer && <div className="shrink-0">{composer}</div>}
     </aside>
   );
 }

@@ -6,11 +6,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lang } from "@/lib/lang";
 import type { VoiceStyle } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
+import { earcon } from "@/lib/earcon";
 
 export type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
+/** How a speak ended: it played, the browser blocked it (no tap yet), or it failed (no voice, bad audio). */
+export type SpeakResult = "played" | "blocked" | "failed";
 
 // Voice activity detection: stop recording after this much silence.
 const SILENCE_MS = 1300;
+/** The mic-open tone plays as recording starts: ignore that long before counting speech. */
+const CUE_MS = 200;
 const MAX_RECORD_MS = 15_000;
 const NO_SPEECH_MS = 7000;
 const SPEECH_RMS = 0.035;
@@ -71,6 +76,9 @@ export function useVoice(handlers: VoiceHandlers) {
   const out = useRef<{ ctx: AudioContext; analyser: AnalyserNode; bands: () => Float32Array } | null>(null);
   const lastAudio = useRef<{ url: string; text: string } | null>(null);
   const stopRecording = useRef<(() => void) | null>(null);
+  const cancelRecording = useRef<(() => void) | null>(null);
+  /** The last play was blocked: the next tap on the orb plays it instead of opening the mic. */
+  const pendingReplay = useRef(false);
 
   // ---- speaking ----
   /**
@@ -100,9 +108,13 @@ export function useVoice(handlers: VoiceHandlers) {
     }
   }, []);
 
-  /** Plays the reply (on the element unlocked in the tap) and feeds its loudness to the orb. */
-  const playUrl = useCallback(async (url: string) => {
+  /**
+   * Plays the reply (on the element unlocked in the tap) and feeds its loudness to the orb.
+   * Resolves "played" only when playback actually started (play() resolved).
+   */
+  const playUrl = useCallback(async (url: string): Promise<SpeakResult> => {
     const el = audioEl.current ?? (audioEl.current = new Audio());
+    let result: SpeakResult = "failed";
     void out.current?.ctx.resume();
     load(el, url);
     setPhase("speaking");
@@ -114,24 +126,34 @@ export function useVoice(handlers: VoiceHandlers) {
     };
     try {
       await el.play();
+      result = "played";
+      pendingReplay.current = false;
       bands.current = out.current?.bands ?? null;
       raf = requestAnimationFrame(meter);
       await new Promise<void>((resolve) => {
         el.onended = () => resolve();
         el.onpause = () => resolve();
       });
-    } catch {
-      /* autoplay blocked or bad audio: the answer stays on screen */
+    } catch (e) {
+      // Autoplay blocked (no tap yet): say so, since an eyes-free user cannot see the answer. The next
+      // tap on the orb plays it (core below).
+      if ((e as DOMException | null)?.name === "NotAllowedError") {
+        result = "blocked";
+        pendingReplay.current = true;
+        h.current.onNotice(UI[h.current.lang].tapToHear);
+      }
     } finally {
       cancelAnimationFrame(raf);
       level.current = 0;
       bands.current = null;
       setPhase("idle");
     }
+    return result;
   }, []);
 
+  /** Speaks `text`; resolves "played" only when the audio actually started playing. */
   const speak = useCallback(
-    async (text: string, l: Lang, voice?: VoiceStyle) => {
+    async (text: string, l: Lang, voice?: VoiceStyle): Promise<SpeakResult> => {
       const v = voice ?? h.current.voice();
       const res = await fetch("/api/speak", {
         method: "POST",
@@ -141,14 +163,14 @@ export function useVoice(handlers: VoiceHandlers) {
       if (!res?.ok) {
         h.current.onNotice(UI[l].voiceOffline);
         setPhase("idle");
-        return;
+        return "failed";
       }
       const engine = res.headers.get("X-Voice-Engine");
       if (engine) h.current.onEngine?.(engine, v, l);
       const url = URL.createObjectURL(await res.blob());
       if (lastAudio.current) URL.revokeObjectURL(lastAudio.current.url);
       lastAudio.current = { url, text };
-      await playUrl(url);
+      return playUrl(url);
     },
     [playUrl],
   );
@@ -156,11 +178,14 @@ export function useVoice(handlers: VoiceHandlers) {
   // ---- listening ----
   const listen = useCallback(async () => {
     const t = UI[h.current.lang];
+    // Tones on the reply context (unlocked in the tap), so they outlive the mic's own context.
+    const cue = (hz: number, times = 1) => earcon(out.current?.ctx, hz, times);
     h.current.onNotice("");
     // Create and resume the AudioContext synchronously inside the tap: phones (iOS Safari above
     // all) start a context made after an await "suspended", so the meter reads pure silence.
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      cue(220, 2);
       h.current.onNotice(t.noMic);
       h.current.onError();
       return;
@@ -174,6 +199,7 @@ export function useVoice(handlers: VoiceHandlers) {
       });
     } catch {
       void ctx.close();
+      cue(220, 2);
       h.current.onNotice(t.noMic);
       h.current.onError();
       return;
@@ -192,6 +218,7 @@ export function useVoice(handlers: VoiceHandlers) {
       stream.getTracks().forEach((tr) => tr.stop());
       void ctx.close();
       bands.current = null;
+      cue(220, 2);
       h.current.onNotice(t.noMic);
       h.current.onError();
       return;
@@ -204,6 +231,7 @@ export function useVoice(handlers: VoiceHandlers) {
     let lastVoice = started;
     let raf = 0;
     let cancelled = false;
+    let aborted = false;
     // Phone mics with auto gain sit far below a fixed threshold: speech = 3x the room's noise floor.
     let floor = 0.004;
     let peak = 0;
@@ -216,6 +244,11 @@ export function useVoice(handlers: VoiceHandlers) {
       spoke = true;
       finish(false);
     };
+    // Escape: drop the recording without sending it.
+    cancelRecording.current = () => {
+      aborted = true;
+      finish(true);
+    };
 
     const tick = () => {
       const r = rms(analyser, buf);
@@ -223,7 +256,7 @@ export function useVoice(handlers: VoiceHandlers) {
       level.current = Math.min(1, r * 8);
       const now = performance.now();
       if (!spoke) floor = floor * 0.95 + Math.min(r, 0.05) * 0.05;
-      if (r > Math.max(0.012, Math.min(SPEECH_RMS, floor * 3))) {
+      if (now - started > CUE_MS && r > Math.max(0.012, Math.min(SPEECH_RMS, floor * 3))) {
         spoke = true;
         lastVoice = now;
       }
@@ -239,15 +272,23 @@ export function useVoice(handlers: VoiceHandlers) {
     rec.onstop = async () => {
       cancelAnimationFrame(raf);
       stopRecording.current = null;
+      cancelRecording.current = null;
       stream.getTracks().forEach((tr) => tr.stop());
       void ctx.close();
       level.current = 0;
       bands.current = null;
+      if (aborted) {
+        cue(440); // the mic closed; nothing sent, nothing to announce
+        setPhase("idle");
+        return;
+      }
       if (cancelled || !spoke) {
+        cue(220, 2);
         h.current.onNotice(t.notHeard);
         setPhase("idle");
         return;
       }
+      cue(440);
       setPhase("thinking");
       const form = new FormData();
       const type = rec.mimeType || chunks[0]?.type || "audio/webm";
@@ -256,7 +297,8 @@ export function useVoice(handlers: VoiceHandlers) {
       const res = await fetch("/api/listen", { method: "POST", body: form }).catch(() => null);
       const data = (await res?.json().catch(() => null)) as { text?: string; lang?: Lang; error?: string } | null;
       if (!res?.ok || !data?.text || !data.lang) {
-        h.current.onNotice(data?.error === "voice_offline" ? t.voiceOffline : t.notHeard);
+        cue(220, 2);
+        h.current.onNotice(data?.error === "voice_offline" ? t.voiceInputOffline : t.notHeard);
         setPhase("idle");
         h.current.onError();
         return;
@@ -265,17 +307,30 @@ export function useVoice(handlers: VoiceHandlers) {
     };
 
     rec.start(250);
+    cue(880);
     setPhase("listening");
     raf = requestAnimationFrame(tick);
   }, []);
 
-  /** The mic button: listen when idle, finish recording while listening, stop speaking. */
+  /**
+   * The mic button: listen when idle (or play a reply the browser blocked), finish recording while
+   * listening, stop speaking.
+   */
   const core = useCallback(() => {
     if (phase !== "listening") unlock();
-    if (phase === "idle") void listen();
+    if (phase === "idle" && pendingReplay.current && lastAudio.current) {
+      pendingReplay.current = false;
+      void playUrl(lastAudio.current.url);
+    } else if (phase === "idle") void listen();
     else if (phase === "listening") stopRecording.current?.();
     else if (phase === "speaking") audioEl.current?.pause();
-  }, [phase, listen, unlock]);
+  }, [phase, listen, unlock, playUrl]);
+
+  /** Escape: drop the recording unsent, or stop speaking. */
+  const cancel = useCallback(() => {
+    if (phase === "listening") cancelRecording.current?.();
+    else if (phase === "speaking") audioEl.current?.pause();
+  }, [phase]);
 
   /** Hear a reply again (from memory when it was the last one spoken). */
   const replay = useCallback(
@@ -306,5 +361,5 @@ export function useVoice(handlers: VoiceHandlers) {
     [],
   );
 
-  return { phase, setPhase, level: () => level.current, bands: () => bands.current?.() ?? null, speak, core, replay, unlock };
+  return { phase, setPhase, level: () => level.current, bands: () => bands.current?.() ?? null, speak, core, cancel, replay, unlock };
 }

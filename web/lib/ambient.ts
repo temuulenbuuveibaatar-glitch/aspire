@@ -28,6 +28,7 @@ import {
   nearbyTaxis,
   nearbyTransitStops,
   openMeteoHourly,
+  reverseLocality,
   transitOptions,
   weatherCurrent,
   weatherDays,
@@ -47,6 +48,8 @@ export interface Located {
   city: string | null;
   /** A typed city's English name from the geocoder (the city photo is searched by it). */
   english?: string | null;
+  /** That city's country in English, from the geocoder ("Mongolia": the photo search names it). */
+  englishCountry?: string | null;
   country: string | null;
   timeZone: string | null;
 }
@@ -105,13 +108,34 @@ export async function locate(params: URLSearchParams, headers: Headers): Promise
   if (typed) {
     // Google first; without a key, over quota or on error, Open-Meteo (free): a typed city is never ignored.
     const find = async () => (mapsConfigured() ? await geocode(typed, "en", BG).catch(() => openMeteoGeocode(typed)) : openMeteoGeocode(typed));
-    const g = await memo(`geo:${typed.toLowerCase()}`, DAY_MS, find).catch(() => null);
-    // The typed text stays the label; the geocoder's English name (asked in English) finds the photo.
-    const english = g?.name.split(",")[0].trim() || null;
-    if (g) return { coords: { lat: round(g.lat, 4), lng: round(g.lng, 4) }, locatedBy: "city", city: typed, country: null, timeZone: null, ...(english ? { english } : {}) };
+    const [g, gn] = await Promise.all([
+      memo(`geo:${typed.toLowerCase()}`, DAY_MS, find).catch(() => null),
+      memoDay(`geonames:${typed.toLowerCase()}`, () => geoNames(typed), (v) => !v, null),
+    ]);
+    // GeoNames knows the city's country and time zone: used when both name the same place (40 km).
+    // Google's point is the precise one, unless it is over 3 km from the city's own point: then it
+    // is the middle of a whole region ("Singapore", "Tokyo") and GeoNames' centre is used.
+    const same = g && gn && haversineKm(g, gn) <= 40 ? gn : null;
+    const at = g && same && haversineKm(g, same) > 3 ? same : g;
+    // The typed text stays the label; the geocoder's English name and country (asked in English,
+    // "Darkhan, Mongolia") find the photo.
+    const parts = (g?.name ?? "").split(",").map((s) => s.replace(/\b\d[\d-]*\b/g, " ").replace(/\s+/g, " ").trim());
+    const english = parts[0] || null;
+    const englishCountry = parts.length > 1 ? parts[parts.length - 1] || null : null;
+    if (at) return { coords: { lat: round(at.lat, 4), lng: round(at.lng, 4) }, locatedBy: "city", city: typed, country: same?.country ?? null, timeZone: same?.timeZone ?? null, ...(english ? { english } : {}), ...(englishCountry ? { englishCountry } : {}) };
   }
   if (network) return { coords: network, locatedBy: "network", city, country, timeZone };
   return { coords: null, locatedBy: null, city: null, country: null, timeZone };
+}
+
+/** A city by name from GeoNames (Open-Meteo's free geocoder): its centre point, ISO country and time zone. */
+async function geoNames(name: string): Promise<(LatLng & { country: string | null; timeZone: string | null }) | null> {
+  const d = await getJson<{ results?: Array<Record<string, unknown>> }>(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(name)}`);
+  const r = d.results?.[0] ?? {};
+  const lat = finite(r.latitude), lng = finite(r.longitude);
+  if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  const cc = typeof r.country_code === "string" && /^[A-Z]{2}$/.test(r.country_code) ? r.country_code : null;
+  return { lat, lng, country: cc, timeZone: validTimeZone(r.timezone) };
 }
 
 // ---- condition mapping ------------------------------------------------------------------------
@@ -481,62 +505,152 @@ const cell10 = (p: LatLng) => `${round(p.lat, 1)},${round(p.lng, 1)}`;
 
 const stripTags = (h: string) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-/** The city photo to look for first, by the weather and the hour; the plain skyline is the fallback. */
-export type PhotoVariant = "night" | "winter";
-const VARIANTS: Record<PhotoVariant, { queries: string[]; title: RegExp }> = {
-  night: { queries: ["skyline night", "city night", "night panorama"], title: /night|nacht|dusk|evening/i },
-  winter: { queries: ["city winter", "winter panorama", "skyline snow"], title: /winter|snow/i },
-};
-/** A variant's title must also say it shows the city ("Erdenet city in winter", not "Winter Palace"). */
-const CITY_VIEW = /\b(?:skyline|panorama|cityscape|city|view|aerial|overview|downtown)\b/i;
+/** A memo for lookups that may come back empty: a hit is kept a day, a miss or a failure an hour (not retried every refresh). */
+async function memoDay<T>(key: string, fn: () => Promise<T>, missed: (v: T) => boolean, onError: T): Promise<T> {
+  const v = await memo(key, DAY_MS, () => fn().catch(() => onError));
+  const hit = memos.get(key);
+  if (hit && missed(v)) hit.ttl = HOUR_MS;
+  return v;
+}
 
-/** Night after dark; winter when it snows, sleets, hails or is -5 C or colder; else none. */
-export function photoVariant(sky: AmbientSky | null | undefined, tempC: number | null | undefined): PhotoVariant | null {
+/** What the city photo should show, by the hour and the weather: a night view after dark, a winter one in snow or deep cold. */
+export type PhotoVariant = "night" | "winter";
+const VARIANT_WORDS: Record<PhotoVariant, RegExp> = {
+  night: /\b(?:night|nacht|dusk|evening|twilight|blue hour)\b/i,
+  winter: /\b(?:winter|snow\w*|frost\w*)\b/i,
+};
+const SUMMER = /\bsummer\b/i;
+
+/**
+ * Night after dark, winter when it snows, sleets, hails or is -5 C or colder (both can hold); []
+ * on a mild day; null when no weather backs the sky (then no preference either way).
+ */
+export function photoVariants(sky: AmbientSky | null | undefined, tempC: number | null | undefined): PhotoVariant[] | null {
   if (!sky || sky.known === false) return null;
-  if (!sky.isDay) return "night";
-  return sky.kind === "snow" || sky.kind === "sleet" || sky.kind === "hail" || (typeof tempC === "number" && tempC <= -5) ? "winter" : null;
+  const winter = sky.kind === "snow" || sky.kind === "sleet" || sky.kind === "hail" || (typeof tempC === "number" && tempC <= -5);
+  return [...(sky.isDay ? [] : ["night" as const]), ...(winter ? ["winter" as const] : [])];
+}
+
+// What the owner wants is the WHOLE city, seen from the ground or a hill. Never a shot from a plane
+// (wing, window), never one building, monument, vehicle or nature subject, never a map, flag or logo.
+const FROM_PLANE = /\b(?:air ?planes?|aeroplanes?|aircraft|planes?|wings?|windows?|flights?|in-flight|from the air|aerial|airborne|on ?board|boeing|airbus|airlines?|airways)\b/i;
+const NOT_PHOTO = /\b(?:maps?|plans?|flags?|logos?|emblems?|coats? of arms|banners?|seals?|diagrams?|charts?|locator|symbols?|icons?|stamps?|posters?|postcards?)\b/i;
+const ONE_THING = /\b(?:hotels?|buildings?|monuments?|memorials?|statues?|sculptures?|busts?|church(?:es)?|cathedrals?|temples?|monaster(?:y|ies)|mosques?|buddha|mines?|mining|plants?|factor(?:y|ies)|stations?|stadiums?|museums?|malls?|markets?|towers?|bridges?|gates?|parks?|squares?|airports?|hospitals?|universit(?:y|ies)|campus|schools?|offices?|theat(?:er|re)s?|palaces?|parliament|cars?|volga|gaz|bus(?:es)?|trains?|trams?|locomotives?|trucks?|vehicles?|portraits?|interiors?|exteriors?|facades?|fa[cç]ades?|entrances?|signs?|people|protests?|marathons?|festivals?|concerts?|near|outskirts|forests?|flowers?|insects?|animals?|horses?)\b/i;
+/** Says it shows the city as a whole (title, description, or a category such as "Cityscapes of X"). "Panoramio" is a website. */
+const WHOLE_CITY = /\b(?:skylines?|panoram(?:a|as|ic|ics)|pano|cityscapes?|townscapes?|overview|views? (?:of|from|over|on|to|across)|vista|old town|city view|general view)\b/i;
+const CITYISH = /\b(?:city|town|downtown|centre|center|view|landscape)\b/i;
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A Commons file as photoScore sees it: title, description, categories and the 1920 px thumbnail's size. */
+export interface PhotoCandidate {
+  title: string;
+  text: string;
+  cats: string;
+  w: number;
+  h: number;
+}
+
+/**
+ * How well a Commons file shows the whole city, or null when it must not be shown: from a plane, a
+ * map or logo, one building, vehicle or nature subject, not about this city, or the wrong shape.
+ * Higher is better: whole-city words, a panorama's shape, the city in the title, the wanted variant.
+ */
+export function photoScore(c: PhotoCandidate, city: string, want: PhotoVariant[] | null): number | null {
+  const name = city.split(",")[0].trim();
+  if (!name) return null;
+  // The city name as a whole word ("Murun" must not match "Muruntau").
+  const named = new RegExp(`(^|[^\\p{L}])${escapeRe(name)}([^\\p{L}]|$)`, "iu");
+  const title = c.title.replace(/^File:/i, "").replace(/\.[a-z]+$/i, "");
+  const all = `${title} | ${c.text} | ${c.cats}`;
+  if (!/\.jpe?g$/i.test(c.title) || FROM_PLANE.test(all) || NOT_PHOTO.test(all) || ONE_THING.test(title)) return null;
+  const whole = WHOLE_CITY.test(all);
+  // One thing named only in the description or a category is still one thing, unless the file
+  // says it is a view of the city ("Panorama from the TV tower").
+  if (!whole && ONE_THING.test(`${c.text} | ${c.cats}`)) return null;
+  const ratio = c.w / Math.max(1, c.h);
+  if (c.w < 1200 || c.h < 400 || ratio < 1.3) return null;
+  let view = WHOLE_CITY.test(title) ? 3 : whole ? 2 : 0;
+  if (CITYISH.test(`${title} | ${c.text}`)) view += 1;
+  if (ratio >= 2.2) view += 3;
+  // "Erdenet 01", "Darkhan (2019)": a file named just for the city is usually a view of it.
+  if (new RegExp(`^${escapeRe(name)}[\\s\\d()_.,-]*$`, "iu").test(title)) view += 1;
+  const inTitle = named.test(title);
+  // Named only in a category: only a clear view of the city counts.
+  if (!view || (!inTitle && !named.test(c.text) && (!named.test(c.cats) || view < 2))) return null;
+  let score = view + (inTitle ? 1 : 0);
+  if (want) {
+    for (const v of ["night", "winter"] as const) {
+      if (VARIANT_WORDS[v].test(all)) score += want.includes(v) ? 4 : v === "night" ? -3 : -2;
+    }
+    if (want.includes("winter") && SUMMER.test(all)) score -= 2;
+  }
+  return score;
+}
+
+type Candidate = PhotoCandidate & { index: number; url: string; uri: string; artist: string; licence: string };
+
+/** One Commons file search, memoised a day; an empty answer or a failure is kept an hour. */
+async function commonsSearch(search: string, limit: number): Promise<Candidate[]> {
+  type Info = { thumburl?: string; thumbwidth?: number; thumbheight?: number; descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
+  type Page = { title?: string; index?: number; imageinfo?: Info[] };
+  const q = new URLSearchParams({
+    action: "query", format: "json", origin: "*", generator: "search", gsrnamespace: "6", gsrlimit: String(limit),
+    gsrsearch: `${search} filetype:bitmap`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1920",
+    iiextmetadatafilter: "Artist|LicenseShortName|ImageDescription|Categories", iiextmetadatalanguage: "en",
+  });
+  return memoDay(`commons:${search.toLowerCase()}`, async () => {
+    const data = await getJson<{ query?: { pages?: Record<string, Page> } }>(`https://commons.wikimedia.org/w/api.php?${q}`);
+    return Object.values(data.query?.pages ?? {}).flatMap((pg): Candidate[] => {
+      const i = pg.imageinfo?.[0];
+      const url = i?.thumburl ?? "";
+      if (!pg.title || !/^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(url)) return [];
+      const field = (k: string, max: number) => { const v = i?.extmetadata?.[k]?.value; return typeof v === "string" ? stripTags(v).slice(0, max) : ""; };
+      const uri = i?.descriptionurl && /^https:\/\/commons\.wikimedia\.org\//.test(i.descriptionurl) ? i.descriptionurl : "https://commons.wikimedia.org";
+      return [{
+        title: pg.title, index: pg.index ?? 99, url, uri, w: i?.thumbwidth ?? 0, h: i?.thumbheight ?? 0,
+        text: field("ImageDescription", 400), cats: field("Categories", 400).replace(/\|/g, " | "),
+        artist: field("Artist", 40), licence: field("LicenseShortName", 30),
+      }];
+    });
+  }, (v) => !v.length, []);
 }
 
 /**
  * A WHOLE-CITY photo (skyline, panorama, city view) from Wikimedia Commons, searched by the city's
- * name: the first wide landscape JPEG whose title names the city, as a 1920 px thumbnail, credited
- * with author and licence. With a variant, only photos whose title also says it ("Erdenet in
- * winter", "Ulaanbaatar at night"). null when none; throws when a request fails (not memoised).
+ * English name and its country ("Darkhan Mongolia": no other Darkhan), as a 1920 px thumbnail
+ * credited with author and licence. The best by photoScore wins, so a night or winter view is
+ * preferred when that is what the sky shows. null when nothing fits: no photo beats a wrong one.
+ * Never throws (each search is memoised: a day, or an hour when it found nothing or failed).
  */
-export async function cityPhoto(city: string, variant?: PhotoVariant): Promise<AmbientPhoto | null> {
+export async function cityPhoto(city: string, want: PhotoVariant[] | null = null, country: string | null = null): Promise<AmbientPhoto | null> {
   const name = city.split(",")[0].trim();
   if (!name) return null;
-  type Info = { thumburl?: string; thumbwidth?: number; thumbheight?: number; descriptionurl?: string; extmetadata?: Record<string, { value?: unknown }> };
-  type Page = { title?: string; index?: number; imageinfo?: Info[] };
-  // The city name as a whole word ("Murun" must not match "Muruntau").
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const wordRe = new RegExp(`(^|[^\\p{L}])${escaped}([^\\p{L}]|$)`, "iu");
-  // Whole city only: a single building, hotel, monument or vehicle is not "the city".
-  const notCity = /hotel|building|monument|statue|church|temple|monastery|mine|plant|factory|station|stadium|museum|mall|tower|bridge|car\b|volga|bus\b|portrait|interior|sign/i;
-  const want = variant ? VARIANTS[variant] : null;
-  for (const words of want?.queries ?? ["skyline", "panorama", "cityscape", "aerial view", "city view"]) {
-    const q = new URLSearchParams({
-      action: "query", format: "json", origin: "*", generator: "search", gsrnamespace: "6", gsrlimit: "10",
-      gsrsearch: `${name} ${words} filetype:bitmap`, prop: "imageinfo", iiprop: "url|extmetadata", iiurlwidth: "1920",
-    });
-    const data = await getJson<{ query?: { pages?: Record<string, Page> } }>(`https://commons.wikimedia.org/w/api.php?${q}`);
-    const hit = Object.values(data.query?.pages ?? {})
-      .sort((a, b) => (a.index ?? 99) - (b.index ?? 99))
-      .find((pg) => {
-        const i = pg.imageinfo?.[0];
-        const w = i?.thumbwidth ?? 0, h = i?.thumbheight ?? 0;
-        return wordRe.test(pg.title ?? "") && !notCity.test(pg.title ?? "") && /\.jpe?g$/i.test(pg.title ?? "") && (!want || (want.title.test(pg.title ?? "") && CITY_VIEW.test(pg.title ?? ""))) &&
-          /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(i?.thumburl ?? "") && w >= 1200 && h > 0 && w / h >= 1.3;
-      });
-    const info = hit?.imageinfo?.[0];
-    if (!info?.thumburl) continue;
-    const field = (k: string) => { const v = info.extmetadata?.[k]?.value; return typeof v === "string" ? stripTags(v) : ""; };
-    const artist = field("Artist").slice(0, 40), licence = field("LicenseShortName").slice(0, 30);
-    if (!artist || !licence) continue;
-    const uri = info.descriptionurl && /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : "https://commons.wikimedia.org";
-    return { url: info.thumburl, attribution: { name: `${artist} / ${licence} (Wikimedia Commons)`, uri } };
-  }
-  return null;
+  const base = [name, country?.trim()].filter(Boolean).join(" ");
+  const seen = new Set<string>();
+  let best = null as Candidate | null; // (assigned inside pick: keep the declared type)
+  let bestScore = -Infinity;
+  // In search order: a tie goes to the earlier search and the higher rank.
+  const pick = (lists: Candidate[][]) => {
+    for (const list of lists) {
+      for (const c of [...list].sort((a, b) => a.index - b.index)) {
+        if (seen.has(c.title)) continue;
+        seen.add(c.title);
+        const score = c.artist && c.licence ? photoScore(c, name, want) : null;
+        if (score !== null && score > bestScore) [best, bestScore] = [c, score];
+      }
+    }
+  };
+  pick(await Promise.all([
+    commonsSearch(base, 50),
+    commonsSearch(`${base} panorama`, 20),
+    commonsSearch(`${base} skyline`, 20),
+    ...(want ?? []).map((v) => commonsSearch(`${base} ${v}`, 20)),
+  ]));
+  // Small towns: the page may not name the country (or names it differently), so one more search by
+  // the name alone (photoScore still demands the name as a whole word).
+  if (!best && base !== name) pick([await commonsSearch(name, 50)]);
+  return best ? { url: best.url, attribution: { name: `${best.artist} / ${best.licence} (Wikimedia Commons)`, uri: best.uri } } : null;
 }
 
 const cell = (p: LatLng) => `${p.lat},${p.lng}`;
@@ -741,10 +855,7 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
   const osm = precise && !erd && !gStops.length && !open?.stops.length ? await osmPart(p, lang).catch(() => []) : [];
   // OSM stops carry their own `source`; stopsSource stays unset for them (it names a departures source).
   const stopsSource: Ambient["stopsSource"] = erd?.stops.length ? "erdenet-live" : gStops.length ? "google" : open?.stops.length ? "transitous" : undefined;
-  // Commons searches best by the English name: a typed city's English name from the geocoder (never
-  // the typed text: "Эрдэнэт" matches no Commons title), the network city (English) when it describes
-  // this position, else Google's centre asked in English (memoised a day), else the local name.
-  const english = loc.english ?? (loc.locatedBy === "city" ? null : loc.city) ?? (lang === "en" ? centre?.city : google ? (await centreFor(c, null, "en").catch(() => null))?.city : null) ?? city;
+  const [where, w] = await Promise.all([photoPlace(loc, c, lang === "en" ? (centre?.city ?? null) : null), world]);
   return {
     traffic: value(trafficR, null),
     city,
@@ -753,25 +864,53 @@ async function localFor(loc: Located & { coords: LatLng }, lang: Lang, now: Date
     // Map pins only: no "nearest taxi" readout.
     taxis: value(taxisR, []),
     // The WHOLE city only (skyline / panorama / cityscape from Commons). No landmark or hotel photos (owner).
-    photo: english ? await bestPhoto(english, await world) : null,
+    // A night or winter view when the sky shows one.
+    photo: where ? await cityPhoto(where.name, photoVariants(w.weather?.sky, w.weather?.tempC), where.country) : null,
     nextBus: erd ? erd.nextBus : (gBus ?? open?.nextBus ?? null),
   };
 }
 
-/** The city photo, memoised a day; "no photo" is kept only an hour, so a new upload or a fixed name shows soon. */
-async function photoFor(name: string, variant?: PhotoVariant): Promise<AmbientPhoto | null> {
-  const key = `city:${variant ?? ""}:${name.toLowerCase()}`;
-  const got = await memo(key, DAY_MS, () => cityPhoto(name, variant));
-  const hit = memos.get(key);
-  if (!got && hit) hit.ttl = HOUR_MS;
-  return got;
+const COMMONS_COUNTRY: Record<string, string> = { "Türkiye": "Turkey", Czechia: "Czech Republic" };
+
+/** "MN" -> "Mongolia" (English: Commons is searched in English). */
+function countryEn(iso: string | null): string | null {
+  if (!iso || !/^[A-Z]{2}$/.test(iso)) return null;
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" }).of(iso);
+    if (!name || name === iso) return null;
+    // The forms Commons uses: "Myanmar (Burma)" -> "Myanmar", "Hong Kong SAR China" -> "Hong Kong".
+    return COMMONS_COUNTRY[name] ?? name.replace(/\s*\(.*\)$/, "").replace(/ SAR China$/, "");
+  } catch {
+    return null;
+  }
 }
 
-/** The weather's variant (night, winter) when Commons has one, else the plain city photo; both asked at once. */
-async function bestPhoto(name: string, world: World): Promise<AmbientPhoto | null> {
-  const variant = photoVariant(world.weather?.sky, world.weather?.tempC);
-  const [v, plain] = await Promise.all([variant ? photoFor(name, variant).catch(() => null) : null, photoFor(name).catch(() => null)]);
-  return v ?? plain;
+/**
+ * The English town and country around a coarse cell: Google reverse geocoding (locality), else
+ * OpenStreetMap Nominatim at city zoom (10). Only the ~1 km cell is sent. A day; a miss an hour.
+ */
+async function placeAt(c: LatLng): Promise<{ city: string | null; country: string | null }> {
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 80) : null);
+  return memoDay(`place:${cell(c)}`, async () => {
+    const g = mapsConfigured() ? await reverseLocality(c, BG).catch(() => null) : null;
+    if (g?.city && g.country) return g;
+    const q = new URLSearchParams({ format: "jsonv2", lat: String(c.lat), lon: String(c.lng), zoom: "10", addressdetails: "1", "accept-language": "en" });
+    const a = (await getJson<{ address?: Record<string, unknown> }>(`https://nominatim.openstreetmap.org/reverse?${q}`).catch(() => null))?.address ?? {};
+    return { city: g?.city ?? text(a.city) ?? text(a.town) ?? text(a.village), country: g?.country ?? text(a.country) };
+  }, (v) => !v.city, { city: null, country: null });
+}
+
+/**
+ * The name and country Commons is searched by, both in English (never the typed or local text:
+ * "Эрдэнэт" matches no Commons title): a typed city's from the geocoder, the network city and
+ * country when they describe this position, Google's centre (English), else reverse geocoding.
+ */
+async function photoPlace(loc: Located, c: LatLng, centreEn: string | null): Promise<{ name: string; country: string | null } | null> {
+  const name = loc.english ?? (loc.locatedBy === "city" ? null : loc.city) ?? centreEn;
+  const country = loc.englishCountry ?? countryEn(loc.country);
+  const at = name && country ? null : await placeAt(c);
+  const found = name ?? at?.city ?? null;
+  return found ? { name: found, country: country ?? at?.country ?? null } : null;
 }
 
 /** "Erdenet" + "MN" -> "Erdenet, Mongolia" (the country in the person's language). */
@@ -824,6 +963,7 @@ export async function getAmbient(loc: Located, lang: Lang, now: Date = new Date(
   return {
     // Google's locality is in the person's language; the network city header is in English.
     place: placeName(local.city, loc.country, lang),
+    country: loc.country && /^[A-Z]{2}$/.test(loc.country) ? loc.country : null,
     address,
     coords: approx ? null : { lat: p.lat, lng: p.lng },
     locatedBy: loc.locatedBy,

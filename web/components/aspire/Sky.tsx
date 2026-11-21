@@ -2,7 +2,8 @@
 
 // The live sky. Two modes:
 // - overlay (over the city photo in Backdrop): clouds, precipitation, fog, storm flashes and, on a
-//   clear dark night, a few stars high up, over transparency. No gradient or vignette.
+//   clear dark night, a few stars high up, over transparency. No gradient or vignette. With `photo`,
+//   rain also beads on the glass (RainGlass, WebGL) and refracts the photo.
 // - full (login, no photo): a gradient per weather family x time-of-day phase that crossfades on
 //   change, stars at night and a vignette, plus everything above.
 // Particles live in a preallocated Float32Array pool, so a frame allocates nothing. The loop runs
@@ -10,6 +11,7 @@
 // still frame, no rAF, no flashes.
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { RainGlass } from "@/components/aspire/RainGlass";
 import { ORB_LIGHTNING_EVENT } from "@/components/ui/voice-orb";
 import { SKY_KINDS, type SkyKind } from "@/lib/ambient-types";
 import { useStill } from "@/lib/display-prefs";
@@ -31,6 +33,8 @@ export interface SkyProps {
   className?: string;
   /** Draw only particles, fog and flashes over transparency (the photo backdrop). */
   overlay?: boolean;
+  /** The https photo under the overlay: rain, drizzle and storm then also bead on the glass and refract it (WebGL). */
+  photo?: string | null;
 }
 
 export type Family = "clear" | "cloud" | "fog" | "rain" | "storm" | "snow";
@@ -112,17 +116,24 @@ const T_STREAK = 0, T_DOT = 1, T_PELLET = 2;
 const BASE: Record<SkyKind, number> = { clear: 0, partly: 0, cloudy: 0, fog: 0, drizzle: 60, rain: 180, storm: 320, snow: 120, sleet: 140, hail: 90 };
 type Range = readonly [number, number];
 const RAIN_V: readonly Range[] = [[450, 600], [650, 850], [900, 1200]];
-const SNOW_V: readonly Range[] = [[25, 35], [40, 55], [60, 80]];
+/** Near flakes are big soft bokeh that float slower than the mid layer (they read as close to the lens). */
+const SNOW_V: readonly Range[] = [[25, 35], [40, 55], [32, 46]];
 const SLEET_V: readonly Range[] = [[150, 190], [200, 250], [260, 320]];
 const HAIL_V: readonly Range[] = [[560, 640], [650, 740], [720, 820]];
-const SNOW_R: readonly Range[] = [[0.8, 1.2], [1.4, 2], [2.2, 3]];
+const SNOW_R: readonly Range[] = [[0.8, 1.2], [1.4, 2], [3, 5]];
 const HAIL_R: readonly Range[] = [[1.5, 1.9], [1.8, 2.2], [2.1, 2.5]];
-const LEN_BY: Partial<Record<SkyKind, Range>> = { drizzle: [6, 10], rain: [10, 20], storm: [14, 22], sleet: [8, 12], hail: [3, 6] };
+const HAIL_LEN: Range = [3, 6];
 const SPEED_BY: Partial<Record<SkyKind, number>> = { drizzle: 0.6, rain: 1, storm: 1.12, sleet: 0.85 };
-const LAYER_LEN = [0.8, 1, 1.35];
+/** Motion-blur length by depth (far thin and short, near long): a streak is the drop's path during one exposure. */
+const STREAK_LEN: readonly Range[] = [[15, 25], [26, 44], [45, 90]];
+const LEN_K: Partial<Record<SkyKind, number>> = { drizzle: 0.55, sleet: 0.75 };
+/** Stroke width by depth; drizzle is finer. */
+const RAIN_W = [0.8, 1.2, 1.9];
 const PARALLAX = [0.6, 0.8, 1];
-const RAIN_A = [0.2, 0.34, 0.5];
-const SNOW_A = [0.45, 0.65, 0.8];
+const RAIN_A = [0.3, 0.45, 0.65];
+/** Rain and storm never thin below this many streaks, even on a low-tier phone: a dozen strands read as dust, not rain. */
+const RAIN_FLOOR = 60;
+const SNOW_A = [0.45, 0.65, 0.5];
 const SLEET_A = [0.35, 0.5, 0.65];
 const HAIL_STYLE = [0.5, 0.6, 0.7].map((a) => `rgba(236, 242, 252, ${a})`);
 const HAIL_W = [2.6, 3.4, 4.4];
@@ -170,16 +181,85 @@ function drawNight(c: CanvasRenderingContext2D, w: number, h: number, vis: numbe
 
 interface Sys { kind: SkyKind; data: Float32Array; count: number; fade: number; dir: number; rand: () => number }
 
+/** A streak covers at least its own travel per frame (plus 10%), so at 30 fps it reads as a falling line, not a hopping dot. */
+export function streakLen(len: number, vy: number, fps: number): number {
+  return Math.max(len, (vy / fps) * 1.1);
+}
+
+/** Particles for a scene: base x intensity x screen area x device tier, a floor for rain and storm, then the still factor, capped at max. */
+export function particleBudget(kind: SkyKind, intensity: number, area: number, tier: number, still: boolean, max: number): number {
+  let n = BASE[kind] * (0.4 + 0.6 * intensity) * area * tier;
+  if (kind === "rain" || kind === "storm") n = Math.max(n, RAIN_FLOOR);
+  return Math.min(max, Math.round(n * (still ? 0.3 : 1)));
+}
+
+/** One rain streak on depth layer L (0 far .. 2 near) at u in 0..1: fall speed px/s, blur length px, width px. Length rises with speed. */
+export function rainStreak(kind: SkyKind, L: number, u: number, intensity: number, fps = 60): { vy: number; len: number; width: number } {
+  const at = (rg: Range) => rg[0] + (rg[1] - rg[0]) * u;
+  const vy = at(RAIN_V[L]) * (SPEED_BY[kind] ?? 1) * (0.92 + 0.16 * intensity);
+  return { vy, len: streakLen(at(STREAK_LEN[L]) * (LEN_K[kind] ?? 1), vy, fps), width: RAIN_W[L] * (kind === "drizzle" ? 0.6 : 1) };
+}
+
+/** Lightning waits at least 6 s between flashes (r in 0..1), so it never strobes. */
+export function flashDelay(r: number): number {
+  return 6000 + 8000 * clamp(r, 0, 1);
+}
+
+/** A faint single bolt as polyline points in a 0..100 box: from the top down to 40-60%, jagged sideways. */
+export function boltPoints(rand: () => number): string {
+  let x = 20 + 60 * rand();
+  const end = 40 + 20 * rand();
+  const pts = [`${x.toFixed(1)},0`];
+  for (let k = 1; k <= 10; k++) {
+    x = clamp(x + (rand() - 0.5) * 9, 2, 98);
+    pts.push(`${x.toFixed(1)},${((end * k) / 10).toFixed(1)}`);
+  }
+  return pts.join(" ");
+}
+
+/** A rain streak sprite: transparent tail fading in to a bright head at the bottom, soft at the sides. */
+function streakSprite(rgb: string): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = 8;
+  c.height = 64;
+  const g = c.getContext("2d");
+  if (!g) return c;
+  const v = g.createLinearGradient(0, 0, 0, 64);
+  v.addColorStop(0, `rgba(${rgb}, 0)`);
+  v.addColorStop(0.55, `rgba(${rgb}, 0.35)`);
+  v.addColorStop(0.92, `rgba(${rgb}, 1)`);
+  v.addColorStop(1, `rgba(${rgb}, 0.55)`);
+  g.fillStyle = v;
+  g.fillRect(0, 0, 8, 64);
+  g.globalCompositeOperation = "destination-in";
+  const s = g.createLinearGradient(0, 0, 8, 0);
+  s.addColorStop(0, "rgba(0, 0, 0, 0)");
+  s.addColorStop(0.5, "rgba(0, 0, 0, 1)");
+  s.addColorStop(1, "rgba(0, 0, 0, 0)");
+  g.fillStyle = s;
+  g.fillRect(0, 0, 8, 64);
+  return c;
+}
+
 function createEngine(canvas: HTMLCanvasElement, tier: number) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   const MAX = tier < 1 ? 260 : 520;
+  const FPS = tier < 1 ? 30 : 60;
   const night = document.createElement("canvas");
   // Flake sprites: crisp (far, mid) and soft bokeh (near); the Day pair keeps a slate rim for white skies.
   const crisp = sprite(32, [[0, "rgba(244,248,255,1)"], [0.42, "rgba(234,242,255,0.95)"], [0.62, "rgba(234,242,255,0.28)"], [1, "rgba(234,242,255,0)"]]);
   const crispDay = sprite(32, [[0, "rgba(248,250,255,1)"], [0.36, "rgba(240,245,252,0.95)"], [0.5, "rgba(70,85,110,0.5)"], [0.75, "rgba(70,85,110,0.16)"], [1, "rgba(70,85,110,0)"]]);
   const soft = sprite(64, [[0, "rgba(240,246,255,0.9)"], [0.3, "rgba(236,243,255,0.55)"], [0.65, "rgba(234,242,255,0.14)"], [1, "rgba(234,242,255,0)"]]);
   const softDay = sprite(64, [[0, "rgba(246,249,255,0.95)"], [0.26, "rgba(236,242,250,0.7)"], [0.42, "rgba(80,95,120,0.3)"], [0.7, "rgba(80,95,120,0.08)"], [1, "rgba(80,95,120,0)"]]);
+  // Streaks: cool blue at night and in storms, pale grey by day.
+  const streakDay = streakSprite("225, 232, 245");
+  const streakNight = streakSprite("170, 200, 255");
+  let streak = streakDay;
+  // Splash ripples near the bottom edge: a small ring buffer of x, y, age (s), size.
+  const SPLASHES = 48, SPLASH_T = 0.35;
+  const splash = new Float32Array(SPLASHES * 4).fill(SPLASH_T);
+  let splashAt = 0;
 
   let w = 0, h = 0, dpr = 1;
   let scene: Scene | null = null;
@@ -190,12 +270,11 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
   let destroyed = false, nightKey = "";
   // Off screen (the hero scrolled away): no frames until it is back.
   let onScreen = true;
-  const tail = ["", "", ""];
-  const head = ["", "", ""];
+  const rainAlpha = [0, 0, 0];
 
   const budget = (s: Scene) => {
     const area = clamp((w * h) / (390 * 844), 0.6, 2.2);
-    return Math.min(MAX, Math.round(BASE[s.kind] * (0.4 + 0.6 * s.intensity) * area * tier * (s.still ? 0.3 : 1)));
+    return particleBudget(s.kind, s.intensity, area, tier, s.still, MAX);
   };
 
   /** mode 0: scatter over the screen; 1: respawn just above the top; 2: flow in from well above. */
@@ -207,11 +286,10 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     const lerp = (rg: Range) => rg[0] + (rg[1] - rg[0]) * r();
     let vy: number, len: number, size = 1, alpha = 1;
     if (type === T_STREAK) {
-      vy = lerp(RAIN_V[L]) * (SPEED_BY[k] ?? 1) * (0.92 + 0.16 * I);
-      len = lerp(LEN_BY[k] ?? [10, 20]) * LAYER_LEN[L];
+      ({ vy, len } = rainStreak(k, L, r(), I, FPS));
     } else if (type === T_PELLET) {
       vy = lerp(HAIL_V[L]);
-      len = lerp(LEN_BY.hail ?? [3, 6]);
+      len = lerp(HAIL_LEN);
       size = lerp(HAIL_R[L]);
     } else {
       const sleet = k === "sleet";
@@ -224,7 +302,9 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     // Respawns start upwind so the slant never leaves a bare strip on one side.
     const extra = mode === 0 ? 0 : type === T_DOT ? clamp((drift * h) / Math.max(vy, 20), 0, w * 0.6) : clamp(h * Math.max(tanT, 0), 0, w);
     const x = r() * (w + extra) - extra;
-    sys.data.set([x, y, vy, len, size, r() * Math.PI * 2, (0.3 + 0.5 * r()) * Math.PI * 2, 6 + 18 * r(), L, type, alpha], i * STRIDE);
+    // Near bokeh flakes sway slower and wider.
+    const bokeh = type === T_DOT && L === 2 && k === "snow";
+    sys.data.set([x, y, vy, len, size, r() * Math.PI * 2, (0.3 + 0.5 * r()) * Math.PI * 2 * (bokeh ? 0.5 : 1), (6 + 18 * r()) * (bokeh ? 1.4 : 1), L, type, alpha], i * STRIDE);
   }
 
   function setCount(sys: Sys, n: number, mode: 0 | 2) {
@@ -266,12 +346,48 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
         d[o + X] += d[o + TYPE] === T_DOT
           ? (drift * PARALLAX[d[o + LAYER]] + Math.sin(t * d[o + FQ] + d[o + PH]) * d[o + AMP] * sway) * dt
           : d[o + VY] * tanT * dt;
-        if (d[o + Y] - d[o + LEN] > h) spawn(sys, i, 1);
-        else if (d[o + X] > w + 30) d[o + X] -= w + 60;
+        if (d[o + Y] - d[o + LEN] > h) {
+          // Some mid and near rain drops land as a ripple in the bottom strip.
+          if ((sys.kind === "rain" || sys.kind === "storm") && d[o + LAYER] > 0 && d[o + TYPE] === T_STREAK && sys.rand() < 0.12 + 0.3 * (scene?.intensity ?? 0.5)) {
+            const s = splashAt++ % SPLASHES * 4;
+            splash.set([d[o + X], h -sys.rand() * h * 0.1, 0, (3 + 4 * sys.rand()) * (d[o + LAYER] === 2 ? 1.5 : 1)], s);
+          }
+          spawn(sys, i, 1);
+        } else if (d[o + X] > w + 30) d[o + X] -= w + 60;
         else if (d[o + X] < -30) d[o + X] += w + 60;
       }
     }
+    for (let s = 2; s < splash.length; s += 4) if (splash[s] < SPLASH_T) splash[s] += dt;
     if (prev && prev.fade <= 0) prev = null;
+  }
+
+  /** Each streak is the sprite drawn along the fall direction: rotate once, then map every head into that frame. */
+  function streaks(c: CanvasRenderingContext2D, d: Float32Array, n: number, L: number, width: number) {
+    const norm = 1 / Math.sqrt(1 + tanT * tanT);
+    const dx = tanT * norm;
+    c.setTransform(dpr * norm, -dpr * dx, dpr * dx, dpr * norm, 0, 0);
+    for (let i = 0; i < n; i++) {
+      const o = i * STRIDE;
+      if (d[o + TYPE] !== T_STREAK || d[o + LAYER] !== L) continue;
+      const x = d[o + X], y = d[o + Y], len = d[o + LEN];
+      c.drawImage(streak, norm * x - dx * y - width * 1.5, dx * x + norm * y - len, width * 3, len);
+    }
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function ripples(c: CanvasRenderingContext2D) {
+    c.lineWidth = 1;
+    c.strokeStyle = streak === streakNight ? "rgb(190, 210, 255)" : "rgb(230, 236, 248)";
+    for (let s = 0; s < splash.length; s += 4) {
+      const p = splash[s + 2] / SPLASH_T;
+      if (p >= 1) continue;
+      const rx = splash[s + 3] * (0.3 + 0.7 * p);
+      c.globalAlpha = (1 - p) * (1 - p) * 0.45;
+      c.beginPath();
+      c.ellipse(splash[s], splash[s + 1], rx, rx * 0.28, 0, 0, Math.PI * 2);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
   }
 
   /** Strokes every particle of one type and layer as a single path, from..to along its length. */
@@ -297,12 +413,9 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     for (let L = 0; L < 3; L++) {
       c.globalAlpha = sys.fade;
       if (k === "drizzle" || k === "rain" || k === "storm" || k === "sleet") {
-        // A faint tail and a brighter head: the streak tapers instead of ending in a hard bar.
-        c.lineWidth = L === 2 ? 1.5 : L === 1 ? 1.15 : 1;
-        c.strokeStyle = tail[L];
-        strokes(c, d, n, T_STREAK, L, 1, 0.45);
-        c.strokeStyle = head[L];
-        strokes(c, d, n, T_STREAK, L, 0.55, 0);
+        // Motion blur: a gradient streak, clear at the tail and brightest at the head.
+        c.globalAlpha = sys.fade * rainAlpha[L];
+        streaks(c, d, n, L, RAIN_W[L] * (k === "drizzle" ? 0.6 : 1));
       }
       if (k === "hail") {
         c.lineWidth = HAIL_W[L];
@@ -329,13 +442,14 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     if (nightKey) ctx!.drawImage(night, 0, 0, w, h);
     if (prev) drawSys(ctx!, prev);
     if (cur) drawSys(ctx!, cur);
+    ripples(ctx!);
   }
 
   function frame(now: number) {
     raf = 0;
     if (destroyed || document.hidden || !onScreen) return;
     // 60 fps, 30 on the low tier.
-    if (now - lastDraw >= 1000 / (tier < 1 ? 30 : 60) - 2) {
+    if (now - lastDraw >= 1000 / FPS - 2) {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = lastDraw = now;
       t += dt;
@@ -359,7 +473,8 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     const rect = canvas.getBoundingClientRect();
     const nw = Math.max(1, Math.round(rect.width || window.innerWidth));
     const nh = Math.max(1, Math.round(rect.height || window.innerHeight));
-    const ndpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    // At most about 4 MP of backing store, so a big high-DPI screen costs no more than a laptop.
+    const ndpr = Math.min(window.devicePixelRatio || 1, tier < 1 ? 1.5 : 2, Math.sqrt(4e6 / (nw * nh)));
     if (nw === w && nh === h && ndpr === dpr) return;
     const sx = w ? nw / w : 1, sy = h ? nh / h : 1;
     [w, h, dpr] = [nw, nh, ndpr];
@@ -398,12 +513,8 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     setScene(s: Scene) {
       const first = scene === null;
       scene = s;
-      const c = s.night || s.kind === "storm" ? "170, 200, 255" : "225, 232, 245";
-      for (let L = 0; L < 3; L++) {
-        const a = RAIN_A[L] * Math.min(1, 0.85 + 0.15 * s.intensity);
-        tail[L] = `rgba(${c}, ${(a * 0.4).toFixed(3)})`;
-        head[L] = `rgba(${c}, ${a.toFixed(3)})`;
-      }
+      streak = s.night || s.kind === "storm" ? streakNight : streakDay;
+      for (let L = 0; L < 3; L++) rainAlpha[L] = RAIN_A[L] * Math.min(1, 0.85 + 0.15 * s.intensity);
       const wind = Math.max(0, s.windKph);
       thetaTarget = Math.max(clamp(wind / 60, 0, 1) * 25 * DEG, s.kind === "storm" ? 8 * DEG : 0);
       drift = wind * 1.2;
@@ -435,15 +546,28 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
       io?.disconnect();
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVis);
-      canvas.width = canvas.height = night.width = night.height = 0;
+      canvas.width = canvas.height = night.width = night.height = streakDay.width = streakNight.width = 0;
     },
   };
 }
 
 /* ---- static decor ---- */
 
+/** Fog as tileable fractal noise (SVG feTurbulence, stitched tiles), wider than tall, in the fog colour with alpha from the noise. */
+function fogNoise(size: number, freq: number, seed: number): { backgroundImage: string; backgroundSize: string } {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${size * 2}' height='${size}'><filter id='f' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='${freq} ${freq * 2}' numOctaves='4' seed='${seed}' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.86 0 0 0 0 0.89 0 0 0 0 0.92 1.7 0 0 0 -0.6'/></filter><rect width='100%' height='100%' filter='url(#f)'/></svg>`;
+  return { backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`, backgroundSize: `${size * 2}px ${size}px` };
+}
+/** Far layer: big slow banks over the whole frame; near layer: finer wisps in the low half. Both thicken toward the ground. */
+const FOG_LAYERS = [
+  { anim: "animate-fog-110", box: "inset-y-0", noise: fogNoise(520, 0.0035, 7), mask: "linear-gradient(180deg, transparent 0%, black 65%)" },
+  { anim: "animate-fog-80", box: "top-[45%] bottom-0", noise: fogNoise(300, 0.006, 23), mask: "linear-gradient(180deg, transparent 0%, black 55%)" },
+];
+/** Glass beads only for liquid rain. */
+const GLASS = new Set<SkyKind>(["drizzle", "rain", "storm"]);
+
 const FOG = "#DCE2EA";
-/** Soft blobs in a band: fog low down, cloud banks up top. */
+/** Soft blobs in a band: the cloud banks up top. */
 function band(color: string, a: number, offset: number): string {
   const p = (v: number) => (v + offset) % 100;
   return [
@@ -464,7 +588,7 @@ const EASE = "cubic-bezier(0.45, 0, 0.55, 1)";
 
 /* ---- component ---- */
 
-export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phase: phaseProp, cloudCover, className, overlay = false }: SkyProps) {
+export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phase: phaseProp, cloudCover, className, overlay = false, photo }: SkyProps) {
   const still = useStill();
   const tier = useSyncExternalStore(noop, getTier, () => 1);
 
@@ -504,27 +628,35 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phas
     engineRef.current?.setScene(scene);
   }, [scene, tier]);
 
-  // Storm lightning: soft, single, at most one flash per 8-14 s, never when still.
+  // Storm lightning: one soft swell that lifts the whole photo a little (strongest up top), at most one
+  // per 6 s, never a strobe, never when still. About one flash in three also shows a faint bolt.
   const flashRef = useRef<HTMLDivElement>(null);
+  const boltRef = useRef<SVGPolylineElement>(null);
   useEffect(() => {
     const el = flashRef.current;
     if (kind !== "storm" || still || !el || typeof el.animate !== "function") return;
     let timer = 0;
-    let anim: Animation | null = null;
+    const anims: Animation[] = [];
     const fire = () => {
       if (!document.hidden) {
         const x = Math.round(15 + Math.random() * 70);
-        el.style.background = `radial-gradient(ellipse 70% 55% at ${x}% 12%, rgb(220 230 255) 0%, rgb(220 230 255 / 0.45) 38%, rgb(220 230 255 / 0) 72%)`;
-        anim?.cancel();
-        anim = el.animate([{ opacity: 0 }, { opacity: 0.1, offset: 0.2 }, { opacity: 0.1, offset: 0.333 }, { opacity: 0 }], { duration: 600 });
+        el.style.background = `radial-gradient(ellipse 70% 55% at ${x}% 12%, rgb(225 232 255) 0%, rgb(225 232 255 / 0.45) 40%, rgb(225 232 255 / 0) 75%), rgb(225 232 255 / 0.45)`;
+        anims.forEach((a) => a.cancel());
+        anims.length = 0;
+        anims.push(el.animate([{ opacity: 0 }, { opacity: 0.16, offset: 0.15 }, { opacity: 0.06, offset: 0.45 }, { opacity: 0 }], { duration: 700, easing: "ease-out" }));
+        const bolt = boltRef.current;
+        if (bolt && Math.random() < 0.35) {
+          bolt.setAttribute("points", boltPoints(Math.random));
+          anims.push(bolt.animate([{ opacity: 0 }, { opacity: 0.5, offset: 0.1 }, { opacity: 0.15, offset: 0.4 }, { opacity: 0 }], { duration: 500 }));
+        }
         window.dispatchEvent(new Event(ORB_LIGHTNING_EVENT));
       }
-      timer = window.setTimeout(fire, 8000 + Math.random() * 6000);
+      timer = window.setTimeout(fire, flashDelay(Math.random()));
     };
-    timer = window.setTimeout(fire, 8000 + Math.random() * 6000);
+    timer = window.setTimeout(fire, flashDelay(Math.random()));
     return () => {
       window.clearTimeout(timer);
-      anim?.cancel();
+      anims.forEach((a) => a.cancel());
     };
   }, [kind, still]);
 
@@ -562,15 +694,16 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phas
 
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {/* Fog bands drift (transform only, the --animate-fog-* tokens); the low tier keeps them still. */}
-      {["animate-fog-80", "animate-fog-110"].map((anim, i) => (
+      {/* Fog: two layers of noise drift at different speeds (transform only, the --animate-fog-* tokens), denser low; the low tier keeps them still. */}
+      {FOG_LAYERS.map(({ anim, box, noise, mask }) => (
         <div
           key={anim}
-          className={cn("absolute -left-1/2 h-[40vh] w-[200%]", anim)}
+          className={cn("absolute -left-1/2 w-[200%]", box, anim)}
           style={{
-            top: `calc(${i ? 75 : 55}% - 20vh)`,
-            background: band(FOG, Math.max(fogA, 0.01), i * 17),
-            opacity: fogA > 0 ? 1 : 0,
+            ...noise,
+            maskImage: mask,
+            WebkitMaskImage: mask,
+            opacity: clamp(fogA * 3, 0, 0.85),
             transition: fade,
             animationPlayState: fogA > 0 && !still && tier >= 1 ? "running" : "paused",
           }}
@@ -585,6 +718,12 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phas
         }}
       />
       <div ref={flashRef} className="absolute inset-0" style={{ opacity: 0 }} />
+      {kind === "storm" && (
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline ref={boltRef} fill="none" stroke="rgb(236 240 255)" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" opacity={0} style={{ filter: "drop-shadow(0 0 4px rgb(190 210 255 / 0.9))" }} />
+        </svg>
+      )}
+      {overlay && photo && GLASS.has(kind) && <RainGlass src={photo} intensity={I} still={still} tier={tier} />}
       {!overlay && <div className="absolute inset-0" style={{ background: "radial-gradient(130% 100% at 50% 35%, rgb(2 6 16 / 0) 55%, rgb(2 6 16 / 0.38) 100%)" }} />}
     </div>
   );

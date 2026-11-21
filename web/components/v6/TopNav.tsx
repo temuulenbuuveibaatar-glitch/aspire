@@ -30,11 +30,9 @@ export function TopNav({ lang, view, onView, onSearch, onSettings, onMyLocation,
   ];
   return (
     <nav aria-label={t.mainNav} className="flex items-center gap-3 border-b border-line pb-4">
-      <button type="button" onClick={() => onView("overview")} className="press flex min-h-11 shrink-0 items-center gap-1.5 text-ink">
-        <span aria-hidden className="text-[1.375rem] leading-none font-semibold text-accent">
-          a
-        </span>
-        <span className="text-[1.25rem] leading-none font-semibold tracking-tight">aspire</span>
+      {/* Same wordmark as the homepage: one "Aspire", never a stray "a" mark beside it. */}
+      <button type="button" onClick={() => onView("overview")} className="press flex min-h-11 shrink-0 items-center font-display text-wordmark text-ink uppercase">
+        Aspire
       </button>
       <ul className="mx-auto hidden items-center gap-1 lg:flex">
         {views.map(([v, label]) => (

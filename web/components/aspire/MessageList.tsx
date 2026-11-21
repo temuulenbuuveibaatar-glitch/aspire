@@ -63,7 +63,7 @@ import { CAMERA_TEXT } from "@/components/aspire/CameraSheet";
 import { MediaCard } from "@/components/aspire/MediaCard";
 import { OpenAppCard } from "@/components/aspire/OpenAppCard";
 import { TaskCard } from "@/components/aspire/TaskCard";
-import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
+import { detectTextLanguage, HTML_LANG, type Lang, speechLang } from "@/lib/lang";
 import type { Headline } from "@/lib/news";
 import type { CameraAction, ClientAction, MediaAction, OpenAppAction, Reminder, TaskAction, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
@@ -265,6 +265,8 @@ const TEXT: Record<
     stepFailed: string;
     stepWorking: string;
     newTab: string;
+    /** Speaker label read before the person's own messages (sr-only). */
+    you: string;
     oneMoment: Record<"mr" | "mrs" | "none", string>;
   }
 > = {
@@ -278,6 +280,7 @@ const TEXT: Record<
     stepFailed: "амжилтгүй",
     stepWorking: "хийж байна",
     newTab: "шинэ цонхонд нээгдэнэ",
+    you: "Та",
     oneMoment: { mr: "Түр хүлээнэ үү, эрхэм ээ.", mrs: "Түр хүлээнэ үү, хатагтай.", none: "Түр хүлээнэ үү." },
   },
   zh: {
@@ -290,6 +293,7 @@ const TEXT: Record<
     stepFailed: "失败",
     stepWorking: "进行中",
     newTab: "在新标签页中打开",
+    you: "您",
     oneMoment: { mr: "请稍候，先生。", mrs: "请稍候，女士。", none: "请稍候。" },
   },
   en: {
@@ -302,6 +306,7 @@ const TEXT: Record<
     stepFailed: "failed",
     stepWorking: "working",
     newTab: "opens in a new tab",
+    you: "You",
     oneMoment: { mr: "One moment, sir.", mrs: "One moment, ma'am.", none: "One moment." },
   },
   ru: {
@@ -314,6 +319,7 @@ const TEXT: Record<
     stepFailed: "ошибка",
     stepWorking: "выполняется",
     newTab: "откроется в новой вкладке",
+    you: "Вы",
     oneMoment: { mr: "Одну минуту, сэр.", mrs: "Одну минуту, мадам.", none: "Одну минуту." },
   },
   de: {
@@ -326,6 +332,7 @@ const TEXT: Record<
     stepFailed: "fehlgeschlagen",
     stepWorking: "läuft",
     newTab: "öffnet in neuem Tab",
+    you: "Sie",
     oneMoment: { mr: "Einen Moment, Sir.", mrs: "Einen Moment, gnädige Frau.", none: "Einen Moment." },
   },
 };
@@ -415,6 +422,7 @@ export function MessageList({
   // "the person scrolled away" (that would hide the next reply behind the pill).
   const programmaticUntil = useRef(0);
   const [showJump, setShowJump] = useState(false);
+  const list = useRef<HTMLOListElement>(null);
 
   const followNow = useCallback(() => {
     programmaticUntil.current = performance.now() + (reduced ? 100 : 900);
@@ -422,8 +430,10 @@ export function MessageList({
     bottom.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
   }, [reduced]);
 
+  // The pill unmounts once used: focus moves to the newest message, not to <body>.
   const scrollToEnd = useCallback(() => {
     followNow();
+    (list.current?.lastElementChild as HTMLElement | null)?.focus({ preventScroll: true });
     setShowJump(false);
   }, [followNow]);
 
@@ -431,9 +441,15 @@ export function MessageList({
     // Read the composer clearance once (and on resize), never per scroll event; measure at most
     // once per frame so scrolling never forces style and layout work at event frequency.
     let clearance = 0;
+    // Desktop (lg): the thread is its own scroll box inside the agent panel, with the composer,
+    // model line and chips below it, so "near the bottom" is measured against that box, not the
+    // window. Phones: the page scrolls, so the window is the reference.
+    let box: HTMLElement | null = null;
     const readClearance = () => {
       const el = bottom.current;
       clearance = el ? parseFloat(getComputedStyle(el).scrollMarginBottom) || 0 : 0;
+      const desktop = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;
+      box = desktop ? (el?.closest<HTMLElement>("[data-thread-scroll]") ?? null) : null;
     };
     readClearance();
     let ticking = false;
@@ -442,11 +458,12 @@ export function MessageList({
       const el = bottom.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      // Also near when the page cannot scroll any further and the sentinel is on screen
+      // Also near when the scroller cannot scroll any further and the sentinel is in view
       // (a shell with less bottom padding than the clearance never reaches the resting point).
-      const doc = document.scrollingElement ?? document.documentElement;
-      const pageAtEnd = doc.scrollHeight - doc.scrollTop - doc.clientHeight <= 2;
-      const near = top - (window.innerHeight - clearance) <= NEAR_BOTTOM_PX || (pageAtEnd && top <= window.innerHeight);
+      const scroller = box ?? document.scrollingElement ?? document.documentElement;
+      const atEnd = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 2;
+      const limit = box ? Math.min(box.getBoundingClientRect().bottom, window.innerHeight) : window.innerHeight;
+      const near = top - (limit - clearance) <= NEAR_BOTTOM_PX || (atEnd && top <= limit);
       if (!near && performance.now() < programmaticUntil.current) return;
       nearBottom.current = near;
       if (near) setShowJump(false);
@@ -514,25 +531,30 @@ export function MessageList({
             gmailError={briefing.gmailError}
             onReconnect={onOpenConnections}
             headlines={briefing.headlines}
+            lang={briefing.lang}
+            newTab={s.newTab}
           />
         </div>
       )}
 
       {/* ---- conversation (no aria-live here; the reply region below announces) ---- */}
-      <ol className="mt-2 flex flex-col gap-4">
+      <ol ref={list} className="mt-2 flex flex-col gap-4">
         <AnimatePresence initial={false}>
           {messages.map((m, index) => (
             <motion.li
               key={m.id}
               lang={htmlLang(m.lang)}
+              tabIndex={-1}
               initial={enter}
               animate={shown}
               exit={{ opacity: 0, transition: reduced ? FADE : EXIT }}
               transition={transition}
-              className={cn("flex flex-col gap-2", m.role === "user" ? "items-end" : "items-stretch")}
+              className={cn("flex flex-col gap-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent", m.role === "user" ? "items-end" : "items-stretch")}
             >
               {m.role === "user" ? (
                 <p className="max-w-[85%] rounded-lg rounded-br-[6px] border border-line bg-panel-2 px-4 py-3 text-body whitespace-pre-line text-ink [overflow-wrap:anywhere]">
+                  {/* In the message's language, like the li around it (WCAG 3.1.2). */}
+                  <span className="sr-only">{textFor(m.lang).you}: </span>
                   {clean(m.text)}
                 </p>
               ) : (
@@ -585,8 +607,9 @@ export function MessageList({
         )}
       </AnimatePresence>
 
-      {/* scroll-margin = the fixed composer's clearance (read back by the near-bottom check) */}
-      <div ref={bottom} aria-hidden className="h-px scroll-mb-[calc(env(safe-area-inset-bottom)+7rem)]" />
+      {/* scroll-margin = the fixed composer's clearance (read back by the near-bottom check). Desktop: the
+          thread scrolls inside the agent panel above its own composer, so only a small gap. */}
+      <div ref={bottom} aria-hidden className="h-px scroll-mb-[calc(env(safe-area-inset-bottom)+7rem)] lg:scroll-mb-2" />
 
       {/* ---- the single reply live region (spec 13.2): newest finished reply only ----
           The region itself stays mounted; its child is keyed by message id so a new reply
@@ -594,7 +617,7 @@ export function MessageList({
       {announceReplies && (
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {lastReply && clean(lastReply.text) && (
-            <p key={lastReply.id} lang={htmlLang(lastReply.lang)}>
+            <p key={lastReply.id} lang={htmlLang(speechLang(clean(lastReply.text), lastReply.lang))}>
               {clean(lastReply.text)}
             </p>
           )}
@@ -606,7 +629,8 @@ export function MessageList({
         {jumpVisible && (
           <div
             key="jump"
-            className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[25] flex justify-center px-4"
+            // Desktop: pinned to the bottom of the panel's thread region, not the middle of the page.
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[25] flex justify-center px-4 lg:sticky lg:bottom-2"
           >
             <motion.button
               type="button"
@@ -720,6 +744,7 @@ function AssistantMessage({
   return (
     <div className="flex w-full flex-col gap-3">
       <div className={cn("panel p-5", m.error && "border-danger/60")}>
+        <span className="sr-only">Aspire: </span>
         {!!m.steps?.length && <ToolLedger steps={m.steps} lang={m.lang} s={s} reduced={reduced} />}
 
         {m.error ? (
@@ -734,6 +759,8 @@ function AssistantMessage({
             )}
             {!!text && (
               <p
+                // Interpreter mode: a Chinese reply to a Mongolian question is read with a Chinese voice.
+                lang={htmlLang(speechLang(text, m.lang))}
                 className={cn(
                   "max-w-[65ch] text-reply whitespace-pre-line [overflow-wrap:anywhere]",
                   m.interrupted ? "text-ink-muted" : "text-ink",

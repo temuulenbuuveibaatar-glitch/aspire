@@ -2,7 +2,7 @@
 // the consent). Server only: every query goes through the service-role client. The cloud copy
 // never holds device-only secrets (Gmail refresh token, webhook URLs).
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { applyActions, emptyState, mergeState, parseState, stripLocalOnly, type UserState } from "@/lib/state";
+import { applyActions, emptyState, mergeState, nextDaily, parseState, stripLocalOnly, type UserState } from "@/lib/state";
 import type { ClientAction } from "@/lib/tools/types";
 
 type Db = ReturnType<typeof supabaseAdmin>;
@@ -33,8 +33,14 @@ interface ReminderRow {
   repeat_daily: boolean;
 }
 
-/** Make `bot_reminders` match the live reminders in the state (one row per reminder, never duplicated). */
-async function syncBotReminders(db: Db, userId: string, state: UserState): Promise<void> {
+/** A new or changed reminder this late was already rung by the phone: never queued (it would only be retried for an hour). */
+const LATE_MS = 5 * 60_000;
+
+/**
+ * Make `bot_reminders` match the live reminders in the state (one row per reminder, never duplicated).
+ * A new or changed row that is already late is not queued: a daily one moves to its next time.
+ */
+async function syncBotReminders(db: Db, userId: string, state: UserState, now: Date): Promise<void> {
   const { data, error } = await db.from("bot_reminders").select("id, text, at, repeat_daily").eq("user_id", userId);
   if (error) fail("reminders read", error);
   const rows = (data ?? []) as ReminderRow[];
@@ -45,12 +51,14 @@ async function syncBotReminders(db: Db, userId: string, state: UserState): Promi
     const { error: e } = await db.from("bot_reminders").delete().eq("user_id", userId).in("id", stale);
     if (e) fail("reminders delete", e);
   }
+  const late = now.getTime() - LATE_MS;
   const changed = [...live.entries()]
     .filter(([id, r]) => {
       const row = rows.find((x) => x.id === id);
       return !row || row.text !== r.text || row.repeat_daily !== r.repeatDaily || Date.parse(row.at) !== Date.parse(r.at);
     })
-    .map(([id, r]) => ({ id, user_id: userId, text: r.text, at: r.at, repeat_daily: r.repeatDaily, sent_at: null }));
+    .map(([id, r]) => ({ id, user_id: userId, text: r.text, at: r.repeatDaily && Date.parse(r.at) < late ? nextDaily(r.at, now) : r.at, repeat_daily: r.repeatDaily, sent_at: null }))
+    .filter((row) => Date.parse(row.at) >= late);
   if (changed.length) {
     const { error: e } = await db.from("bot_reminders").upsert(changed, { onConflict: "id" });
     if (e) fail("reminders write", e);
@@ -68,7 +76,7 @@ export async function saveCloudState(userId: string, state: UserState, now = new
     .from("user_state")
     .upsert({ user_id: userId, state: merged, updated_at: now.toISOString() }, { onConflict: "user_id" });
   if (error) fail("save", error);
-  await syncBotReminders(db, userId, merged);
+  await syncBotReminders(db, userId, merged, now);
   return merged;
 }
 
@@ -110,8 +118,9 @@ export async function markReminderFired(
  * Needs supabase/migrations/20261121100000_desktop.sql applied (else 42P01 on the desktop tables).
  */
 export async function deleteCloudData(userId: string, db: Db = supabaseAdmin()): Promise<void> {
-  for (const table of ["desktop_jobs", "desktop_codes", "desktop_devices", "user_state", "secrets", "bot_reminders", "bot_links", "link_codes"]) {
+  for (const table of ["desktop_jobs", "desktop_codes", "desktop_devices", "user_state", "secrets", "bot_reminders", "bot_links", "link_codes", "push_subscriptions"]) {
     const { error } = await db.from(table).delete().eq("user_id", userId);
-    if (error) fail(`delete ${table}`, error);
+    // Push is optional: before its migration is applied the table is missing, and that is not a failure.
+    if (error && !(table === "push_subscriptions" && (error.code === "42P01" || error.code === "PGRST205"))) fail(`delete ${table}`, error);
   }
 }

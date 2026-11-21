@@ -29,6 +29,7 @@ export interface V6Text {
   live: string;
   scheduled: string;
   estimated: string;
+  forecast: string;
   static: string;
   calculated: string;
   none: string;
@@ -108,7 +109,7 @@ export const V6: Record<Lang, V6Text> = {
     scene: "Weather-synced scene", feels: "Feels like", high: "H", low: "L", now: "Now", openMap: "Open city map", photo: "Photo",
     rainPct: "{n}% rain", nextDays: "Next 3 days", noWeather: "No weather data yet",
     transit: "Nearby transit", air: "Air quality", sunrise: "Tomorrow's sunrise", traffic: "Live traffic",
-    live: "Live", scheduled: "Scheduled", estimated: "Estimated", static: "Not live", calculated: "Calculated", none: "No data",
+    live: "Live", scheduled: "Scheduled", estimated: "Estimated", forecast: "Forecast", static: "Not live", calculated: "Calculated", none: "No data",
     loading: "Loading", empty: "No data yet", offline: "Offline. Showing data from {age}.", offlineNoAge: "Offline. Showing the last data received.", denied: "Location is off. Search for a city to see it here.",
     error: "Could not load this.", retry: "Retry",
     leaveIn: "Leave in {n} min", leaveNow: "Leave now", walk: "{n} min walk", min: "min", due: "Due", viewRoutes: "View all routes",
@@ -136,7 +137,7 @@ export const V6: Record<Lang, V6Text> = {
     scene: "Цаг агаартай уялдсан дүр зураг", feels: "Мэдрэгдэх", high: "Дээд", low: "Доод", now: "Одоо", openMap: "Хотын зураг нээх", photo: "Зураг",
     rainPct: "{n}% бороо", nextDays: "Ирэх 3 хоног", noWeather: "Цаг агаарын мэдээ алга байна",
     transit: "Ойролцоох нийтийн тээвэр", air: "Агаарын чанар", sunrise: "Маргаашийн нар мандах", traffic: "Замын хөдөлгөөн",
-    live: "Шууд", scheduled: "Хуваарийн дагуу", estimated: "Ойролцоо тооцоо", static: "Шууд биш", calculated: "Тооцоолсон", none: "Мэдээлэл алга",
+    live: "Шууд", scheduled: "Хуваарийн дагуу", estimated: "Ойролцоо тооцоо", forecast: "Урьдчилсан мэдээ", static: "Шууд биш", calculated: "Тооцоолсон", none: "Мэдээлэл алга",
     loading: "Ачаалж байна", empty: "Мэдээлэл алга байна", offline: "Сүлжээгүй байна. Мэдээлэл: {age}.", offlineNoAge: "Сүлжээгүй байна. Хамгийн сүүлд ирсэн мэдээллийг харуулж байна.", denied: "Байршил унтраалттай байна. Хотоо хайж олно уу.",
     error: "Ачаалж чадсангүй.", retry: "Дахин оролдох",
     leaveIn: "{n} минутын дараа гарна уу", leaveNow: "Одоо гарна уу", walk: "{n} мин алхана", min: "мин", due: "Ирж байна", viewRoutes: "Бүх чиглэл харах",
@@ -164,7 +165,7 @@ export const V6: Record<Lang, V6Text> = {
     scene: "随天气同步的场景", feels: "体感", high: "高", low: "低", now: "现在", openMap: "打开城市地图", photo: "照片",
     rainPct: "降雨 {n}%", nextDays: "未来 3 天", noWeather: "暂无天气数据",
     transit: "附近公交", air: "空气质量", sunrise: "明天日出", traffic: "实时路况",
-    live: "实时", scheduled: "按时刻表", estimated: "估算", static: "非实时", calculated: "计算得出", none: "无数据",
+    live: "实时", scheduled: "按时刻表", estimated: "估算", forecast: "预报", static: "非实时", calculated: "计算得出", none: "无数据",
     loading: "加载中", empty: "暂无数据", offline: "已离线，显示 {age} 的数据。", offlineNoAge: "已离线，显示最后收到的数据。", denied: "定位已关闭。搜索城市即可在此查看。",
     error: "加载失败。", retry: "重试",
     leaveIn: "{n} 分钟后出发", leaveNow: "现在出发", walk: "步行 {n} 分钟", min: "分钟", due: "即将到站", viewRoutes: "查看全部线路",
@@ -192,7 +193,7 @@ export const V6: Record<Lang, V6Text> = {
     scene: "Сцена по погоде", feels: "Ощущается как", high: "Макс", low: "Мин", now: "Сейчас", openMap: "Открыть карту города", photo: "Фото",
     rainPct: "дождь {n}%", nextDays: "Следующие 3 дня", noWeather: "Данных о погоде пока нет",
     transit: "Транспорт рядом", air: "Качество воздуха", sunrise: "Восход завтра", traffic: "Пробки сейчас",
-    live: "Онлайн", scheduled: "По расписанию", estimated: "Оценка", static: "Не онлайн", calculated: "Расчёт", none: "Нет данных",
+    live: "Онлайн", scheduled: "По расписанию", estimated: "Оценка", forecast: "Прогноз", static: "Не онлайн", calculated: "Расчёт", none: "Нет данных",
     loading: "Загрузка", empty: "Данных пока нет", offline: "Нет сети. Данные получены {age}.", offlineNoAge: "Нет сети. Показаны последние полученные данные.", denied: "Геолокация выключена. Найдите город, чтобы увидеть его здесь.",
     error: "Не удалось загрузить.", retry: "Повторить",
     leaveIn: "Выходите через {n} мин", leaveNow: "Выходите сейчас", walk: "{n} мин пешком", min: "мин", due: "Подходит", viewRoutes: "Все маршруты",
@@ -220,7 +221,7 @@ export const V6: Record<Lang, V6Text> = {
     scene: "Wettersynchrone Szene", feels: "Gefühlt", high: "H", low: "T", now: "Jetzt", openMap: "Stadtkarte öffnen", photo: "Foto",
     rainPct: "{n} % Regen", nextDays: "Nächste 3 Tage", noWeather: "Noch keine Wetterdaten",
     transit: "Nahverkehr in der Nähe", air: "Luftqualität", sunrise: "Sonnenaufgang morgen", traffic: "Verkehr live",
-    live: "Live", scheduled: "Fahrplan", estimated: "Geschätzt", static: "Nicht live", calculated: "Berechnet", none: "Keine Daten",
+    live: "Live", scheduled: "Fahrplan", estimated: "Geschätzt", forecast: "Vorhersage", static: "Nicht live", calculated: "Berechnet", none: "Keine Daten",
     loading: "Lädt", empty: "Noch keine Daten", offline: "Offline. Stand: {age}.", offlineNoAge: "Offline. Die zuletzt empfangenen Daten werden gezeigt.", denied: "Standort ist aus. Suche eine Stadt, um sie hier zu sehen.",
     error: "Konnte nicht geladen werden.", retry: "Erneut versuchen",
     leaveIn: "In {n} Min. losgehen", leaveNow: "Jetzt losgehen", walk: "{n} Min. zu Fuß", min: "Min.", due: "Kommt", viewRoutes: "Alle Linien",

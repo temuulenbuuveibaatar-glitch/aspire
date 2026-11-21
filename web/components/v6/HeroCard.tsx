@@ -69,6 +69,8 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
   // The scene is "weather-synced" only when real weather backs the sky and it is actually drawn.
   const synced = effects && sky.known !== false;
   const hourlyFrom = weather?.hourly?.length && weather.hourlySource && weather.hourlySource !== weather.source ? weather.hourlySource : null;
+  // A provider's weather and strip are its forecast, not an estimate (that word is kept for bus ETAs).
+  const line = prov && prov.kind === "estimated" ? { ...prov, kind: "forecast" as const } : prov;
 
   return (
     <section
@@ -91,12 +93,14 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
               setFailed((f) => [...f, shown]);
               onPhotoError?.(shown);
             }}
-            className="v6-photo absolute inset-0 h-full w-full object-cover"
+            className="v6-photo v6-film-photo absolute inset-0 h-full w-full object-cover"
           />
         )}
+        {/* A subtle "nostalgic film" grade (globals.css .v6-film), under the weather so rain and snow stay crisp; off in Calm mode. */}
+        {shown && <div className="v6-film absolute inset-0" />}
         {/* No photo: the sky itself fills the card (a still clear sky when no weather backs it). */}
         {(synced || !shown) && (
-          <Sky overlay={!!shown} className={shown ? undefined : "absolute"} kind={synced ? safeKind(sky.kind) : "clear"} intensity={synced ? sky.intensity : 0} isDay={sky.isDay} windKph={synced ? sky.windKph : 0} cloudCover={synced ? sky.cloudCover : null} />
+          <Sky overlay={!!shown} photo={shown} className={shown ? undefined : "absolute"} kind={synced ? safeKind(sky.kind) : "clear"} intensity={synced ? sky.intensity : 0} isDay={sky.isDay} windKph={synced ? sky.windKph : 0} cloudCover={synced ? sky.cloudCover : null} />
         )}
         <div className="v6-scrim absolute inset-0" />
       </div>
@@ -114,7 +118,7 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
               </button>
             )}
             {synced && (
-              <p className="mt-1 flex items-center gap-2 text-meta tracking-wide text-ink-muted uppercase">
+              <p className="mt-1 flex items-center gap-2 text-meta tracking-wide text-ink uppercase">
                 <span aria-hidden className="size-1.5 rounded-full bg-accent" />
                 {t.scene}
               </p>
@@ -123,7 +127,7 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
           {clock && (
             <p className="min-w-0 max-w-[45%] text-right">
               <time className="num block text-clock text-ink">{clock.time}</time>
-              <span className="num block text-meta tracking-wide text-ink-muted uppercase">
+              <span className="num block text-meta tracking-wide text-ink uppercase">
                 {clock.date}
                 {/* Phones: the zone is in the footer, so the place picker keeps its width. */}
                 {clock.zone && <span className="hidden sm:inline"> · {clock.zone}</span>}
@@ -137,7 +141,7 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
             <h1 className="text-city text-ink [overflow-wrap:anywhere]" title={rest.length ? place ?? undefined : undefined}>
               {city}
             </h1>
-            <p className="text-copy text-ink-muted">{t.tagline}</p>
+            <p className="text-copy text-ink">{t.tagline}</p>
           </div>
         )}
 
@@ -151,7 +155,7 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
               </data>
               <div className="min-w-0">
                 <p className="text-[1.25rem] font-medium text-ink">{weather.text || t.kinds[safeKind(sky.kind)]}</p>
-                <p className="num text-copy text-ink-muted">
+                <p className="num text-copy text-ink">
                   {t.feels} {temp(weather.feelsC, imperial, false)}
                   {today && (
                     <>
@@ -163,7 +167,7 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
               </div>
             </div>
           ) : (
-            <p className="text-copy text-ink-muted">{t.noWeather}</p>
+            <p className="text-copy text-ink">{t.noWeather}</p>
           )}
           <button type="button" onClick={onOpenMap} data-on-accent className="press flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] bg-accent px-4 text-copy font-medium text-on-accent">
             <MapIcon aria-hidden className="size-4" />
@@ -175,9 +179,9 @@ export function HeroCard({ lang, place, sky, weather, photo, fallback, onPhotoEr
         <HourlyStrip lang={lang} hours={weather?.hourly} days={weather?.days} timeZone={timeZone} imperial={imperial} coords={coords} now={now} />
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          {prov && <ProvenanceLine prov={prov} lang={lang} className="text-ink-muted" />}
+          {line && <ProvenanceLine prov={line} lang={lang} className="text-ink-muted" />}
           {/* The hourly strip from another provider (Google without hours: Open-Meteo) says so. */}
-          {prov && hourlyFrom && <ProvenanceLine prov={{ source: `${t.hourly}: ${PROVIDER[hourlyFrom]}`, ageS: prov.ageS, kind: "estimated" }} lang={lang} className="text-ink-muted" />}
+          {line && hourlyFrom && <ProvenanceLine prov={{ source: `${t.hourly}: ${PROVIDER[hourlyFrom]}`, ageS: line.ageS, kind: "forecast" }} lang={lang} className="text-ink-muted" />}
           {shown && (creditName || google) && (
             <p className="flex min-w-0 items-center gap-1.5 text-meta text-ink-muted">
               <Camera aria-hidden className="size-3.5 shrink-0" />

@@ -72,6 +72,8 @@ export interface NewEvent {
   tz: string;
   location?: string;
   details?: string;
+  /** One RRULE line (lib/rrule.ts); Google needs start/end timeZone for it, which is always set. */
+  recurrence?: string;
 }
 
 /** Adds a timed event to the primary calendar. Throws GoogleAuthError on 401/403. */
@@ -82,6 +84,7 @@ export async function insertEvent(accessToken: string, ev: NewEvent): Promise<{ 
     end: { dateTime: ev.endISO, timeZone: ev.tz },
     ...(ev.location ? { location: ev.location } : {}),
     ...(ev.details ? { description: ev.details } : {}),
+    ...(ev.recurrence ? { recurrence: [ev.recurrence] } : {}),
   });
   return { id: out.id ?? "", htmlLink: out.htmlLink ?? "" };
 }

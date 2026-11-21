@@ -1,18 +1,19 @@
 "use client";
 
-// The HUD news card: 3-5 headlines from /api/news (newsdata.io), each with its source and how long
-// ago it was published; a tap opens the article in a new tab. It is a .hud panel itself, so never
-// place it inside another .hud. Headlines are shown as published, in the publisher's own language.
+// The news card: 3-5 headlines from /api/news (newsdata.io), each with its source and how long ago it
+// was published; a tap opens the article in a new tab. It uses the v6 card shell (components/v6/Card),
+// so surface, spacing, title and states match the other cards. Headlines are shown as published, in
+// the publisher's own language (marked with lang, so screen readers switch voice).
 
-import { Newspaper, RotateCw } from "lucide-react";
-import { useEffect, useId, useState } from "react";
-import { HTML_LANG, type Lang } from "@/lib/lang";
+import { Newspaper, RefreshCw } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { detectTextLanguage, HTML_LANG, type Lang } from "@/lib/lang";
 import type { Headline } from "@/lib/news";
+import { Card } from "@/components/v6/Card";
 
-const TEXT: Record<Lang, { title: string; loading: string; empty: string; unavailable: string; notConfigured: string; retry: string; newTab: string }> = {
+const TEXT: Record<Lang, { title: string; empty: string; unavailable: string; notConfigured: string; retry: string; newTab: string }> = {
   mn: {
     title: "Мэдээ",
-    loading: "Мэдээ ачаалж байна",
     empty: "Одоогоор мэдээ алга.",
     unavailable: "Мэдээний үйлчилгээ одоо ажиллахгүй байна.",
     notConfigured: "Мэдээний үйлчилгээ тохируулагдаагүй байна.",
@@ -21,7 +22,6 @@ const TEXT: Record<Lang, { title: string; loading: string; empty: string; unavai
   },
   zh: {
     title: "新闻",
-    loading: "正在加载新闻",
     empty: "暂时没有新闻。",
     unavailable: "新闻服务暂时不可用。",
     notConfigured: "新闻服务尚未设置。",
@@ -30,7 +30,6 @@ const TEXT: Record<Lang, { title: string; loading: string; empty: string; unavai
   },
   en: {
     title: "News",
-    loading: "Loading headlines",
     empty: "No headlines right now.",
     unavailable: "The news service is unavailable right now.",
     notConfigured: "News is not set up yet.",
@@ -39,7 +38,6 @@ const TEXT: Record<Lang, { title: string; loading: string; empty: string; unavai
   },
   ru: {
     title: "Новости",
-    loading: "Загрузка новостей",
     empty: "Пока нет новостей.",
     unavailable: "Сервис новостей сейчас недоступен.",
     notConfigured: "Новости ещё не настроены.",
@@ -48,7 +46,6 @@ const TEXT: Record<Lang, { title: string; loading: string; empty: string; unavai
   },
   de: {
     title: "Nachrichten",
-    loading: "Schlagzeilen werden geladen",
     empty: "Gerade keine Schlagzeilen.",
     unavailable: "Der Nachrichtendienst ist gerade nicht erreichbar.",
     notConfigured: "Nachrichten sind noch nicht eingerichtet.",
@@ -73,11 +70,10 @@ export function ago(iso: string | null, lang: Lang, now = Date.now()): string {
 }
 
 /** `max`: how many headlines to list (3 keeps a phone screen for the photo). */
-export function NewsStrip({ lang, country, max = 5 }: { lang: Lang; country: string | null; max?: number }) {
+export function NewsStrip({ lang, country, max = 5, index, className }: { lang: Lang; country: string | null; max?: number; index?: number; className?: string }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const t = TEXT[lang];
-  const titleId = useId();
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -103,73 +99,56 @@ export function NewsStrip({ lang, country, max = 5 }: { lang: Lang; country: str
     };
   }, [lang, country, attempt]);
 
-  const retry = () => {
+  const retry = (e: MouseEvent<HTMLButtonElement>) => {
+    // The button goes away while loading: focus moves to the card first so it is not lost.
+    e.currentTarget.closest("section")?.focus();
     setState({ status: "loading" });
     setAttempt((n) => n + 1);
   };
 
+  const headlines = state.status === "ok" ? state.headlines.slice(0, max) : [];
+  const credit = <p className="text-meta text-ink-faint">newsdata.io</p>;
   return (
-    <section className="hud p-3" aria-labelledby={titleId} aria-busy={state.status === "loading"}>
-      <h2 id={titleId} className="mb-2 flex items-center gap-2 text-label uppercase tracking-[0.12em] text-ink-muted">
-        <Newspaper aria-hidden className="size-5 text-hud" />
-        {t.title}
-      </h2>
-
-      {state.status === "loading" && (
-        <div role="status">
-          <span className="sr-only">{t.loading}</span>
-          {[0, 1, 2].map((i) => (
-            <div key={i} aria-hidden className="my-3 h-4 rounded bg-panel-3 motion-safe:animate-pulse" style={{ width: `${90 - i * 15}%` }} />
-          ))}
-        </div>
-      )}
-
-      {state.status === "error" && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p role="status" className="text-body text-ink-muted">
+    <Card
+      title={t.title}
+      icon={<Newspaper />}
+      lang={lang}
+      state={state.status === "loading" ? "loading" : state.status === "ok" && !headlines.length ? "empty" : "ready"}
+      emptyText={t.empty}
+      index={index}
+      footer={credit}
+      className={className}
+    >
+      {state.status === "error" ? (
+        <div className="flex flex-col items-start gap-3">
+          <p role="status" className="text-copy text-ink-muted">
             {state.notConfigured ? t.notConfigured : t.unavailable}
           </p>
           {!state.notConfigured && (
-            <button
-              type="button"
-              onClick={retry}
-              className="press inline-flex min-h-12 items-center gap-2 rounded-md border border-line px-4 text-body text-ink hover:bg-panel-3"
-            >
-              <RotateCw aria-hidden className="size-5" /> {t.retry}
+            <button type="button" onClick={retry} className="press v6-chip min-h-11 gap-2 px-4">
+              <RefreshCw aria-hidden className="size-4" />
+              {t.retry}
             </button>
           )}
         </div>
+      ) : (
+        <ul className="-my-1 divide-y divide-line">
+          {headlines.map((h, i) => {
+            const when = ago(h.publishedAt, lang);
+            return (
+              <li key={`${i}-${h.url}`}>
+                <a href={h.url} target="_blank" rel="noopener noreferrer" className="press group flex min-h-11 flex-col justify-center gap-0.5 py-2.5">
+                  <span lang={HTML_LANG[detectTextLanguage(h.title, lang)]} className="line-clamp-2 text-copy text-ink group-hover:underline">
+                    {h.title}
+                  </span>
+                  <span className="num truncate text-meta text-ink-faint">{[h.source, when].filter(Boolean).join(" · ")}</span>
+                  <span className="sr-only">, {t.newTab}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       )}
-
-      {state.status === "ok" &&
-        (state.headlines.length === 0 ? (
-          <p role="status" className="text-body text-ink-muted">
-            {t.empty}
-          </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {state.headlines.slice(0, max).map((h, i) => {
-              const when = ago(h.publishedAt, lang);
-              return (
-                <li key={`${i}-${h.url}`}>
-                  <a
-                    href={h.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="press block min-h-12 py-2 hover:text-hud focus-visible:text-hud"
-                  >
-                    <span className="line-clamp-2 text-body text-ink">{h.title}</span>
-                    <span className="block font-mono text-label tabular-nums text-ink-faint">
-                      {[h.source, when].filter(Boolean).join(" · ")}
-                    </span>
-                    <span className="sr-only">, {t.newTab}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        ))}
-      <p className="mt-2 text-right text-label text-ink-faint">newsdata.io</p>
-    </section>
+    </Card>
   );
 }

@@ -259,6 +259,8 @@ describe("city tools", () => {
     expect(ub2.liveCameras).toBe("https://ubtraffic.mn");
     const named = (await (await tool("get_fuel")).run({ fuel: "" }, ctx({ device: { memory: {}, reminders: [] }, city: "Berlin" }))) as Record<string, unknown>;
     expect(named.error).toMatch(/No live fuel data/);
+    expect(named.hint).toMatch(/find_places.*fuel station.*open_now true/);
+    expect(berlin.hint).toMatch(/find_places.*'parking'/);
     const unknown = (await (await tool("get_fuel")).run({ fuel: "" }, ctx({ device: { memory: {}, reminders: [] } }))) as Record<string, unknown>;
     expect(unknown.error).toMatch(/Location unknown/);
     fail.add("traffic");

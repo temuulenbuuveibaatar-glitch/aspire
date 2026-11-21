@@ -11,7 +11,7 @@ export const findCamerasTool: Tool = {
   name: "find_cameras",
   label: { mn: "Камер хайж байна", en: "Finding cameras" },
   description:
-    "Public live cameras near a place: city traffic camera pages (Erdenet, Ulaanbaatar), government traffic cameras (London, Singapore, Hong Kong, California, New Zealand), YouTube live streams posted with a location, and webcams mapped on OpenStreetMap. Opens a camera panel on the screen. Use for 'show me the cameras', 'is there a webcam in Paris?', 'traffic cameras near me'. Say how many were found and name a few with who runs them; if none, say there are no public cameras known near there. Never offer private or unsecured cameras.",
+    "Public live cameras near a place: city traffic camera pages (Erdenet, Ulaanbaatar), government traffic and road weather cameras (London, Singapore, Hong Kong, California, New Zealand, Finland, Norway, Iceland, Queensland, British Columbia, Washington, Oregon, Iowa, Toronto, Austin, Quebec, Taiwan), YouTube live city cameras posted with a location (game streams are left out), and webcams mapped on OpenStreetMap. Opens a camera panel on the screen. Use for 'show me the cameras', 'is there a webcam in Paris?', 'traffic cameras near me'. Say how many were found and name a few with who runs them; if none, say there are no public cameras known near there. Never offer private or unsecured cameras.",
   parameters: {
     type: "object",
     properties: {

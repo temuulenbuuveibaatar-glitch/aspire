@@ -356,6 +356,8 @@ function SheetBody({
       <motion.button
         type="button"
         aria-label={closeLabel}
+        // Pointer-only (a tap outside closes): hidden from screen readers, who have Escape and the dialog's Close.
+        aria-hidden="true"
         tabIndex={-1}
         className="absolute inset-0 cursor-default bg-bg"
         {...(!wide && !still
@@ -468,7 +470,7 @@ function SheetBody({
 
         <div
           ref={scroller}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(24px,env(safe-area-inset-bottom))]"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-2 pb-[max(24px,env(safe-area-inset-bottom))]"
           onPointerDown={(e) => {
             contentPull.current = wide || e.pointerType === "touch" ? null : { y: e.clientY };
           }}

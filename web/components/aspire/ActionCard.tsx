@@ -209,7 +209,7 @@ function CalendarCard({ action, t }: { action: Extract<Card, { type: "calendar" 
     const res = await fetch("/api/calendar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: action.title, start: action.start, end: action.end, details: action.details, tz }),
+      body: JSON.stringify({ title: action.title, start: action.start, end: action.end, details: action.details, tz, recurrence: action.recurrence }),
     }).catch(() => null);
     setStatus(res?.ok ? "added" : res?.status === 403 ? "unlinked" : "failed");
   };

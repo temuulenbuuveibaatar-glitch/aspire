@@ -1,6 +1,6 @@
 "use client";
 // Display choices that belong to this device only (never synced to the cloud): sky effects,
-// text size, Calm mode and units. Stored in localStorage and mirrored onto <html> so every
+// text size, Calm mode, units and screen reader mode. Stored in localStorage and mirrored onto <html> so every
 // component (and the CSS variants `still:` / `opaque:` / `calm:`) can follow them:
 //   data-text-size="lg" | "xl", data-calm="true", data-units="metric" | "imperial".
 import { useCallback, useEffect, useSyncExternalStore } from "react";
@@ -15,9 +15,11 @@ export interface DisplayPrefs {
   /** In-app Calm mode: still sky and orb, no flashes, opaque panels. */
   calm: boolean;
   units: UnitsPref;
+  /** Screen reader mode: replies go to the screen reader (one live region), not Aspire's own voice. */
+  screenReader: boolean;
 }
 
-export const DEFAULT_PREFS: DisplayPrefs = { skyEffects: true, textSize: "md", calm: false, units: "auto" };
+export const DEFAULT_PREFS: DisplayPrefs = { skyEffects: true, textSize: "md", calm: false, units: "auto", screenReader: false };
 
 const KEY = "aspire-display-v1";
 const EVENT = "aspire:display";
@@ -32,6 +34,7 @@ export function parsePrefs(raw: string | null): DisplayPrefs {
       textSize: v.textSize === "lg" || v.textSize === "xl" ? v.textSize : "md",
       calm: v.calm === true,
       units: v.units === "metric" || v.units === "imperial" ? v.units : "auto",
+      screenReader: v.screenReader === true,
     };
   } catch {
     return DEFAULT_PREFS;

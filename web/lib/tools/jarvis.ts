@@ -4,6 +4,7 @@
 import { vehiclesNear } from "@/lib/transitous";
 import { airQuality } from "./air";
 import { getCalendar } from "./calendar";
+import { ALARM_NOTE } from "./local";
 import { clockIn, dayIn, zoneOr } from "./time";
 import { str, type Tool, type ToolContext } from "./types";
 import { currency, weather } from "./world";
@@ -37,7 +38,7 @@ export const setTimer: Tool = {
     const at = new Date(ctx.now.getTime() + total * 1000);
     const id = `t${at.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     ctx.actions.push({ type: "reminder", id, text: str(input.label, 200) || "Time is up.", at: at.toISOString(), repeatDaily: false });
-    return { ok: true, id, seconds: total, endsAt: clockIn(at, zoneOr(ctx.timeZone)), note: "Spoken when it ends while the app is open." };
+    return { ok: true, id, seconds: total, endsAt: clockIn(at, zoneOr(ctx.timeZone)), note: ALARM_NOTE };
   },
 };
 

@@ -4,7 +4,6 @@ import type { Lang } from "@/lib/lang";
 
 type Pair = { title: string; body: string };
 type Qa = { q: string; a: string };
-type Plan = { name: string; points: string[] };
 
 export type LandingText = {
   skip: string;
@@ -23,22 +22,12 @@ export type LandingText = {
   citiesTitle: string;
   erdenet: Pair;
   world: Pair;
-  // Pricing. Prices are not in the copy: Landing.tsx fills `{price}` in `after` from its PRICES table.
-  pricingTitle: string;
-  pricingLead: string;
-  hackathon: string;
-  hackathonBody: string;
-  freePrice: string;
-  freeNow: string;
-  after: string;
-  plans: [Plan, Plan, Plan];
-  own: Plan & { price: string; cta: string };
   selfTitle: string;
   selfLead: string;
   self: [Pair, Pair, Pair];
   download: string;
   faqTitle: string;
-  faq: [Qa, Qa, Qa];
+  faq: [Qa, Qa, Qa, Qa];
   privacy: string;
   terms: string;
   legal: string;
@@ -73,7 +62,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       { title: "Reach it from your chat apps", body: "Link Telegram, Discord or Slack and ask from there." },
       {
         title: "Your memory stays on your device",
-        body: "Your memory and settings are stored on your device. A copy goes to the cloud only when you link a chat app or your computer. Your account is handled by Clerk.",
+        body: "Your memory and settings are stored on your device. A copy goes to the cloud only when you link a chat app or your computer. Your account is kept secure.",
       },
     ],
     howTitle: "How it works",
@@ -91,24 +80,6 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Every other city",
       body: "Weather, air quality, maps, news, and public transit where open data exists. Coverage depends on what each city publishes.",
     },
-    pricingTitle: "Pricing",
-    pricingLead: "Cloud plans run on our accounts with Claude, Azure Speech, ElevenLabs and Supabase. Bring your own keys and Aspire stays free.",
-    hackathon: "Free during the Orkhon Hackathon",
-    hackathonBody: "Every cloud plan costs nothing while the hackathon runs. The prices show what Pro and Ultra will cost after it.",
-    freePrice: "Free",
-    freeNow: "Free now",
-    after: "{price} a month after the hackathon",
-    plans: [
-      { name: "Free", points: ["20 questions a day", "Standard voice"] },
-      { name: "Pro", points: ["1,500 questions a month", "2 hours of ElevenLabs voice a month", "Desktop actions with Aspire Desktop"] },
-      { name: "Ultra", points: ["5,000 questions a month", "8 hours of ElevenLabs voice a month", "Desktop actions with Aspire Desktop", "Priority access"] },
-    ],
-    own: {
-      name: "Self-hosted or own keys",
-      price: "Free forever",
-      points: ["Your own Claude or OpenAI key", "Your own Azure or AWS for voice and hosting", "Local Qwen2.5 1.5B model in Aspire Desktop", "The server on your own machine"],
-      cta: "Run it yourself",
-    },
     selfTitle: "Run it yourself",
     selfLead: "Aspire does not need our servers. With your own keys, a local model or your own machine, it costs nothing.",
     self: [
@@ -122,7 +93,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     download: "Download Aspire Desktop",
     faqTitle: "Questions",
     faq: [
-      { q: "Is it free?", a: "Free during the Orkhon Hackathon. After it, the Free plan stays free, and running Aspire with your own keys is free forever." },
+      { q: "Is it free?", a: "Yes. Aspire is free during the Orkhon Hackathon, and running it with your own keys is always free." },
       {
         q: "What happens to my data?",
         a: "Your memory, reminders and settings are stored on your device. To answer you, your question goes to our servers and to the AI and speech services named in the privacy policy (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). A copy goes to the cloud only when you link a chat app or your computer. Your account is handled by Clerk. The privacy policy has the details.",
@@ -131,6 +102,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
         q: "Which languages does it speak?",
         a: "Mongolian, Chinese, English, Russian and German, by voice and by text. Switch any time and it follows you.",
       },
+      { q: "How is my privacy protected?", a: "There are no advertising trackers, and we never sell your data. Your location is used only if you allow it, and you can turn it off at any time in Settings. Messages, calls and emails are sent only after you confirm. You can see and delete what Aspire remembers in Memory and Settings." },
     ],
     privacy: "Privacy",
     terms: "Terms",
@@ -164,7 +136,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       { title: "Чат апп-аас ашигла", body: "Telegram, Discord эсвэл Slack-ээ холбоод тэндээсээ асуу." },
       {
         title: "Санах ой тань төхөөрөмж дээр үлдэнэ",
-        body: "Санах ой, тохиргоо тань төхөөрөмж дээрээ хадгалагдана. Чат апп эсвэл компьютераа холбосон үед л хуулбар нь үүлэнд хадгалагдана. Таны бүртгэлийг Clerk хариуцна.",
+        body: "Санах ой, тохиргоо тань төхөөрөмж дээрээ хадгалагдана. Чат апп эсвэл компьютераа холбосон үед л хуулбар нь үүлэнд хадгалагдана. Таны бүртгэл найдвартай хамгаалагдана.",
       },
     ],
     howTitle: "Хэрхэн ажилладаг вэ",
@@ -182,24 +154,6 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Бусад бүх хот",
       body: "Цаг агаар, агаарын чанар, газрын зураг, мэдээ, нээлттэй өгөгдөл байгаа газар нийтийн тээвэр. Хамрах хүрээ нь хот бүрийн нийтэлдэг өгөгдлөөс хамаарна.",
     },
-    pricingTitle: "Үнэ",
-    pricingLead: "Үүлэн багцууд манай Claude, Azure Speech, ElevenLabs, Supabase бүртгэлээр ажиллана. Өөрийн түлхүүрээ ашиглавал Aspire үнэгүй хэвээр.",
-    hackathon: "Орхон Хакатоны үеэр үнэгүй",
-    hackathonBody: "Хакатон үргэлжлэх хугацаанд бүх үүлэн багц үнэгүй. Доорх үнэ нь Pro, Ultra багцын хакатоны дараах үнэ.",
-    freePrice: "Үнэгүй",
-    freeNow: "Одоо үнэгүй",
-    after: "Хакатоны дараа сард {price}",
-    plans: [
-      { name: "Үнэгүй", points: ["Өдөрт 20 асуулт", "Энгийн дуу хоолой"] },
-      { name: "Pro", points: ["Сард 1,500 асуулт", "Сард 2 цаг ElevenLabs дуу хоолой", "Aspire Desktop-оор компьютер дээрх үйлдэл"] },
-      { name: "Ultra", points: ["Сард 5,000 асуулт", "Сард 8 цаг ElevenLabs дуу хоолой", "Aspire Desktop-оор компьютер дээрх үйлдэл", "Тэргүүн ээлжийн хандалт"] },
-    ],
-    own: {
-      name: "Өөрийн сервер, өөрийн түлхүүр",
-      price: "Үүрд үнэгүй",
-      points: ["Өөрийн Claude эсвэл OpenAI түлхүүр", "Дуу хоолой, байршуулалтад өөрийн Azure эсвэл AWS", "Aspire Desktop дахь локал Qwen2.5 1.5B загвар", "Өөрийн компьютер дээрх сервер"],
-      cta: "Өөрөө ажиллуулах",
-    },
     selfTitle: "Өөрөө ажиллуул",
     selfLead: "Aspire манай серверээс хамааралгүй ажиллаж чадна. Өөрийн түлхүүр, локал загвар эсвэл өөрийн компьютерээ ашиглавал үнэгүй.",
     self: [
@@ -213,7 +167,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     download: "Aspire Desktop татах",
     faqTitle: "Түгээмэл асуулт",
     faq: [
-      { q: "Үнэгүй юу?", a: "Орхон Хакатоны үеэр үнэгүй. Дараа нь ч үнэгүй багц үнэгүй хэвээр, өөрийн түлхүүрээр ажиллуулах нь үүрд үнэгүй." },
+      { q: "Үнэгүй юу?", a: "Тийм. Орхон Хакатоны үеэр Aspire үнэгүй, өөрийн түлхүүрээр ажиллуулах нь үргэлж үнэгүй." },
       {
         q: "Миний мэдээлэлд юу тохиолдох вэ?",
         a: "Санах ой, сануулга, тохиргоо тань төхөөрөмж дээр хадгалагдана. Хариулахын тулд асуултыг тань манай сервер болон нууцлалын бодлогод нэрлэсэн хиймэл оюун, ярианы үйлчилгээ (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs) рүү илгээнэ. Чат апп эсвэл компьютераа холбосон үед л хуулбар нь үүлэнд хадгалагдана. Таны бүртгэлийг Clerk хариуцна. Дэлгэрэнгүйг нууцлалын бодлогоос уншина уу.",
@@ -222,6 +176,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
         q: "Ямар хэлээр ярьдаг вэ?",
         a: "Монгол, хятад, англи, орос, герман хэлээр, дуу болон бичвэрээр. Хүссэн үедээ хэлээ сольж болно, Aspire дагаад солигдоно.",
       },
+      { q: "Миний нууцлал хэрхэн хамгаалагдах вэ?", a: "Бид зар сурталчилгааны хянах хэрэгсэл ашигладаггүй, таны мэдээллийг худалдахгүй. Байршлыг тань зөвхөн таны зөвшөөрлөөр ашиглана, Тохиргооноос хүссэн үедээ унтрааж болно. Мессеж, дуудлага, имэйлийг зөвхөн таныг баталгаажуулсны дараа илгээнэ. Aspire-ийн санаж буй зүйлийг «Санах ой», «Тохиргоо» хэсгээс үзэж, устгаж болно." },
     ],
     privacy: "Нууцлал",
     terms: "Үйлчилгээний нөхцөл",
@@ -255,7 +210,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       { title: "在聊天应用里也能用", body: "绑定 Telegram、Discord 或 Slack，直接在那里提问。" },
       {
         title: "你的记忆留在你的设备上",
-        body: "你的记忆和设置保存在你的设备上。只有绑定聊天应用或你的电脑后，才会在云端保存一份副本。你的账户由 Clerk 管理。",
+        body: "你的记忆和设置保存在你的设备上。只有绑定聊天应用或你的电脑后，才会在云端保存一份副本。你的账户受到安全保护。",
       },
     ],
     howTitle: "如何使用",
@@ -273,24 +228,6 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "其他所有城市",
       body: "天气、空气质量、地图、新闻，以及有开放数据地区的公共交通。覆盖范围取决于各城市公开的数据。",
     },
-    pricingTitle: "价格",
-    pricingLead: "云端方案使用我们的 Claude、Azure Speech、ElevenLabs 和 Supabase 账户运行。使用你自己的密钥，Aspire 一直免费。",
-    hackathon: "鄂尔浑黑客马拉松期间免费",
-    hackathonBody: "黑客马拉松期间，所有云端方案均免费。下方价格是 Pro 和 Ultra 在活动结束后的价格。",
-    freePrice: "免费",
-    freeNow: "现在免费",
-    after: "黑客马拉松结束后每月 {price}",
-    plans: [
-      { name: "免费版", points: ["每天 20 个问题", "标准语音"] },
-      { name: "Pro", points: ["每月 1500 个问题", "每月 2 小时 ElevenLabs 语音", "通过 Aspire Desktop 执行电脑操作"] },
-      { name: "Ultra", points: ["每月 5000 个问题", "每月 8 小时 ElevenLabs 语音", "通过 Aspire Desktop 执行电脑操作", "优先使用"] },
-    ],
-    own: {
-      name: "自托管或自带密钥",
-      price: "永久免费",
-      points: ["你自己的 Claude 或 OpenAI 密钥", "用你自己的 Azure 或 AWS 提供语音和托管", "Aspire Desktop 内置本地 Qwen2.5 1.5B 模型", "在你自己的电脑上运行服务器"],
-      cta: "自行运行",
-    },
     selfTitle: "自行运行",
     selfLead: "Aspire 不一定要用我们的服务器。使用你自己的密钥、本地模型或你自己的电脑，完全免费。",
     self: [
@@ -304,7 +241,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     download: "下载 Aspire Desktop",
     faqTitle: "常见问题",
     faq: [
-      { q: "免费吗？", a: "鄂尔浑黑客马拉松期间免费。活动结束后，免费版仍然免费，用你自己的密钥运行 Aspire 永久免费。" },
+      { q: "免费吗？", a: "是的。鄂尔浑黑客马拉松期间 Aspire 免费，用你自己的密钥运行则一直免费。" },
       {
         q: "我的数据会怎样？",
         a: "你的记忆、提醒和设置保存在你的设备上。为了回答你，你的提问会发送到我们的服务器以及隐私政策中列出的 AI 和语音服务（Anthropic、DeepSeek、Google、Microsoft、ElevenLabs）。只有绑定聊天应用或你的电脑后，才会在云端保存一份副本。你的账户由 Clerk 管理。详情请阅读隐私政策。",
@@ -313,6 +250,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
         q: "支持哪些语言？",
         a: "蒙古语、中文、英语、俄语和德语，语音和文字均可。随时切换，它会跟着你。",
       },
+      { q: "我的隐私如何得到保护？", a: "没有广告追踪，我们绝不出售你的数据。只有在你允许时才会使用你的位置，你可以随时在设置中关闭。消息、电话和邮件只有在你确认后才会发送。你可以在“记忆”和“设置”中查看并删除 Aspire 记住的内容。" },
     ],
     privacy: "隐私政策",
     terms: "服务条款",
@@ -346,7 +284,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       { title: "Работает в мессенджерах", body: "Подключите Telegram, Discord или Slack и спрашивайте оттуда." },
       {
         title: "Ваша память остаётся на устройстве",
-        body: "Память и настройки хранятся на вашем устройстве. Копия попадает в облако, только если вы подключили мессенджер или компьютер. Учётной записью занимается Clerk.",
+        body: "Память и настройки хранятся на вашем устройстве. Копия попадает в облако, только если вы подключили мессенджер или компьютер. Ваша учётная запись надёжно защищена.",
       },
     ],
     howTitle: "Как это работает",
@@ -364,24 +302,6 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Все остальные города",
       body: "Погода, качество воздуха, карты, новости и общественный транспорт там, где есть открытые данные. Охват зависит от того, что публикует каждый город.",
     },
-    pricingTitle: "Цены",
-    pricingLead: "Облачные тарифы работают на наших аккаунтах Claude, Azure Speech, ElevenLabs и Supabase. Со своими ключами Aspire остаётся бесплатным.",
-    hackathon: "Бесплатно на время Орхон Хакатона",
-    hackathonBody: "Пока идёт хакатон, все облачные тарифы бесплатны. Цены показывают, сколько Pro и Ultra будут стоить после него.",
-    freePrice: "Бесплатно",
-    freeNow: "Сейчас бесплатно",
-    after: "{price} в месяц после хакатона",
-    plans: [
-      { name: "Бесплатный", points: ["20 вопросов в день", "Стандартный голос"] },
-      { name: "Pro", points: ["1 500 вопросов в месяц", "2 часа голоса ElevenLabs в месяц", "Действия на компьютере через Aspire Desktop"] },
-      { name: "Ultra", points: ["5 000 вопросов в месяц", "8 часов голоса ElevenLabs в месяц", "Действия на компьютере через Aspire Desktop", "Приоритетный доступ"] },
-    ],
-    own: {
-      name: "Свой сервер или свои ключи",
-      price: "Бесплатно навсегда",
-      points: ["Свой ключ Claude или OpenAI", "Свой Azure или AWS для голоса и хостинга", "Локальная модель Qwen2.5 1.5B в Aspire Desktop", "Сервер на вашем собственном компьютере"],
-      cta: "Запустить у себя",
-    },
     selfTitle: "Запустите у себя",
     selfLead: "Aspire может работать без наших серверов. Со своими ключами, локальной моделью или на своём компьютере это ничего не стоит.",
     self: [
@@ -395,7 +315,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     download: "Скачать Aspire Desktop",
     faqTitle: "Вопросы",
     faq: [
-      { q: "Это бесплатно?", a: "Бесплатно на время Орхон Хакатона. После него бесплатный тариф останется бесплатным, а Aspire со своими ключами бесплатен навсегда." },
+      { q: "Это бесплатно?", a: "Да. На время Орхон Хакатона Aspire бесплатен, а со своими ключами он бесплатен всегда." },
       {
         q: "Что происходит с моими данными?",
         a: "Память, напоминания и настройки хранятся на вашем устройстве. Для ответа ваш вопрос отправляется на наши серверы и в сервисы ИИ и речи, перечисленные в политике конфиденциальности (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). Копия попадает в облако, только если вы подключили мессенджер или компьютер. Учётной записью занимается Clerk. Подробнее в политике конфиденциальности.",
@@ -404,6 +324,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
         q: "На каких языках он говорит?",
         a: "Монгольский, китайский, английский, русский и немецкий, голосом и текстом. Переключайтесь в любой момент, он подстроится.",
       },
+      { q: "Как защищена моя конфиденциальность?", a: "Никаких рекламных трекеров, и мы не продаём ваши данные. Местоположение используется только с вашего разрешения, и его можно отключить в любой момент в настройках. Сообщения, звонки и письма отправляются только после вашего подтверждения. То, что помнит Aspire, можно посмотреть и удалить в разделах «Память» и «Настройки»." },
     ],
     privacy: "Конфиденциальность",
     terms: "Условия",
@@ -437,7 +358,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       { title: "Auch in deinen Chat-Apps", body: "Verbinde Telegram, Discord oder Slack und frag direkt dort." },
       {
         title: "Dein Gedächtnis bleibt auf deinem Gerät",
-        body: "Gedächtnis und Einstellungen liegen auf deinem Gerät. Eine Kopie landet nur in der Cloud, wenn du eine Chat-App oder deinen Computer verbindest. Dein Konto verwaltet Clerk.",
+        body: "Gedächtnis und Einstellungen liegen auf deinem Gerät. Eine Kopie landet nur in der Cloud, wenn du eine Chat-App oder deinen Computer verbindest. Dein Konto ist sicher geschützt.",
       },
     ],
     howTitle: "So funktioniert es",
@@ -455,24 +376,6 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
       title: "Jede andere Stadt",
       body: "Wetter, Luftqualität, Karten, Nachrichten und Nahverkehr, wo offene Daten existieren. Die Abdeckung hängt davon ab, was jede Stadt veröffentlicht.",
     },
-    pricingTitle: "Preise",
-    pricingLead: "Die Cloud-Tarife laufen über unsere Konten bei Claude, Azure Speech, ElevenLabs und Supabase. Mit eigenen Schlüsseln bleibt Aspire kostenlos.",
-    hackathon: "Kostenlos während des Orkhon Hackathons",
-    hackathonBody: "Solange der Hackathon läuft, kosten alle Cloud-Tarife nichts. Die Preise zeigen, was Pro und Ultra danach kosten.",
-    freePrice: "Kostenlos",
-    freeNow: "Jetzt kostenlos",
-    after: "{price} pro Monat nach dem Hackathon",
-    plans: [
-      { name: "Kostenlos", points: ["20 Fragen pro Tag", "Standardstimme"] },
-      { name: "Pro", points: ["1.500 Fragen pro Monat", "2 Stunden ElevenLabs-Stimme pro Monat", "Aktionen am Computer mit Aspire Desktop"] },
-      { name: "Ultra", points: ["5.000 Fragen pro Monat", "8 Stunden ElevenLabs-Stimme pro Monat", "Aktionen am Computer mit Aspire Desktop", "Vorrangiger Zugang"] },
-    ],
-    own: {
-      name: "Selbst gehostet oder eigene Schlüssel",
-      price: "Für immer kostenlos",
-      points: ["Dein eigener Claude- oder OpenAI-Schlüssel", "Dein eigenes Azure oder AWS für Stimme und Hosting", "Lokales Qwen2.5-1.5B-Modell in Aspire Desktop", "Der Server auf deinem eigenen Rechner"],
-      cta: "Selbst betreiben",
-    },
     selfTitle: "Selbst betreiben",
     selfLead: "Aspire braucht unsere Server nicht. Mit eigenen Schlüsseln, einem lokalen Modell oder deinem eigenen Rechner kostet es nichts.",
     self: [
@@ -486,7 +389,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     download: "Aspire Desktop herunterladen",
     faqTitle: "Fragen",
     faq: [
-      { q: "Ist es kostenlos?", a: "Kostenlos während des Orkhon Hackathons. Danach bleibt der kostenlose Tarif kostenlos, und Aspire mit eigenen Schlüsseln ist für immer kostenlos." },
+      { q: "Ist es kostenlos?", a: "Ja. Während des Orkhon Hackathons ist Aspire kostenlos, und mit eigenen Schlüsseln immer." },
       {
         q: "Was passiert mit meinen Daten?",
         a: "Gedächtnis, Erinnerungen und Einstellungen liegen auf deinem Gerät. Für die Antwort geht deine Frage an unsere Server und an die KI- und Sprachdienste aus der Datenschutzerklärung (Anthropic, DeepSeek, Google, Microsoft, ElevenLabs). Eine Kopie landet nur in der Cloud, wenn du eine Chat-App oder deinen Computer verbindest. Dein Konto verwaltet Clerk. Details stehen in der Datenschutzerklärung.",
@@ -495,6 +398,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
         q: "Welche Sprachen spricht es?",
         a: "Mongolisch, Chinesisch, Englisch, Russisch und Deutsch, per Stimme und Text. Wechsle jederzeit, es folgt dir.",
       },
+      { q: "Wie wird meine Privatsphäre geschützt?", a: "Keine Werbe-Tracker, und wir verkaufen deine Daten nie. Dein Standort wird nur genutzt, wenn du es erlaubst, und du kannst ihn jederzeit in den Einstellungen ausschalten. Nachrichten, Anrufe und E-Mails gehen erst nach deiner Bestätigung raus. Was Aspire sich merkt, kannst du unter „Gedächtnis“ und „Einstellungen“ ansehen und löschen." },
     ],
     privacy: "Datenschutz",
     terms: "Nutzungsbedingungen",

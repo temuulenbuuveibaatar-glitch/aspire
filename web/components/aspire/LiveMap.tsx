@@ -179,7 +179,7 @@ export function LiveMap({ center, lang, stops = [], taxis = [], erdenet = false,
         // Inline (tablets too): two fingers pan, so a one-finger swipe still scrolls the page.
         cooperativeGestures: !fullscreen,
         attributionControl: { compact: false, customAttribution: ATTRIBUTION },
-        locale: { "CooperativeGesturesHandler.WindowsHelpText": wheel("Ctrl"), "CooperativeGesturesHandler.MacHelpText": wheel("Cmd"), "CooperativeGesturesHandler.MobileHelpText": t.touch },
+        locale: { "Map.Title": t.title, "CooperativeGesturesHandler.WindowsHelpText": wheel("Ctrl"), "CooperativeGesturesHandler.MacHelpText": wheel("Cmd"), "CooperativeGesturesHandler.MobileHelpText": t.touch },
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,

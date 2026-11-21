@@ -7,7 +7,7 @@
 // source that did not answer is never passed off as "no cameras".
 
 import { ExternalLink } from "lucide-react";
-import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ageS, ageText } from "@/components/v6/Card";
 import { HTML_LANG, type Lang } from "@/lib/lang";
 import { cameraName, isHls, safeCameraUrl, safeImageUrl, type Camera, type CameraKind } from "@/lib/tools/camera-types";
@@ -123,6 +123,12 @@ const canPlayHls = () => (hlsNative ??= document.createElement("video").canPlayT
 export function CameraPanel({ state, lang }: { state: CameraState; lang: Lang }) {
   const t = CAMERA_TEXT[lang] ?? CAMERA_TEXT.en;
   const [picked, setPicked] = useState<string | null>(null);
+  // The viewer opens above the list: focus moves to it so screen readers and keyboards land on the picked
+  // camera. The figcaption (name, source, time) names the figure, so the image alt says only its kind.
+  const viewer = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (picked) viewer.current?.focus();
+  }, [picked]);
   // The clock in 15 s steps for picture ages; null on the server.
   const step = useSyncExternalStore(subscribeTick, () => Math.floor(Date.now() / 15_000), () => null);
   const now = step == null ? null : step * 15_000;
@@ -158,11 +164,11 @@ export function CameraPanel({ state, lang }: { state: CameraState; lang: Lang })
   return (
     <div className="flex flex-col gap-3">
       {current && (
-        <figure className="flex flex-col gap-2">
+        <figure ref={viewer} tabIndex={-1} className="flex flex-col gap-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           {current.kind === "image" ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element -- remote snapshot from an allow-listed host */}
-              <img src={current.url} alt={currentName} loading="lazy" referrerPolicy="no-referrer" className="w-full rounded-[var(--radius-md)] border border-line bg-bg" />
+              <img src={current.url} alt={t.kinds.image} loading="lazy" referrerPolicy="no-referrer" className="w-full rounded-[var(--radius-md)] border border-line bg-bg" />
               {clip && (
                 <>
                   <p className="text-small text-ink-muted">{isHls(clip) ? t.stream : t.clip}</p>

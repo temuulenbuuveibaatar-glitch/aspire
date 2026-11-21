@@ -1,5 +1,6 @@
 // Google Gemini via the generateContent REST API (function calling + Google Search).
 import type { Lang } from "@/lib/lang";
+import { geminiImage } from "@/lib/photo";
 import { type Brain, contextNote, forSpeech, MAX_STEPS, runTool, SYSTEM, toolSpecs } from "./shared";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
@@ -61,7 +62,7 @@ export const gemini: Brain = {
   async ask(text, lang: Lang, history, run) {
     const contents: Content[] = [
       ...history.map((t): Content => ({ role: t.role === "user" ? "user" : "model", parts: [{ text: t.text }] })),
-      { role: "user", parts: [{ text }] },
+      { role: "user", parts: run.photo ? [geminiImage(run.photo), { text }] : [{ text }] },
     ];
 
     const note = contextNote(lang, run);

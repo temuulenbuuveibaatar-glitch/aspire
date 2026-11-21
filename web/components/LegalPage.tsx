@@ -39,7 +39,7 @@ export function LangJump() {
   );
 }
 
-export default function LegalPage({ title, children }: { title: string; children: React.ReactNode }) {
+export default function LegalPage({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <main className="legal">
       <nav>

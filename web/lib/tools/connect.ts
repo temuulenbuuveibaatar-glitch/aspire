@@ -3,6 +3,7 @@
 // nothing is sent, posted or dialed until they press the button themselves.
 import type { Lang } from "@/lib/lang";
 import { googleCalendarUrl, phoneDigits } from "@/lib/links";
+import { buildRRule, describeRepeat, parseRepeat, REPEAT_PARAMS, withRecur } from "@/lib/rrule";
 import { TIME_ZONE_PARAM, zoneFor } from "./local";
 import { zonedTime } from "./time";
 import { CHANNELS, type Channel, str, type Tool } from "./types";
@@ -124,7 +125,7 @@ export const addToCalendar: Tool = {
   name: "add_to_calendar",
   label: { mn: "Календарь", en: "Calendar" },
   description:
-    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' card; nothing is saved until the person presses it, so say it is ready to add, never that it was added. Times are the person's own local time. Get the local time first for words like 'tomorrow'. Use get_calendar to check what is already on.",
+    "Prepare a Google Calendar event (meeting, appointment, class). Shows an 'Add to Google Calendar' card; nothing is saved until the person presses it, so say it is ready to add, never that it was added. Times are the person's own local time. Get the local time first for words like 'tomorrow'. Use get_calendar to check what is already on. For repeating events (every Monday class, pension day each month, last day of the month bill) set repeat.",
   parameters: {
     type: "object",
     properties: {
@@ -134,22 +135,28 @@ export const addToCalendar: Tool = {
       duration_minutes: { type: "number", description: "Length in minutes, e.g. 60" },
       details: { type: "string", description: "Notes, place or empty string" },
       time_zone: TIME_ZONE_PARAM,
+      ...REPEAT_PARAMS,
     },
-    required: ["title", "date", "time", "duration_minutes", "details", "time_zone"],
+    required: ["title", "date", "time", "duration_minutes", "details", "time_zone", "repeat", "repeat_on", "repeat_count"],
   },
   async run(input, ctx) {
     const title = str(input.title, 120);
     if (!title) return { error: "title is required" };
     const start = zonedTime(str(input.date, 10), str(input.time, 5), zoneFor(input, ctx));
     if (!start) return { error: "date must be YYYY-MM-DD and time HH:MM" };
+    const rep = parseRepeat(input, Number(str(input.date, 10).slice(8, 10)));
+    if (rep && "error" in rep) return rep;
+    const recurrence = rep ? buildRRule(rep) : undefined;
     const rawMinutes = Number(input.duration_minutes);
     const minutes = Number.isFinite(rawMinutes) && rawMinutes > 0 ? Math.min(Math.round(rawMinutes), 24 * 60) : 60;
     const end = new Date(start.getTime() + minutes * 60_000);
     const details = str(input.details, 500);
     const startIso = start.toISOString();
     const endIso = end.toISOString();
-    ctx.actions.push({ type: "calendar", title, start: startIso, end: endIso, details, url: googleCalendarUrl(title, startIso, endIso, details) });
-    if (start.getTime() < ctx.now.getTime()) return { ok: true, shown: "calendar button", warning: "That time is in the past; check the date with the person" };
-    return { ok: true, shown: "calendar button" };
+    const url = googleCalendarUrl(title, startIso, endIso, details);
+    ctx.actions.push({ type: "calendar", title, start: startIso, end: endIso, details, url: recurrence ? withRecur(url, recurrence) : url, ...(recurrence ? { recurrence } : {}) });
+    const repeat = rep ? { repeat: describeRepeat(rep) } : {};
+    if (start.getTime() < ctx.now.getTime()) return { ok: true, shown: "calendar button", ...repeat, warning: "That time is in the past; check the date with the person" };
+    return { ok: true, shown: "calendar button", ...repeat };
   },
 };

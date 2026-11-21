@@ -37,7 +37,10 @@ function elsewhere(ctx: ToolContext, what: string) {
       hint: "The city's Traffic Management Center shows live cameras at ubtraffic.mn. For drive times with traffic use get_directions with mode 'drive'.",
     };
   }
-  return { error: `No live ${what} data for this city yet. Say so honestly.`, hint: "For drive times with live traffic use get_directions with mode 'drive'." };
+  const hint = what === "traffic"
+    ? "For drive times with live traffic use get_directions with mode 'drive'."
+    : `Then call find_places with query '${what === "fuel" ? "fuel station" : "parking"}' (add the city name when the location is unknown) and open_now true, to show the nearest ones.`;
+  return { error: `No live ${what} data for this city yet. Say so honestly.`, hint };
 }
 
 const inErdenet = (ctx: ToolContext) => {
@@ -84,7 +87,7 @@ export const getParkingTool: Tool = {
   name: "get_parking",
   label: { mn: "Зогсоол", en: "Parking" },
   description:
-    "Free parking spaces in Erdenet, Mongolia, per car park (counted by the city's cameras, so approximate), nearest first when the person shared their location. Other cities: no feed. " +
+    "Free parking spaces in Erdenet, Mongolia, per car park (counted by the city's cameras, so approximate), nearest first when the person shared their location. Other cities: no feed; use find_places for nearby parking instead. " +
     TRUTH,
   parameters: { type: "object", properties: {}, required: [] },
   async run(_input, ctx) {
@@ -109,7 +112,7 @@ export const getFuelTool: Tool = {
   name: "get_fuel",
   label: { mn: "Шатахуун", en: "Fuel" },
   description:
-    "Which fuel stations in Erdenet, Mongolia are selling each fuel (AI92, AI95, DIESEL, GAS, EURO92), with community queue reports, nearest first when the person shared their location. Most stations report nothing: 'unknown' means not known, never 'sold out'. Other cities: no feed. " +
+    "Which fuel stations in Erdenet, Mongolia are selling each fuel (AI92, AI95, DIESEL, GAS, EURO92), with community queue reports, nearest first when the person shared their location. Most stations report nothing: 'unknown' means not known, never 'sold out'. Other cities: no feed; use find_places for nearby fuel stations instead. " +
     TRUTH,
   parameters: {
     type: "object",

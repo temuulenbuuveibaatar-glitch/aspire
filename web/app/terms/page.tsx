@@ -13,7 +13,13 @@ export const metadata: Metadata = {
 
 export default function Terms() {
   return (
-    <LegalPage title="Үйлчилгээний нөхцөл · Terms of Use">
+    <LegalPage
+      title={
+        <>
+          <span lang="mn">Үйлчилгээний нөхцөл</span> · Terms of Use
+        </>
+      }
+    >
       <LangJump />
       <section lang="mn" id="mn">
         <h2>Энэ юу вэ</h2>

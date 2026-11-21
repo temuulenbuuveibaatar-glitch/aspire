@@ -13,7 +13,13 @@ const GOOGLE_POLICY = "https://developers.google.com/terms/api-services-user-dat
 
 export default function Privacy() {
   return (
-    <LegalPage title="Нууцлалын бодлого · Privacy Policy">
+    <LegalPage
+      title={
+        <>
+          <span lang="mn">Нууцлалын бодлого</span> · Privacy Policy
+        </>
+      }
+    >
       <LangJump />
       <section lang="mn" id="mn">
         <h2>Товчхондоо</h2>
@@ -28,7 +34,7 @@ export default function Privacy() {
           </li>
           <li>
             Telegram, Discord эсвэл Slack ботоо холбосон үед л тэдгээрийн хуулбар манай мэдээллийн санд (Supabase, Сөүл, Өмнөд Солонгос)
-            хадгалагдана.
+            хадгалагдана. Сануулгын мэдэгдлийг асаавал зөвхөн сануулга (текст, цаг) тэнд хадгалагдана.
           </li>
           <li>Gmail-ийг зөвхөн уншина, захидлын мэдээллийг хадгалдаггүй.</li>
           <li>Google Calendar: таныг асуухад өнөөдрийн болон энэ долоо хоногийн үйл явдлыг уншина; үйл явдлыг зөвхөн таныг &quot;Нэмэх&quot; дарсны дараа нэмнэ.</li>
@@ -138,6 +144,7 @@ export default function Privacy() {
             зөвхөн Telegram, Discord эсвэл Slack ботоо холбосон хэрэглэгчийн санах ой, сануулга, дадал, хичээлийн явцын хуулбар (бот таныг
             таньж ажиллахад хэрэгтэй);
           </li>
+          <li>зөвхөн сануулгын мэдэгдэл асаасан хэрэглэгчийн хөтчийн мэдэгдлийн хаяг ба сануулгын (текст, цаг) хуулбар;</li>
           <li>
             компьютер холбосон бол Aspire Desktop: төхөөрөмжийн нэр, код ба токены хэш, ажлууд (дуусмагц агуулга нь устна, бичлэг 24
             цагийн дараа устна).
@@ -188,6 +195,12 @@ export default function Privacy() {
           <li>Supabase: мэдээллийн сан (Сөүл, Өмнөд Солонгос).</li>
           <li>Vercel: сайтыг байршуулах.</li>
           <li>Anthropic Claude, DeepSeek, Google Gemini: хиймэл оюуны хариулт. Вэб хайлтыг Claude хийнэ.</li>
+          <li>Зураг илгээвэл хариулахын тулд AI үйлчилгээ (Anthropic эсвэл Google) рүү нэг удаа илгээгдэнэ; Аспайр түүнийг хадгалахгүй, бүртгэхгүй.</li>
+          <li>
+            Сануулгын мэдэгдэл (Тохиргоонд асаасан үед): таны хөтчийн мэдэгдлийн хаяг болон сануулгууд (текст, цаг) Supabase-д хадгалагдана;
+            сануулга таны хөтчийн мэдэгдлийн үйлчилгээгээр (Google, Mozilla эсвэл Apple) шифрлэгдэж очно. Унтраавал, гарвал эсвэл бүртгэлээ
+            устгавал хаяг устна.
+          </li>
           <li>Microsoft Azure Speech: яриа таних, дуугаар хариулах.</li>
           <li>ElevenLabs: дуугаар хариулах (хариултын текст).</li>
           <li>Google: Gmail API, Google Calendar API, нэвтрэлт. Apple: нэвтрэлт.</li>
@@ -249,7 +262,8 @@ export default function Privacy() {
             By default your memory, reminders, routines, lessons, settings and Discord/Slack channel links stay <b>only on your device</b>.
           </li>
           <li>
-            Only if you link a Telegram, Discord or Slack bot is a copy of them kept in our database (Supabase, Seoul, South Korea).
+            Only if you link a Telegram, Discord or Slack bot is a copy of them kept in our database (Supabase, Seoul, South Korea). If
+            you turn on reminder notifications, only your reminders (text and time) are kept there.
           </li>
           <li>Gmail is read-only, and nothing from your mail is stored.</li>
           <li>Google Calendar: today&apos;s or this week&apos;s events are read when you ask; an event is added only after you press Add.</li>
@@ -357,6 +371,7 @@ export default function Privacy() {
             only for users who link a Telegram, Discord or Slack bot: a synced copy of your memory, reminders, routines and lessons, so
             the bot can help you as you;
           </li>
+          <li>only for users who turn on reminder notifications: their browser&apos;s push address and a copy of their reminders (text and time);</li>
           <li>
             only if you pair a computer with Aspire Desktop: its device name, hashed codes and token, and jobs (content erased once
             finished, records deleted after 24 hours).
@@ -408,6 +423,12 @@ export default function Privacy() {
           <li>Supabase: database (Seoul, South Korea).</li>
           <li>Vercel: hosting.</li>
           <li>Anthropic Claude, DeepSeek, Google Gemini: AI answers. Web search is done through Claude.</li>
+          <li>If you send a photo, it is sent once to the AI provider (Anthropic or Google) to answer you, and is not stored or logged by Aspire.</li>
+          <li>
+            Reminder notifications (only when you turn them on in Settings): your browser&apos;s push address and your reminders (text and
+            time) are stored in Supabase, and reminders travel encrypted through your browser&apos;s push service (Google, Mozilla or Apple).
+            Turning them off, signing out or deleting your data removes the address.
+          </li>
           <li>Microsoft Azure Speech: voice recognition and spoken replies.</li>
           <li>ElevenLabs: spoken replies (the reply text).</li>
           <li>Google: Gmail API, Google Calendar API and sign-in. Apple: sign-in.</li>
@@ -462,7 +483,7 @@ export default function Privacy() {
         <ul>
           <li>登录由 Clerk 提供（Google、Apple 或发送到邮箱的 6 位验证码）。Aspire 不保存密码。</li>
           <li>默认情况下，您的记忆、提醒、流程、课程、设置以及 Discord/Slack 频道链接只保存在您的设备上。</li>
-          <li>只有在您关联 Telegram、Discord 或 Slack 机器人时，才会在我们的数据库（Supabase，韩国首尔）中保存一份副本。</li>
+          <li>只有在您关联 Telegram、Discord 或 Slack 机器人时，才会在我们的数据库（Supabase，韩国首尔）中保存一份副本。开启提醒通知时，只保存您的提醒（内容和时间）。</li>
           <li>Gmail 为只读，不保存任何邮件内容。</li>
           <li>Google 日历：在您询问时读取今天或本周的日程；只有在您点击“添加”后才会添加日程，不保存任何内容。</li>
           <li>
@@ -508,7 +529,10 @@ export default function Privacy() {
             По умолчанию ваша память, напоминания, сценарии, уроки, настройки и ссылки на каналы Discord/Slack хранятся только на вашем
             устройстве.
           </li>
-          <li>Только если вы подключите бота Telegram, Discord или Slack, их копия хранится в нашей базе (Supabase, Сеул, Южная Корея).</li>
+          <li>
+            Только если вы подключите бота Telegram, Discord или Slack, их копия хранится в нашей базе (Supabase, Сеул, Южная Корея). Если
+            включить уведомления о напоминаниях, там хранятся только напоминания (текст и время).
+          </li>
           <li>Доступ к Gmail только для чтения, содержимое писем не сохраняется.</li>
           <li>Google Календарь: события на сегодня или неделю читаются по вашему запросу; событие добавляется только после нажатия «Добавить». Ничего не сохраняется.</li>
           <li>
@@ -564,7 +588,10 @@ export default function Privacy() {
             Gedächtnis, Erinnerungen, Abläufe, Lektionen, Einstellungen und Discord/Slack-Kanallinks bleiben standardmäßig nur auf Ihrem
             Gerät.
           </li>
-          <li>Nur wenn Sie einen Telegram-, Discord- oder Slack-Bot verknüpfen, liegt eine Kopie in unserer Datenbank (Supabase, Seoul, Südkorea).</li>
+          <li>
+            Nur wenn Sie einen Telegram-, Discord- oder Slack-Bot verknüpfen, liegt eine Kopie in unserer Datenbank (Supabase, Seoul, Südkorea).
+            Mit eingeschalteten Erinnerungsmitteilungen werden dort nur Ihre Erinnerungen (Text und Uhrzeit) gespeichert.
+          </li>
           <li>Gmail ist nur lesbar; aus Ihren E-Mails wird nichts gespeichert.</li>
           <li>Google Kalender: Termine von heute oder dieser Woche werden gelesen, wenn Sie fragen; ein Termin wird erst nach Tippen auf „Hinzufügen“ eingetragen. Nichts wird gespeichert.</li>
           <li>

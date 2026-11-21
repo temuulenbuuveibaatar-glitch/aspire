@@ -117,6 +117,8 @@ export interface AmbientNextBus {
 
 export interface Ambient {
   place: string | null;
+  /** The place's country, ISO 3166-1 alpha-2 ("MN"): the news card asks for its headlines. */
+  country?: string | null;
   /** The device position (4 decimals) or the chosen city; never an IP-derived one. */
   coords: { lat: number; lng: number } | null;
   /** Where the position came from: the device (opt-in), the city the person set, or the network (approximate). */

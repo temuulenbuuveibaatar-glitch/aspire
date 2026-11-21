@@ -171,6 +171,23 @@ export function detectTextLanguage(text: string, hint?: Lang): Lang {
   return de > en ? "de" : "en";
 }
 
+const SCRIPT: Record<Lang, RegExp> = {
+  mn: /\p{Script=Cyrillic}/u,
+  ru: /\p{Script=Cyrillic}/u,
+  zh: /\p{Script=Han}/u,
+  en: /\p{Script=Latin}/u,
+  de: /\p{Script=Latin}/u,
+};
+
+/**
+ * Voice for a reply: the question's language, unless the reply has no letter of that language's
+ * script at all (interpreter mode: a Chinese reply to a Mongolian speaker is read by a Chinese voice).
+ * A reply that only quotes a foreign phrase keeps the person's own voice.
+ */
+export function speechLang(reply: string, asked: Lang): Lang {
+  return SCRIPT[asked].test(reply) ? asked : detectTextLanguage(reply, asked);
+}
+
 /**
  * Pick the language for a spoken message, combining the speech engine's
  * language probabilities with the transcript itself.
