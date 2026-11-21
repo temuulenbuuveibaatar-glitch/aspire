@@ -1,0 +1,72 @@
+name: Desktop
+
+# Builds Aspire Desktop (desktop-app/, Tauri 2 + Rust) for Windows (.msi, -setup.exe) and macOS
+# (universal .dmg). Unsigned. Pushing a v* tag also creates a draft GitHub Release.
+on:
+  push:
+    branches: [desktop-app]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust-targets: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc
+          - os: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-app/src-tauri -> target
+
+      - name: Install Tauri CLI
+        working-directory: desktop-app
+        run: npm ci
+
+      - name: Build (and draft a release on v* tags)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop-app
+          args: ${{ matrix.args }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: Aspire Desktop ${{ github.ref_name }}
+          releaseBody: Unsigned installers. See desktop-app/README.md for first-run steps.
+          releaseDraft: true
+          prerelease: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aspire-desktop-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            desktop-app/src-tauri/target/*/release/bundle/msi/*.msi
+            desktop-app/src-tauri/target/*/release/bundle/nsis/*-setup.exe
+            desktop-app/src-tauri/target/*/release/bundle/dmg/*.dmg
