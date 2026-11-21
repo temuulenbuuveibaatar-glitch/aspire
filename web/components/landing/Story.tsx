@@ -1,16 +1,19 @@
 "use client";
 
 // The scroll story of the opening page: five scenes that each pin to the screen and play as you
-// scroll, then (rendered by Landing after it) the city marquee and the feature index.
+// scroll, then (rendered by Landing after it) the city marquee.
 //
-//   01 Ask               the orb listens, a question types itself, the answer arrives
-//   02 The city, live    six product cards are dealt onto a pile and fan out into a row
-//   03 Real weather      the page's own sky turns clear, rain, snow, then back to the visitor's
-//   04 Five languages    one question, in Mongolian, Chinese, English, Russian and German
-//   05 It does the work  the jobs Aspire takes on fly in and settle into a grid
+//   001 Ask               the orb in its gauge listens, a question types itself, the answer arrives
+//                         (and is spoken, when the play button is pressed)
+//   002 The city, live    the visitor's own readings on one gauge, one dial after another
+//   003 Real weather      the page's own sky turns clear, rain, snow, then back to the visitor's
+//   004 Five languages    one question, in Mongolian, Chinese, English, Russian and German
+//   005 It does the work  the jobs Aspire takes on, and a line typed for the one that is picked
 //
-// The parts live in ./story: the strings (copy.ts), the numbers behind the motion (math.ts), what
-// may move (mode.ts), the pinned frame every scene shares (scene.tsx) and the styles (story.css).
+// The parts live in ./story: the strings (copy.ts), the numbers behind the motion (math.ts and
+// dials.ts), what may move (mode.ts), the pinned frame every scene shares (scene.tsx), the gauge
+// (Gauge.tsx), the settling mono line (Decode.tsx), the recorded clips (sound.ts) and the styles
+// (story.css).
 //
 // The server's HTML is every scene in normal flow, in its final, readable state: nothing waits for
 // a script or an observer to be seen. A hydrated page that may move (no reduced motion, no Calm
@@ -24,7 +27,6 @@ import "./story/story.css";
 import { useMemo } from "react";
 import type { LandingWeather } from "@/lib/landing-weather";
 import type { Lang } from "@/lib/lang";
-import { FeatureList } from "./story/FeatureIndex";
 import { CityMarquee } from "./story/Marquee";
 import { usableReading } from "./story/math";
 import { ModeContext, useStoryMode } from "./story/mode";
@@ -36,13 +38,16 @@ import { SceneWork } from "./story/SceneWork";
 
 /**
  * The five pinned scenes. `weather` is the visitor's reading, not awaited: the two places that show
- * it (the weather card of scene 02, the last step of scene 03) read it inside their own Suspense
- * boundaries, and show an example or nothing until it arrives and when there is none.
+ * it (the dials of scene 002, the last step of scene 003) read it inside their own Suspense
+ * boundaries, and show nothing of it until it arrives and when there is none.
  */
 export function Story({ lang, weather }: { lang: Lang; weather?: Promise<LandingWeather | null> }) {
   const mode = useStoryMode();
   // One checked promise for both places. A rejected one counts as no reading.
-  const reading = useMemo(() => weather?.then(usableReading, () => null), [weather]);
+  // Promise.resolve first: a promise that arrives from the server as a prop is React's own
+  // thenable, whose then() calls back but returns nothing. Chaining on it directly gave
+  // `undefined`, and the story then behaved as if the page had no reading at all.
+  const reading = useMemo(() => (weather ? Promise.resolve(weather).then(usableReading, () => null) : undefined), [weather]);
   return (
     <ModeContext.Provider value={mode}>
       <div className="st-story" data-story={mode.live ? "live" : "still"}>
@@ -59,9 +64,4 @@ export function Story({ lang, weather }: { lang: Lang; weather?: Promise<Landing
 /** Cities with a public street camera source, in huge outlined type that moves with the scroll. */
 export function Marquee({ lang }: { lang: Lang }) {
   return <CityMarquee lang={lang} />;
-}
-
-/** What Aspire does, as eight large numbered rows; with a mouse a small picture follows the pointer. */
-export function FeatureIndex({ lang }: { lang: Lang }) {
-  return <FeatureList lang={lang} />;
 }

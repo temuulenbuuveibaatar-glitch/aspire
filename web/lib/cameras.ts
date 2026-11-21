@@ -44,6 +44,12 @@ const MAX_CAMERAS = 40;
 const TIMEOUT_MS = 10_000;
 /** The longest findCameras waits for every source together (YouTube and TDX make two calls each). */
 const DEADLINE_MS = 10_000;
+/**
+ * All the Overpass mirrors together get this long. The other sources of a place answer in about half a
+ * second, so a silent Overpass must not hold the camera panel (it did, for 9 s); after the budget the
+ * source is named as not answering and its cell rests 10 minutes.
+ */
+const OVERPASS_BUDGET_MS = 3_000;
 
 const CREDIT = {
   ub: "ЗХУТ",
@@ -658,10 +664,10 @@ function overpass(at: LatLng): Promise<Spot[]> {
   return resting(key, () => cached(key, DAY, async () => {
     // 33 km around the cell centre covers 25 km around any point in the cell; filtered below.
     const around = `(around:33000,${c.lat.toFixed(1)},${c.lng.toFixed(1)})`;
-    // Server timeout under the client's 10 s; `out 400` so the distance sort sees every candidate.
-    const query = `[out:json][timeout:9];(node${around}["contact:webcam"];node${around}["url:webcam"];node${around}["webcam"];);out 400;`;
-    // The mirrors in order (lib/osm-stops.ts; resting ones skipped), one shared 9 s budget.
-    const deadline = Date.now() + 9_000;
+    // Server timeout the same as our own budget; `out 400` so the distance sort sees every candidate.
+    const query = `[out:json][timeout:${OVERPASS_BUDGET_MS / 1000}];(node${around}["contact:webcam"];node${around}["url:webcam"];node${around}["webcam"];);out 400;`;
+    // The mirrors in order (lib/osm-stops.ts; resting ones skipped), one shared budget.
+    const deadline = Date.now() + OVERPASS_BUDGET_MS;
     let last: unknown = new Error("overpass mirrors resting");
     for (const url of mirrorsUp()) {
       const left = deadline - Date.now();

@@ -1,15 +1,16 @@
 "use client";
 
-// A ring that trails the mouse over the opening page and opens up over anything that can be pressed
-// (landing.css .lp-cursor). Decoration only: the system's arrow stays, nothing depends on the ring,
-// and it is not rendered at all for touch, reduced motion or Calm mode.
+// A small crosshair that trails the mouse over the opening page and opens into four corner brackets
+// over anything that can be pressed (landing.css .lp-cursor). Decoration only: the system's arrow
+// stays, nothing depends on the mark, and it is not rendered at all for touch, reduced motion or
+// Calm mode.
 
 import { motion, useMotionValue, useSpring } from "motion/react";
 import { useEffect, useState } from "react";
 import { useMedia, useStill } from "@/lib/display-prefs";
 
-/** The ring lags the arrow a little, with no overshoot. */
-const TRAIL = { stiffness: 420, damping: 36, mass: 0.5 } as const;
+/** The mark lags the arrow a little, with no overshoot. */
+const TRAIL = { stiffness: 520, damping: 40, mass: 0.45 } as const;
 const PRESSABLE = "a, button, summary, [role='button']";
 
 type State = "off" | "on" | "over";
@@ -31,7 +32,7 @@ export function Cursor() {
       if (e.pointerType !== "mouse") return;
       x.set(e.clientX);
       y.set(e.clientY);
-      // The first position is a place, not a movement: the ring starts there instead of flying in.
+      // The first position is a place, not a movement: the mark starts there instead of flying in.
       if (!seen) {
         seen = true;
         sx.jump(e.clientX);
@@ -53,5 +54,10 @@ export function Cursor() {
   }, [on, x, y, sx, sy]);
 
   if (!on) return null;
-  return <motion.div aria-hidden className="lp-cursor" data-state={state} style={{ x: sx, y: sy }} />;
+  return (
+    <motion.div aria-hidden className="lp-cursor" data-state={state} style={{ x: sx, y: sy }}>
+      <span className="lp-cursor-cross" />
+      <span className="lp-cursor-box" />
+    </motion.div>
+  );
 }

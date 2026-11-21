@@ -1,26 +1,29 @@
 "use client";
 
-// Scene 03, Real weather: the page's own sky is the picture. While the stage is pinned the scene
+// Scene 003, Real weather: the page's own sky is the picture. While the stage is pinned the scene
 // asks the page for a clear sky, then rain, then snow (sky-store.ts, drawn by the one sky layer
-// behind the page at the visitor's own hour), and before it lets go it hands the page back its
-// real sky. The stage itself only names what is overhead, in outlined type the weather shows through.
+// behind the page), and before it lets go it hands the page back its real sky. The stage itself
+// only names what is overhead, in outlined type the weather shows through.
 //
-// The three demonstration skies carry the Example label. The last step shows the visitor's own
-// reading (place, temperature, sky, source) when there is one, and nothing invented when there is not.
-// Without motion nothing is ever asked of the page: the scene lists the three skies and the reading.
+// The four numbered marks are buttons: each scrolls the page to its sky, so the scene can be
+// worked without a scroll wheel. The three demonstration skies carry the Example label. The last
+// step shows the visitor's own reading (place, temperature, sky, source) when there is one, and
+// nothing invented when there is not. Without motion nothing is ever asked of the page: the scene
+// lists the three skies and the reading.
 
 import { motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
-import { createElement, Suspense, use, useContext, useEffect, useId, type CSSProperties } from "react";
+import { createElement, Suspense, use, useContext, useEffect, useId, useState, type CSSProperties } from "react";
+import { PROVIDER } from "@/components/v6/Card";
 import { skyIcon } from "@/components/v6/HourlyStrip";
 import { textFor, type V6Text } from "@/components/v6/text";
 import type { Lang } from "@/lib/lang";
 import { temp } from "@/lib/utils";
 import { setSkyOverride } from "../sky-store";
-import { placeName, type ReadingPromise, SourceLine } from "./cards";
+import { placeName, type ReadingPromise } from "./cards";
 import { storyCopy, type StoryCopy } from "./copy";
-import { fadeStops, fadeValues, SKY_DEMO, SKY_STARTS, skyStep } from "./math";
-import { ModeContext } from "./mode";
-import { SceneBar, SceneFrame, SceneLine, SceneTitle, useSceneProgress } from "./scene";
+import { fadeStops, fadeValues, type Reading, SKY_DEMO, SKY_STARTS, skyStep, stepAt, stepTarget } from "./math";
+import { ModeContext, usePlaceInBar } from "./mode";
+import { SceneBar, SceneFrame, SceneLine, SceneTitle, useSceneJump, useSceneProgress } from "./scene";
 import { Tag } from "./Tag";
 
 const FADE = 0.035;
@@ -69,44 +72,95 @@ function Word({ pin, i, rich, children }: { pin: MotionValue<number>; i: number;
   );
 }
 
-/** The fourth word: the visitor's own place when the reading is real, else just "Now". */
+/**
+ * The fourth word: the visitor's own place when the reading is real, else just "Now". Where the
+ * page's bar already names the place it is "Now" as well, so the name is on the screen once.
+ */
 function YoursWord({ pin, rich, reading, c, v }: { pin: MotionValue<number>; rich: boolean; reading: ReadingPromise; c: StoryCopy; v: V6Text }) {
   const r = reading ? use(reading) : null;
+  const named = usePlaceInBar();
   return (
     <Word pin={pin} i={YOURS} rich={rich}>
-      {r && r.current ? placeName(r, c) : v.now}
+      {r && r.current && !named ? placeName(r, c) : v.now}
     </Word>
   );
 }
 
-/** "Erdenet · −12°C · Snow" with its source line: the reading behind the page's sky, only when it is real. */
-function Yours({ reading, c, v }: { reading: ReadingPromise; c: StoryCopy; v: V6Text }) {
+/**
+ * "Erdenet · −12°C · Snow · Open-Meteo": the reading behind the page's sky and who gave it, only
+ * when it is real. `named`: the place is already on the screen as the giant word, so it is not
+ * said twice (the same holds where the page's bar names it). The source is the provider's name
+ * alone for the same reason: the scene's own line, right above, already says the sky is drawn from
+ * the forecast.
+ */
+function Yours({ reading, c, v, named = false, legend = false }: { reading: ReadingPromise; c: StoryCopy; v: V6Text; named?: boolean; legend?: boolean }) {
   const r = reading ? use(reading) : null;
+  const inBar = usePlaceInBar();
   if (!r || !r.current) return null;
+  const noPlace = named || inBar;
+  // Under the legend a sky that has its own chip is not written out a second time: the icon shows
+  // it, and screen readers still hear the word.
+  const shown = legend && (SKY_DEMO as readonly string[]).includes(r.kind);
   return (
     <div data-yours className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <p className="v6-on-photo flex flex-wrap items-center gap-x-2 text-copy text-ink">
+      <p className="st-yours v6-on-photo">
         {createElement(skyIcon(r.kind, r.isDay), { "aria-hidden": true, className: "size-4 shrink-0" })}
-        <span className="font-semibold">{placeName(r, c)}</span> <span aria-hidden>·</span>{" "}
+        {!noPlace && (
+          <>
+            <span className="font-semibold">{placeName(r, c)}</span> <span aria-hidden>·</span>{" "}
+          </>
+        )}
         <data value={r.tempC} className="num">
           {temp(r.tempC, false)}
         </data>{" "}
-        <span aria-hidden>·</span> <span>{v.kinds[r.kind]}</span>
+        {shown ? (
+          <span className="sr-only">{v.kinds[r.kind]}</span>
+        ) : (
+          <>
+            <span aria-hidden>·</span> <span>{v.kinds[r.kind]}</span>
+          </>
+        )}
+      </p>{" "}
+      <p data-prov="forecast" className="st-yours-src readout v6-on-photo">
+        {PROVIDER["open-meteo"]}
       </p>
-      <SourceLine v={v} className="v6-on-photo text-copy text-ink" />
     </div>
   );
 }
 
-function Step({ pin, i, children }: { pin: MotionValue<number>; i: number; children: string }) {
-  const opacity = useTransform(pin, fadeStops(SKY_STARTS, i, FADE), fadeValues(SKY_STARTS, i, 0.42, 1, 0.42));
+/**
+ * One numbered mark. A press scrolls the page to that sky. Its name is the number it shows and the
+ * sky it stands for ("2 Rain"): the giant word under the marks says the sky by sight.
+ */
+function Step({ i, on, children }: { i: number; on: boolean; children: string }) {
+  const jump = useSceneJump();
   return (
-    <motion.li className="st-step v6-on-photo" style={{ opacity }}>
-      <span aria-hidden className="st-step-dot" />
-      {/* The giant word under the dots says it by sight; said twice it would only repeat itself. */}
-      <span className="sr-only">{children}</span>
-    </motion.li>
+    <li>
+      <button type="button" className="st-step press readout" aria-current={on ? "step" : undefined} onClick={() => jump(stepTarget(SKY_STARTS, i))}>
+        {i + 1}
+        <span className="sr-only"> {children}</span>
+      </button>
+    </li>
   );
+}
+
+/** Erdenet's sky, standing in for a place that is not known, is ours and never called the visitor's. */
+const isHome = (r: Reading | null) => r !== null && !r.local;
+
+/** The fourth mark, named for whose sky it is. */
+function YoursStep({ on, reading, c }: { on: boolean; reading: ReadingPromise; c: StoryCopy }) {
+  const r = reading ? use(reading) : null;
+  return (
+    <Step i={YOURS} on={on}>
+      {isHome(r) ? c.weather.ours : c.weather.yours}
+    </Step>
+  );
+}
+
+/** The scene's one line, by whose forecast the sky is drawn from. */
+function ForecastLine({ reading, c }: { reading: ReadingPromise; c: StoryCopy }) {
+  const r = reading ? use(reading) : null;
+  return <>{isHome(r) ? c.weather.lineHome : c.weather.line}</>;
 }
 
 /** Live: one sky named at a time, in step with what the page draws behind the stage. */
@@ -114,18 +168,28 @@ function Reel({ pin, rich, reading, c, v }: { pin: MotionValue<number>; rich: bo
   const last = fadeStops(SKY_STARTS, YOURS, FADE);
   const demo = useTransform(pin, last, [1, 0]);
   const real = useTransform(pin, last, [0, 1]);
+  // Which sky is on: its mark is lit. Read where the pin stands now, then kept up by the scroll:
+  // a page that opens at the end of the scene never sends a change for it.
+  const [on, setOn] = useState(() => stepAt(SKY_STARTS, pin.get()));
+  useMotionValueEvent(pin, "change", (p) => setOn(stepAt(SKY_STARTS, p)));
   return (
     <div className="st-reel">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <ul className="st-steps">
           {SKY_DEMO.map((kind, i) => (
-            <Step key={kind} pin={pin} i={i}>
+            <Step key={kind} i={i} on={on === i}>
               {v.kinds[kind]}
             </Step>
           ))}
-          <Step pin={pin} i={YOURS}>
-            {c.weather.yours}
-          </Step>
+          <Suspense
+            fallback={
+              <Step i={YOURS} on={on === YOURS}>
+                {c.weather.yours}
+              </Step>
+            }
+          >
+            <YoursStep on={on === YOURS} reading={reading} c={c} />
+          </Suspense>
         </ul>
         <motion.span style={{ opacity: demo }}>
           <Tag>{c.example}</Tag>
@@ -149,7 +213,7 @@ function Reel({ pin, rich, reading, c, v }: { pin: MotionValue<number>; rich: bo
       </div>
       <motion.div className="min-h-6" style={{ opacity: real }}>
         <Suspense fallback={null}>
-          <Yours reading={reading} c={c} v={v} />
+          <Yours reading={reading} c={c} v={v} named />
         </Suspense>
       </motion.div>
     </div>
@@ -162,14 +226,14 @@ function Legend({ reading, c, v }: { reading: ReadingPromise; c: StoryCopy; v: V
     <div className="flex flex-col gap-4">
       <ul className="flex flex-wrap gap-2">
         {SKY_DEMO.map((kind) => (
-          <li key={kind} className="v6-chip min-h-11 gap-2 px-3.5 text-copy">
+          <li key={kind} className="st-sky-chip">
             {createElement(skyIcon(kind), { "aria-hidden": true, className: "size-5 shrink-0 text-accent" })}
             {v.kinds[kind]}
           </li>
         ))}
       </ul>
       <Suspense fallback={null}>
-        <Yours reading={reading} c={c} v={v} />
+        <Yours reading={reading} c={c} v={v} legend />
       </Suspense>
     </div>
   );
@@ -191,17 +255,17 @@ export function SceneWeather({ lang, reading }: { lang: Lang; reading: ReadingPr
   return (
     <SceneFrame id="weather" scene={scene} tall={[2, 2.5]}>
       <SceneBar n={3} label={c.weather.label} scene={scene} />
-      <div className="grid min-h-0 flex-1 content-between gap-6">
-        <div className="min-w-0">
-          <SceneTitle id="weather" rows={c.weather.title} scene={scene} />
-          <SceneLine scene={scene} className="mt-3 max-w-[42rem] sm:mt-6">
-            {c.weather.line}
-            {/* Only true while scrolling does change the sky. Chinese sets no space between sentences. */}
-            {mode.live && (lang === "zh" ? c.weather.hint : ` ${c.weather.hint}`)}
-          </SceneLine>
-        </div>
-        {mode.live ? <Reel pin={pin} rich={mode.rich} reading={reading} c={c} v={v} /> : <Legend reading={reading} c={c} v={v} />}
+      <div className="st-head">
+        <SceneTitle id="weather" rows={c.weather.title} scene={scene} />
+        <SceneLine scene={scene}>
+          <Suspense fallback={c.weather.line}>
+            <ForecastLine reading={reading} c={c} />
+          </Suspense>
+          {/* Only true while scrolling does change the sky. Chinese sets no space between sentences. */}
+          {mode.live && (lang === "zh" ? c.weather.hint : ` ${c.weather.hint}`)}
+        </SceneLine>
       </div>
+      <div className="st-fill">{mode.live ? <Reel pin={pin} rich={mode.rich} reading={reading} c={c} v={v} /> : <Legend reading={reading} c={c} v={v} />}</div>
     </SceneFrame>
   );
 }

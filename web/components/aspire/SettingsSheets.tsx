@@ -4,19 +4,20 @@
 // "Where are you?" prompt. The shell (Assistant.tsx) owns the state; these only render it.
 
 import { SignOutButton } from "@clerk/nextjs";
-import { Brain, Cable, Check, ChevronRight, Download, LocateFixed, LogOut, MapPin, Plus, Repeat, Settings, Sunrise, Trash2, type LucideIcon } from "lucide-react";
+import { Brain, Cable, Check, ChevronRight, Download, LoaderCircle, LocateFixed, LogOut, MapPin, Plus, Repeat, Settings, Sunrise, Trash2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 import { BotLinks } from "@/components/aspire/BotLinks";
 import { DesktopLink } from "@/components/aspire/DesktopLink";
 import { GmailConnect } from "@/components/aspire/GmailConnect";
 import { dropPush, PushToggle } from "@/components/aspire/PushToggle";
-import type { DisplayPrefs, TextSize, UnitsPref } from "@/lib/display-prefs";
+import { speaks, type DisplayPrefs, type TextSize, type UnitsPref } from "@/lib/display-prefs";
 import { applyActions } from "@/lib/device-store";
 import { HTML_LANG, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
 import { cleanCity } from "@/lib/state";
 import type { DeviceContext, Title, VoiceStyle } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
+import { positionRefused } from "@/lib/use-ambient";
 import { cn } from "@/lib/utils";
 import { isAllowedWebhook } from "@/lib/webhooks";
 
@@ -30,27 +31,42 @@ const setSetting = (update: Update, patch: NonNullable<DeviceContext["settings"]
 
 /* ---- first open: where are you? ---- */
 
-/** onAllow resolves false when the browser refused or found no fix: say so here (the shell behind the
- * sheet is inert) and offer the city field straight away. */
+/** onAllow resolves false when the browser refused or found no fix: say which here (the shell behind the
+ * sheet is inert) and offer the city field straight away. The lookup can take seconds, so the button
+ * shows that it is working and takes no second press meanwhile. */
 export function WherePrompt({ t, onAllow, onCity, onLater }: { t: T; onAllow: () => Promise<boolean>; onCity: (city: string) => void; onLater: () => void }) {
   const [typing, setTyping] = useState(false);
-  const [denied, setDenied] = useState(false);
-  const allow = () =>
+  const [failed, setFailed] = useState<"refused" | "unknown" | null>(null);
+  const [looking, setLooking] = useState(false);
+  const allow = () => {
+    if (looking) return;
+    setLooking(true);
+    setFailed(null);
     void onAllow().then((ok) => {
+      setLooking(false);
       if (ok) return;
-      setDenied(true);
+      // "Refused" only when the person or the browser said no; no fix in time is "Location unknown".
+      setFailed(positionRefused() ? "refused" : "unknown");
       setTyping(true);
     });
+  };
   return (
     <div className="flex flex-col gap-3">
       <p className="text-body text-ink">{t.hud.whereWhy}</p>
-      {denied && (
+      {failed && (
         <p role="alert" className="text-body text-signal">
-          {t.hud.denied}
+          {failed === "refused" ? t.hud.denied : t.hud.noLocation}
         </p>
       )}
-      <button type="button" onClick={allow} className="press inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-accent px-6 text-body font-semibold text-on-accent">
-        <LocateFixed className="size-5" aria-hidden />
+      {/* aria-disabled, not disabled: a natively disabled button would drop focus out of the sheet. */}
+      <button
+        type="button"
+        onClick={allow}
+        aria-busy={looking || undefined}
+        aria-disabled={looking || undefined}
+        className={cn("press inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-accent px-6 text-body font-semibold text-on-accent", looking && "cursor-default opacity-60")}
+      >
+        {looking ? <LoaderCircle className="size-5 animate-spin still:animate-none" aria-hidden /> : <LocateFixed className="size-5" aria-hidden />}
         {t.hud.allow}
       </button>
       {typing ? (
@@ -142,12 +158,24 @@ export function SettingsBody(p: {
   return (
     <>
       <Section title={t.voice} id={`${id}voice`}>
+        {/* Spoken answers on/off: the same switch as the speaker button in the agent panel's header. Screen
+            reader mode keeps Aspire's own voice off, so the switch shows off (and says why) while it is on. */}
+        <div className="mb-4">
+          <Toggle
+            label={t.voiceReplies}
+            help={prefs.screenReader ? t.voiceRepliesSr : t.voiceRepliesHelp}
+            checked={speaks(prefs)}
+            disabled={prefs.screenReader}
+            t={t}
+            onChange={(on) => setPrefs({ voice: on })}
+          />
+        </div>
         <Choices labelledBy={`${id}voice`}>
           {(["jarvis", "friday"] as const).map((v) => (
             <Choice
               key={v}
               pressed={(settings.voice ?? "jarvis") === v}
-              disabled={p.busy}
+              disabled={p.busy || !speaks(prefs)}
               onClick={() => {
                 setSetting(update, { voice: v });
                 p.sample(v);
@@ -417,9 +445,10 @@ function Choice({ pressed, disabled, onClick, children }: { pressed: boolean; di
 }
 
 /** An on/off switch with the visible word, so colour is never the only cue. */
-function Toggle({ label, help, icon: Icon, checked, t, onChange }: { label: string; help?: string; icon?: LucideIcon; checked: boolean; t: T; onChange: (on: boolean) => void }) {
+function Toggle({ label, help, icon: Icon, checked, disabled, t, onChange }: { label: string; help?: string; icon?: LucideIcon; checked: boolean; disabled?: boolean; t: T; onChange: (on: boolean) => void }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={cn(rowBtn, "py-2")}>
+    // aria-disabled, not disabled: a natively disabled switch would drop focus out of the sheet.
+    <button type="button" role="switch" aria-checked={checked} aria-disabled={disabled || undefined} onClick={() => !disabled && onChange(!checked)} className={cn(rowBtn, "py-2", disabled && "cursor-default opacity-60")}>
       {Icon && <Icon className="size-5 shrink-0 text-ink-muted" aria-hidden />}
       <span className="flex min-w-0 flex-1 flex-col">
         <span>{label}</span>

@@ -18,9 +18,22 @@ const REFRESH_MS = 3 * 60_000;
 const STALE_ON_SHOW_MS = 60_000;
 /** A fix younger than this is reused: no GPS wake-up per question or refresh. */
 const FIX_MAX_AGE_MS = 10 * 60_000;
+/** The longest the browser may look for a GPS-grade fix, and then for whatever fix the device has. */
+const PRECISE_TIMEOUT_MS = 6_000;
+const COARSE_TIMEOUT_MS = 4_000;
+/** A lookup that found nothing is not repeated for this long, unless the person asks for it. */
+const NO_FIX_REST_MS = 10 * 60_000;
+/** The dashboard waits this long for the position, then loads without it (and once more if it arrives). */
+const FIX_WAIT_MS = 1_500;
+/** After a refusal (429) the dashboard asks again no sooner than this, whatever Retry-After says. */
+const MIN_RETRY_MS = 5_000;
 
 type Fix = { lat: number; lng: number };
 let lastFix: (Fix & { at: number }) | null = null;
+/** The lookup in flight: every caller meanwhile shares it (one GPS wake-up, one permission question). */
+let looking: Promise<Fix | null> | null = null;
+/** The last lookup found nothing: when, and whether the person or the browser refused it. */
+let noFix: { at: number; refused: boolean } | null = null;
 const round = (p: Fix, decimals: number): Fix => {
   const k = 10 ** decimals;
   return { lat: Math.round(p.lat * k) / k, lng: Math.round(p.lng * k) / k };
@@ -28,28 +41,57 @@ const round = (p: Fix, decimals: number): Fix => {
 
 /**
  * The device position rounded to `decimals` (4 = about 11 m), or null when unavailable or refused.
- * Asks for GPS-grade accuracy first (a coarse Wi-Fi/IP fix can be kilometres off and gave wrong stops);
- * if that times out, takes whatever fix the device has. A fix from the last 10 minutes is reused.
+ * A fix from the last 10 minutes is reused, and callers share the one lookup in flight. Phones and
+ * tablets are asked for GPS-grade accuracy first (a coarse Wi-Fi/IP fix can be kilometres off and gave
+ * wrong stops) and, if that times out, for whatever fix the device has. A device without touch has no
+ * GPS, so it gets the coarse try alone. A lookup that found nothing is not repeated for 10 minutes: the
+ * dashboard and every question would wait for it again. `retry` is for a location button the person
+ * pressed: it asks anyway.
  */
-export function devicePosition(decimals = 4): Promise<Fix | null> {
+export function devicePosition(decimals = 4, { retry = false }: { retry?: boolean } = {}): Promise<Fix | null> {
   if (lastFix && Date.now() - lastFix.at < FIX_MAX_AGE_MS) return Promise.resolve(round(lastFix, decimals));
   if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
-  const ask = (high: boolean) =>
-    new Promise<GeolocationPosition | null>((resolve) =>
-      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
-        enableHighAccuracy: high,
-        maximumAge: high ? 60_000 : FIX_MAX_AGE_MS,
-        timeout: high ? 10_000 : 15_000,
-      }),
-    );
-  return ask(true)
-    .then((p) => p ?? ask(false))
-    .then((p) => {
-      if (!p) return null;
-      lastFix = { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() };
-      return round(lastFix, decimals);
-    });
+  if (!looking) {
+    if (!retry && noFix && Date.now() - noFix.at < NO_FIX_REST_MS) return Promise.resolve(null);
+    let refused = false;
+    const ask = (high: boolean) =>
+      new Promise<GeolocationPosition | null>((resolve) =>
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          (e) => {
+            refused = e.code === e.PERMISSION_DENIED;
+            resolve(null);
+          },
+          { enableHighAccuracy: high, maximumAge: high ? 60_000 : FIX_MAX_AGE_MS, timeout: high ? PRECISE_TIMEOUT_MS : COARSE_TIMEOUT_MS },
+        ),
+      );
+    // A refusal is final: asking again for a coarse fix would only put the browser's question up twice.
+    const found = navigator.maxTouchPoints > 0 ? ask(true).then((p) => p ?? (refused ? null : ask(false))) : ask(false);
+    looking = found
+      .catch(() => null)
+      .then((p) => {
+        looking = null;
+        lastFix = p ? { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() } : null;
+        noFix = p ? null : { at: Date.now(), refused };
+        return lastFix;
+      });
+  }
+  return looking.then((fix) => fix && round(fix, decimals));
 }
+
+/** True when the last lookup failed because the person or the browser said no, not because no fix came in time. */
+export const positionRefused = (): boolean => noFix?.refused === true;
+
+/** Tests only. */
+export const resetDevicePosition = () => {
+  lastFix = null;
+  looking = null;
+  noFix = null;
+};
+
+/** `lookup`, or null once `ms` have passed: the lookup goes on, and its result is kept for the next caller. */
+export const within = <T>(lookup: Promise<T>, ms: number): Promise<T | null> =>
+  Promise.race([lookup, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
 
 /** About 1 km: enough for the morning briefing's weather. */
 export const roundedPosition = () => devicePosition(2);
@@ -172,6 +214,21 @@ function isAmbient(x: unknown): x is Ambient {
   return !!a.sky && typeof a.sky === "object" && typeof a.sky.kind === "string" && Array.isArray(a.stops);
 }
 
+/** When to ask again after a refusal (429): its Retry-After in seconds, else (and at most) the normal refresh. */
+export function retryAfterMs(res: { headers: { get(name: string): string | null } }): number {
+  const s = Number(res.headers.get("Retry-After"));
+  return Number.isFinite(s) && s > 0 ? Math.min(Math.max(s * 1000, MIN_RETRY_MS), REFRESH_MS) : REFRESH_MS;
+}
+
+/** The place a snapshot was asked for: the device's own position or the typed city. The language is not part of it. */
+export const whereKey = (shareLocation: boolean, city: string): string => `${shareLocation ? 1 : 0}|${city}`;
+
+/**
+ * The snapshot to show for the place `where`: none while the one in hand was asked for another place.
+ * The dashboard then shows its loading state, not the last city's weather, photo and buses under the new name.
+ */
+export const snapshotFor = <T extends { where: string }>(snap: T | null, where: string): T | null => (snap?.where === where ? snap : null);
+
 export function useAmbient({
   lang,
   shareLocation,
@@ -184,12 +241,20 @@ export function useAmbient({
   city?: string | null;
   enabled?: boolean;
 }): { data: Ambient | null; at: number | null; reload: () => void } {
-  const [snap, setSnap] = useState<{ data: Ambient; at: number } | null>(null);
+  const [snap, setSnap] = useState<{ data: Ambient; at: number; where: string } | null>(null);
+  // The place of the snapshot in hand, for load() to read (it cannot see the state).
+  const shown = useRef("");
+  const show = useCallback((s: { data: Ambient; at: number; where: string }) => {
+    shown.current = s.where;
+    setSnap(s);
+  }, []);
   const last = useRef(0);
   const inFlight = useRef(false);
   // A load asked for while one is in flight (say, a language switch) runs once it settles,
   // instead of being dropped until the next 10-minute tick.
   const pendingReload = useRef(false);
+  // A load went ahead without the position and is waiting to load once more if the fix does arrive.
+  const awaitingFix = useRef(false);
   // Per-language snapshots: the language is auto-detected on every message, so switching back
   // and forth must not refetch (or ask for a new geolocation fix) each time.
   const byLang = useRef(new Map<string, { at: number; data: Ambient }>());
@@ -210,9 +275,23 @@ export function useAmbient({
     inFlight.current = true;
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = null;
+    let next = REFRESH_MS;
     try {
       const { lang: l, shareLocation: share, place: c } = opts.current;
-      const pos = share ? await devicePosition() : null;
+      const key = whereKey(share, c);
+      // A place's first load gives the position FIX_WAIT_MS: a slow lookup must not hold the dashboard
+      // back. Without it the snapshot is the typed city's (or the network's place), and one more load
+      // follows if the fix arrives. A refresh has this place on screen already, so it waits for the
+      // lookup to end rather than swap good data for a guess.
+      const lookup = share ? devicePosition() : null;
+      const pos = lookup && (await (shown.current === key ? lookup : within(lookup, FIX_WAIT_MS)));
+      if (lookup && !pos && !awaitingFix.current) {
+        awaitingFix.current = true;
+        void lookup.then((fix) => {
+          awaitingFix.current = false;
+          if (fix && opts.current.enabled && opts.current.shareLocation) void loadRef.current();
+        });
+      }
       const where = pos ? { lat: pos.lat, lng: pos.lng } : c ? { city: c.slice(0, 80) } : {};
       const res = await fetch("/api/ambient", {
         method: "POST",
@@ -221,28 +300,35 @@ export function useAmbient({
       }).catch(() => null);
       last.current = Date.now();
       // 401 is handled by the shell's fetch guard (sign in again); 429 and errors keep the last snapshot.
+      // A 429 is asked again when the server says so, not a whole refresh later.
+      if (res?.status === 429) next = retryAfterMs(res);
       if (res?.ok) {
         const json: unknown = await res.json().catch(() => null);
         if (isAmbient(json)) {
-          if (json.photo) rememberPhoto(json.photo, json.place, json.coords);
-          byLang.current.set(`${l}|${share ? 1 : 0}|${c}`, { at: Date.now(), data: json });
-          if (opts.current.lang === l) setSnap({ data: json, at: Date.now() });
+          byLang.current.set(`${l}|${key}`, { at: Date.now(), data: json });
+          // An answer for a place the person has left meanwhile is kept for a way back, never shown: not
+          // its data, and not its photo under the new place's name.
+          if (whereKey(opts.current.shareLocation, opts.current.place) === key) {
+            if (json.photo) rememberPhoto(json.photo, json.place, json.coords);
+            if (opts.current.lang === l) show({ data: json, at: Date.now(), where: key });
+          }
         }
       }
     } finally {
       inFlight.current = false;
-      // The next refresh always comes REFRESH_MS after the last completed one, whatever triggered it.
+      // The next refresh always comes REFRESH_MS after the last completed one, whatever triggered it
+      // (sooner after a 429).
       if (opts.current.enabled) {
         timer.current = window.setTimeout(() => {
           if (document.visibilityState === "visible") void loadRef.current();
-        }, REFRESH_MS);
+        }, next);
       }
       if (pendingReload.current) {
         pendingReload.current = false;
         void loadRef.current();
       }
     }
-  }, []);
+  }, [show]);
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
@@ -251,13 +337,14 @@ export function useAmbient({
   // fetched less than REFRESH_MS ago is shown from memory.
   useEffect(() => {
     if (!enabled) return;
-    const hit = byLang.current.get(`${lang}|${shareLocation ? 1 : 0}|${place}`);
+    const where = whereKey(shareLocation, place);
+    const hit = byLang.current.get(`${lang}|${where}`);
     if (hit && Date.now() - hit.at < REFRESH_MS) {
-      setSnap(hit);
+      show({ ...hit, where });
       return;
     }
     void load();
-  }, [enabled, lang, shareLocation, place, load]);
+  }, [enabled, lang, shareLocation, place, load, show]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -269,11 +356,14 @@ export function useAmbient({
       document.removeEventListener("visibilitychange", onShow);
       if (timer.current !== null) window.clearTimeout(timer.current);
       timer.current = null;
+      // Switched off or gone: a fix that arrives late starts no further load.
+      opts.current.enabled = false;
     };
   }, [enabled, load]);
 
   const reload = useCallback(() => void loadRef.current(), []);
-  return { data: snap?.data ?? null, at: snap?.at ?? null, reload };
+  const mine = snapshotFor(snap, whereKey(shareLocation, place));
+  return { data: mine?.data ?? null, at: mine?.at ?? null, reload };
 }
 
 /**

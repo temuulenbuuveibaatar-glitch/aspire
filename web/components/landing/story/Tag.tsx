@@ -1,5 +1,5 @@
-// The small label on everything in the story that is not a live reading ("Example").
-// Dashed, like the app's estimated minutes (story.css .st-tag).
+// The small label on everything in the story that is not a live reading ("Example"): a mono tag
+// in a dashed box, the way the app marks its estimated minutes (story.css .st-tag).
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 

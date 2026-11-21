@@ -44,7 +44,7 @@ export interface HudText {
   cityHelp: string;
   voiceVia: string;
   noLocation: string;
-  /** The browser refused or could not get a location fix. */
+  /** The person or the browser refused the location (a lookup that found no fix in time says noLocation). */
   denied: string;
   kinds: Record<"clear" | "partly" | "cloudy" | "fog" | "drizzle" | "rain" | "storm" | "snow" | "sleet" | "hail", string>;
 }
@@ -165,6 +165,16 @@ export const UI: Record<
     calmHelp: string;
     screenReaderMode: string;
     screenReaderHelp: string;
+    /** The spoken answers switch (Settings, the agent panel's header, the phone tab bar). One name; the state is aria-pressed / aria-checked. */
+    voiceReplies: string;
+    voiceRepliesHelp: string;
+    /** Shown instead of the help while screen reader mode keeps Aspire's own voice off. */
+    voiceRepliesSr: string;
+    /** Said (status region) and shown as the button's tooltip when the switch changes. */
+    voiceOn: string;
+    voiceOff: string;
+    /** The empty panel's hint when spoken answers are off (no orb to tap). */
+    typeBelow: string;
     /** Said when the browser blocked playback (no tap yet): the next tap on the orb plays it. */
     tapToHear: string;
     skyEffects: string;
@@ -294,6 +304,12 @@ export const UI: Record<
     calmHelp: "Тэнгэр болон бөмбөлөг хөдөлгөөнгүй, анивчилтгүй, самбар тод.",
     screenReaderMode: "Дэлгэц уншигчийн горим",
     screenReaderHelp: "Хариулт бүрийг таны дэлгэц уншигч уншина. Aspire-ийн өөрийн дуу хоолой чимээгүй байна.",
+    voiceReplies: "Хариултыг дуугаар хэлэх",
+    voiceRepliesHelp: "Унтраавал хариулт зөвхөн бичвэрээр гарна. Aspire дуугарахгүй.",
+    voiceRepliesSr: "Дэлгэц уншигчийн горим асаалттай тул Aspire-ийн өөрийн дуу хоолой унтраалттай байна.",
+    voiceOn: "Дуу асаалттай",
+    voiceOff: "Дуу унтраалттай",
+    typeBelow: "Асуултаа доор бичээрэй",
     tapToHear: "Дуу тоглуулахыг хөтөч хаасан байна. Тоглуулахын тулд бөмбөлөг дээр дарна уу.",
     skyEffects: "Тэнгэрийн эффект",
     skyEffectsHelp: "Бодит цаг агаарыг дагах бороо, цас, үүл. Унтраавал хөдөлгөөнгүй өнгө харагдана.",
@@ -420,6 +436,12 @@ export const UI: Record<
     calmHelp: "天空和光球保持静止，没有闪光，面板不透明。",
     screenReaderMode: "屏幕阅读器模式",
     screenReaderHelp: "由您的屏幕阅读器朗读每条回答，Aspire 自己的语音保持安静。",
+    voiceReplies: "语音朗读回答",
+    voiceRepliesHelp: "关闭后只显示文字回答：Aspire 不出声，也不请求语音。",
+    voiceRepliesSr: "屏幕阅读器模式已开启，所以 Aspire 自己的语音保持关闭。",
+    voiceOn: "语音已开启",
+    voiceOff: "语音已关闭",
+    typeBelow: "在下面输入您的问题",
     tapToHear: "浏览器阻止了播放。轻点光球即可播放。",
     skyEffects: "天空效果",
     skyEffectsHelp: "雨、雪和云会随实时天气变化。关闭后显示静态渐变。",
@@ -546,6 +568,12 @@ export const UI: Record<
     calmHelp: "Still sky and orb, no flashes, solid panels.",
     screenReaderMode: "Screen reader mode",
     screenReaderHelp: "Your screen reader reads each answer. Aspire's own voice stays quiet.",
+    voiceReplies: "Spoken answers",
+    voiceRepliesHelp: "Off: answers are text only. Aspire stays silent and no speech is requested.",
+    voiceRepliesSr: "Screen reader mode is on, so Aspire's own voice stays off.",
+    voiceOn: "Voice on",
+    voiceOff: "Voice off",
+    typeBelow: "Type your question below",
     tapToHear: "Playback was blocked. Tap the orb to play it.",
     skyEffects: "Sky effects",
     skyEffectsHelp: "Rain, snow and clouds that follow the live weather. Off shows a still gradient.",
@@ -672,6 +700,12 @@ export const UI: Record<
     calmHelp: "Небо и сфера неподвижны, без вспышек, плотные панели.",
     screenReaderMode: "Режим программы чтения с экрана",
     screenReaderHelp: "Каждый ответ читает ваша программа чтения с экрана. Собственный голос Aspire молчит.",
+    voiceReplies: "Озвучивать ответы",
+    voiceRepliesHelp: "Если выключить, ответы будут только текстом: Aspire молчит и не запрашивает речь.",
+    voiceRepliesSr: "Включён режим программы чтения с экрана, поэтому собственный голос Aspire выключен.",
+    voiceOn: "Голос включён",
+    voiceOff: "Голос выключен",
+    typeBelow: "Напишите вопрос ниже",
     tapToHear: "Воспроизведение заблокировано. Нажмите на сферу, чтобы воспроизвести.",
     skyEffects: "Эффекты неба",
     skyEffectsHelp: "Дождь, снег и облака по текущей погоде. Если выключить, будет неподвижный градиент.",
@@ -798,6 +832,12 @@ export const UI: Record<
     calmHelp: "Ruhiger Himmel und ruhige Kugel, keine Blitze, feste Flächen.",
     screenReaderMode: "Screenreader-Modus",
     screenReaderHelp: "Ihr Screenreader liest jede Antwort vor. Die eigene Stimme von Aspire bleibt still.",
+    voiceReplies: "Antworten vorlesen",
+    voiceRepliesHelp: "Aus: Antworten erscheinen nur als Text. Aspire bleibt still und fordert keine Sprachausgabe an.",
+    voiceRepliesSr: "Der Screenreader-Modus ist an, daher bleibt die eigene Stimme von Aspire aus.",
+    voiceOn: "Stimme an",
+    voiceOff: "Stimme aus",
+    typeBelow: "Frage unten eingeben",
     tapToHear: "Die Wiedergabe wurde blockiert. Tippen Sie auf die Kugel, um sie abzuspielen.",
     skyEffects: "Himmelseffekte",
     skyEffectsHelp: "Regen, Schnee und Wolken nach dem aktuellen Wetter. Aus zeigt einen ruhigen Farbverlauf.",

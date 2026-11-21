@@ -44,7 +44,8 @@ export function BriefingCard({
   lang?: Lang;
   /** Said after each headline link ("opens in a new tab"), in the app's language. */
   newTab?: string;
-  onReplay: () => void;
+  /** Omit to hide the "Hear again" button (spoken answers off). */
+  onReplay?: () => void;
   headlines?: Headline[];
   /** Optional: show a "Reconnect Gmail" button (e.g. open Settings, then Connections). */
   gmailError?: boolean;
@@ -57,15 +58,17 @@ export function BriefingCard({
           <Sunrise className="size-6" />
         </span>
         <h2 className="min-w-0 flex-1 text-label tracking-[0.08em] text-ink-muted uppercase">{t.briefing}</h2>
-        <button
-          type="button"
-          onClick={onReplay}
-          aria-label={t.repeat}
-          title={t.repeat}
-          className="press grid size-12 shrink-0 place-items-center rounded-full border border-line bg-panel-2 text-ink-muted hover:bg-panel-3 hover:text-ink"
-        >
-          <Volume2 className="size-6" aria-hidden />
-        </button>
+        {onReplay && (
+          <button
+            type="button"
+            onClick={onReplay}
+            aria-label={t.repeat}
+            title={t.repeat}
+            className="press grid size-12 shrink-0 place-items-center rounded-full border border-line bg-panel-2 text-ink-muted hover:bg-panel-3 hover:text-ink"
+          >
+            <Volume2 className="size-6" aria-hidden />
+          </button>
+        )}
       </div>
       <p className="max-w-[65ch] text-reply text-ink">{text}</p>
       {headlines.length > 0 && (
@@ -159,10 +162,11 @@ export function useDailyBriefing({
     const data = (await res.json().catch(() => null)) as Omit<Briefing, "lang"> | null;
     if (!data || typeof data.text !== "string" || !data.text) return;
     setBriefing({ text: data.text, mailCount: data.mailCount ?? null, gmailError: data.gmailError === true, lang: l, headlines: cleanHeadlines(data.headlines) });
-    // Only a play the browser blocked (no tap yet) leaves the day for the next open. Played, failed
-    // (the voice is down: its notice was already said) or nothing returned (a live region) all count.
-    const result = await latest.current.speak(data.text, l);
-    if (result !== "blocked") latest.current.setLastDate(localDate(new Date()));
+    // The day counts once the text is on screen, not when the voice has finished: a reload during
+    // playback must not fetch and speak a second briefing. A play the browser blocked (no tap yet)
+    // counts too: its notice asks for a tap, and the card keeps the text.
+    latest.current.setLastDate(localDate(new Date()));
+    await latest.current.speak(data.text, l);
   }, []);
 
   useEffect(() => {

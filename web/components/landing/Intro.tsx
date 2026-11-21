@@ -1,8 +1,9 @@
 "use client";
 
-// The opening of the opening page: for 1.2 seconds, once per browser session, a dark screen with
-// the core (the still orb inside its two rings), one line and a counter from 000 to 100; then the
-// screen opens in a circle from the orb onto the hero, whose own core sits in the same place.
+// The opening of the opening page: for 1.2 seconds, once per browser session, a black screen with
+// the core (the still orb inside its gauge), one line in mono and a counter from 000 to 100 in giant
+// figures where the headline will stand; then the screen opens in a circle from the orb onto the
+// hero, whose own core sits in the same place.
 //
 // The page has one inline script: it sets the document's language, and the whole intro belongs to
 // it. It runs while the page is being parsed, before the first paint, builds the overlay itself and
@@ -37,7 +38,8 @@ const ENTRANCE = 800;
 const POINTS = 48;
 
 /**
- * The overlay with a round hole of `radius` at the core, as a clip-path: a polygon clipped by the
+ * The overlay with a round hole of `radius` at the core (--lp-core-x and --lp-core-y, the measures
+ * the hero places its own core by), as a clip-path: a polygon clipped by the
  * even-odd rule (the screen's outline, then a circle inside it), so only what lies between the two
  * stays. clip-path: circle() keeps the inside, which is the opposite of what an opening needs.
  */
@@ -45,7 +47,7 @@ function hole(radius: string): string {
   const ring: string[] = [];
   for (let k = 0; k <= POINTS; k++) {
     const a = (k / POINTS) * Math.PI * 2;
-    ring.push(`calc(50% + ${radius} * ${Math.cos(a).toFixed(3)}) calc(var(--lp-core-y) + ${radius} * ${Math.sin(a).toFixed(3)})`);
+    ring.push(`calc(var(--lp-core-x) + ${radius} * ${Math.cos(a).toFixed(3)}) calc(var(--lp-core-y) + ${radius} * ${Math.sin(a).toFixed(3)})`);
   }
   return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${ring.join(", ")})`;
 }
@@ -86,13 +88,13 @@ export const INTRO_KEYFRAMES = [
 const digits = (count: number) => Array.from({ length: count }, (_, i) => i % 10).join("\n");
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** What the overlay holds: the wordmark where the header has it, the core, the line and the counter. */
+/** What the overlay holds: the wordmark where the bar has it, the core, the line and the counter. */
 function overlay(line: string): string {
   return (
-    `<div class="lp-wrap lp-intro-top"><span class="lp-wordmark" lang="en">Aspire</span></div>` +
+    `<div class="lp-intro-top"><span class="lp-wordmark" lang="en">Aspire</span></div>` +
     CORE +
     `<p class="lp-intro-line"><span class="lp-label">${escapeHtml(line)}</span>` +
-    `<span class="lp-odo"><span class="lp-reel lp-reel-100">${digits(2)}</span><span class="lp-reel lp-reel-10">${digits(11)}</span><span class="lp-reel lp-reel-1">${digits(101)}</span></span></p>`
+    `<span class="lp-odo numeral"><span class="lp-reel lp-reel-100">${digits(2)}</span><span class="lp-reel lp-reel-10">${digits(11)}</span><span class="lp-reel lp-reel-1">${digits(101)}</span></span></p>`
   );
 }
 

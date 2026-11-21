@@ -18,16 +18,16 @@ export default function Image() {
           flexDirection: "column",
           justifyContent: "center",
           padding: "0 96px",
-          background: "linear-gradient(135deg, #0b1311 0%, #13302a 55%, #22403f 100%)",
+          background: "linear-gradient(135deg, #050505 0%, #0d0d0d 55%, #1f1f1f 100%)",
           color: "#f2f6f4",
         }}
       >
-        <div style={{ display: "flex", fontSize: 30, letterSpacing: 6, color: "#a8e6c4" }}>VOICE CITY ASSISTANT</div>
+        <div style={{ display: "flex", fontSize: 30, letterSpacing: 6, color: "#fc4f00" }}>VOICE CITY ASSISTANT</div>
         <div style={{ display: "flex", marginTop: 12, fontSize: 168, fontWeight: 700, letterSpacing: -4 }}>Aspire</div>
         <div style={{ display: "flex", marginTop: 16, maxWidth: 900, fontSize: 44, lineHeight: 1.25, color: "#c9dcd3" }}>
           Live buses, weather and news for Erdenet and every city. Just ask out loud.
         </div>
-        <div style={{ display: "flex", marginTop: 48, height: 6, width: 160, borderRadius: 3, background: "#a8e6c4" }} />
+        <div style={{ display: "flex", marginTop: 48, height: 6, width: 160, borderRadius: 0, background: "#fc4f00" }} />
       </div>
     ),
     size,

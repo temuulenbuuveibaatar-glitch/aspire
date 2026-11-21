@@ -49,7 +49,7 @@ export interface ComposerProps {
   phase: ComposerPhase;
   draft: string;
   onDraft: (value: string) => void;
-  /** Called with the trimmed draft, only when phase is "idle" and the draft is not blank. */
+  /** Called with the trimmed draft, only when the draft is not blank and phase is "idle" or "speaking" (a typed question cuts the speech short). */
   onSubmit: (text: string) => void;
   /**
    * The mic/stop action (Assistant's `onCore`): starts listening when idle with an empty draft,
@@ -132,8 +132,10 @@ const COPY: Record<Lang, ComposerLabels> = {
 
 /** Pure state machine for the primary button (exported for tests and the shell). */
 export function composerMode(phase: ComposerPhase, draft: string): ComposerMode {
-  if (phase === "listening" || phase === "speaking") return "stop";
+  if (phase === "listening") return "stop";
   if (phase === "thinking") return "busy";
+  // While Aspire speaks: Stop with an empty box, Send as soon as there is something to send.
+  if (phase === "speaking") return draft.trim() ? "send" : "stop";
   return draft.trim() ? "send" : "mic";
 }
 
@@ -244,7 +246,7 @@ export function Composer({
 
   const submit = () => {
     const q = draft.trim();
-    if (!q || phase !== "idle") return;
+    if (!q || (phase !== "idle" && phase !== "speaking")) return;
     onSubmit(q);
   };
 
@@ -429,7 +431,7 @@ function Waveform({ level }: { level: () => number }) {
     c.width = W * dpr;
     c.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const color = getComputedStyle(c).color || "#5EE7FF";
+    const color = getComputedStyle(c).color || "#fc4f00";
     const hist: number[] = Array.from({ length: N }, () => 0);
     let raf = 0;
     let last = 0;

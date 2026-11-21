@@ -1,7 +1,7 @@
 /*
  * The scroll story of the opening page (components/landing/Story.tsx and this folder): five pinned
- * scenes, the city marquee and the feature index. Colours, radii, shadows and easings are the app's
- * tokens (app/globals.css @theme); the card, chip, panel and HUD materials are the app's own classes.
+ * scenes and the city marquee, drawn as instruments: black, off-white and one orange, hairlines,
+ * gauges, mono readouts. Colours, radii and easings are the app's tokens (app/globals.css @theme).
  *
  * Rules sit in the components layer, so a Tailwind utility on the same element still wins. The
  * layer order is repeated here so it holds whichever stylesheet the browser reads first.
@@ -9,7 +9,8 @@
  * Every scene reads in normal flow by default: that is the server's HTML, a browser without
  * JavaScript, reduced motion, Calm mode and a short screen. [data-live] is set by script alone
  * (story/mode.ts): only then is a scene a tall strip with a stage pinned to the screen.
- * Motion is transform, opacity and filter; will-change is on only while a scene is on screen.
+ * Motion is transform, opacity, filter and clip-path; will-change is on only while a scene is on
+ * screen. Small orange text never sits on the sky: there the accent is for marks, arcs and giant type.
  */
 @layer theme, base, components, utilities;
 
@@ -20,6 +21,11 @@
 
   .st-story {
     position: relative;
+    /* Hairlines are off-white at two strengths, never a grey of their own. */
+    --st-hair: rgb(221 221 221 / 0.14);
+    --st-hair-2: rgb(221 221 221 / 0.26);
+    /* What a box is filled with: dark enough for small text over any sky the page draws. */
+    --st-glass: rgb(5 5 5 / 0.78);
   }
   .st-scene {
     position: relative;
@@ -35,13 +41,14 @@
     position: relative;
   }
   .st-inner {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: clamp(1.25rem, 3vw, 2.25rem);
+    gap: clamp(1.25rem, 3vw, 2rem);
     width: 100%;
     max-width: 96rem;
     margin-inline: auto;
-    padding-block: clamp(3rem, 9vw, 6.5rem);
+    padding-block: clamp(3rem, 9vw, 6rem);
     padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
   }
   @media (min-width: 40rem) {
@@ -51,7 +58,8 @@
   }
 
   /* Live: the strip is several screens tall and its stage stays on screen while it is scrolled
-     through. svh, so a phone's address bar sliding away changes nothing. */
+     through. svh, so a phone's address bar sliding away changes nothing. The stage starts under
+     the page's fixed bar (--lp-bar, components/landing/landing.css). */
   .st-scene[data-live] {
     height: calc(var(--st-k) * 100vh);
     height: calc(var(--st-k) * 100svh);
@@ -65,44 +73,13 @@
   }
   .st-scene[data-live] .st-inner {
     height: 100%;
-    gap: clamp(0.75rem, 2.2vh, 1.75rem);
-    padding-block: clamp(0.875rem, 3.5vh, 2.5rem);
+    gap: clamp(0.625rem, 2vh, 1.5rem);
+    padding-block: calc(var(--lp-bar, 3.5rem) + clamp(0.625rem, 2vh, 1.25rem)) clamp(0.875rem, 3vh, 2rem);
     transform-origin: 50% 40%;
+    isolation: isolate;
   }
   .st-scene[data-live][data-active] .st-inner {
     will-change: transform, opacity;
-  }
-  /* Light on the stage: a wide mint glow, placed where each scene's subject sits. Scene 03 has none:
-     there the sky is the light. */
-  .st-scene[data-live] > .st-stage::before {
-    content: "";
-    position: absolute;
-    top: var(--st-ly, 62%);
-    left: var(--st-lx, 50%);
-    width: 76vmax;
-    height: 76vmax;
-    margin: -38vmax 0 0 -38vmax;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(168 230 196 / 0.15), rgb(168 230 196 / 0.04) 48%, rgb(168 230 196 / 0) 72%);
-    pointer-events: none;
-  }
-  .st-scene[data-scene="ask"] {
-    --st-lx: 78%;
-    --st-ly: 44%;
-  }
-  .st-scene[data-scene="city"] {
-    --st-ly: 72%;
-  }
-  .st-scene[data-scene="weather"] > .st-stage::before {
-    display: none;
-  }
-  .st-scene[data-scene="languages"] {
-    --st-lx: 26%;
-    --st-ly: 82%;
-  }
-  .st-scene[data-scene="work"] {
-    --st-lx: 62%;
-    --st-ly: 84%;
   }
 
   /* ---------------------------------------------------------------- */
@@ -118,38 +95,44 @@
     display: block;
   }
 
+  /* The label at the far left, the index at the far right, a hairline under both. */
   .st-bar {
+    position: relative;
     display: flex;
-    align-items: flex-end;
-    gap: clamp(0.625rem, 1.6vw, 1.5rem);
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.625rem;
   }
-  /* The index numeral: the display face, large. */
-  .st-num {
-    display: block;
-    font-size: clamp(2.75rem, min(7vw, 10vh), 6.5rem);
-    line-height: 0.82;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--color-accent);
-  }
-  /* Small labels: uppercase, wide-tracked, mint. (Chinese: no tracking, no caps, by the global rule.) */
-  .st-label {
-    padding-bottom: 0.3rem;
-    font-size: 0.8125rem;
+  /* Small labels: mono, uppercase, lightly tracked. (Chinese: no tracking, no caps, by the global rule.) */
+  .st-label,
+  .st-idx {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
     line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.3em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--color-accent);
+    color: var(--color-ink);
+  }
+  .st-idx {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
   }
   .st-rule {
     position: relative;
     flex: 1 1 1.5rem;
     min-width: 1.5rem;
     height: 1px;
-    margin-bottom: 0.7rem;
-    background-color: rgb(238 243 240 / 0.24);
+    margin-bottom: 0.35rem;
+    background-color: var(--st-hair-2, rgb(221 221 221 / 0.26));
     transform-origin: left center;
+  }
+  /* In a scene's head the rule runs the whole width, under the label and the index. */
+  .st-bar > .st-rule {
+    position: absolute;
+    inset: auto 0 0;
+    margin: 0;
   }
   .st-rule-fill {
     position: absolute;
@@ -157,118 +140,389 @@
     background-color: var(--color-accent);
     transform-origin: left center;
   }
-
-  /* The number of rows, at the end of the feature index's rule. */
-  .st-count {
-    display: none;
-    padding-bottom: 0.3rem;
-    font-size: 0.8125rem;
-    line-height: 1.35;
-    letter-spacing: 0.16em;
-    white-space: nowrap;
-    color: var(--color-ink);
-  }
-  @media (min-width: 26rem) {
-    .st-count {
-      display: block;
-    }
-  }
-
-  /* Giant type, tight leading. It follows the screen's width, and its height too, so two lines
-     always fit a pinned stage. */
-  .st-title {
-    font-size: clamp(2.5rem, min(8.4vw, 13vh), 9rem);
-    line-height: 0.95;
+  /* The faint giant numeral behind a stage while it arrives (scene.tsx Ghost). */
+  .st-ghost {
+    position: absolute;
+    top: calc(var(--lp-bar, 3.5rem) + 12%);
+    right: max(1.5rem, env(safe-area-inset-right));
+    z-index: -1;
+    font-size: clamp(12rem, 34vw, 32rem);
+    line-height: 0.74;
     font-weight: 500;
-    letter-spacing: -0.035em;
+    letter-spacing: -0.05em;
     color: var(--color-ink);
-    hyphens: none;
-    text-wrap: balance;
-  }
-  /* Room inside the mask for accents above and descenders below. */
-  .st-title .st-mask {
-    margin-block: -0.1em -0.14em;
-    padding-block: 0.1em 0.14em;
-  }
-  .st-title:lang(zh) {
-    line-height: 1.1;
-  }
-  .st-line {
-    max-width: 34rem;
-    font-size: clamp(1rem, 0.9rem + 0.45vw, 1.375rem);
-    line-height: 1.45;
-    color: var(--color-ink);
+    pointer-events: none;
   }
 
-  /* Chinese labels are neither tracked nor capitalised (the app's global rule), so they are set a
-     little larger to carry the same weight. */
-  :is(.st-label, .st-count, .st-status, .st-code, .st-mq-label):lang(zh) {
-    font-size: 0.9375rem;
-  }
-
-  /* The label on everything that is not a live reading. Dashed, like the app's estimated minutes. */
-  .st-tag {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    border: 1px dashed var(--color-line-strong);
-    border-radius: 8px;
-    padding: 1px 8px;
-    background-color: rgb(11 19 17 / 0.78);
-    color: var(--color-ink-muted);
-    font-size: var(--text-meta);
-    font-weight: 500;
-    line-height: 1.5;
-    letter-spacing: 0;
-    text-transform: none;
-    white-space: nowrap;
-  }
-
-  /* ---------------------------------------------------------------- */
-  /* 01 Ask                                                            */
-  /* ---------------------------------------------------------------- */
-
-  .st-talk {
-    --st-orb: 4rem;
+  /* The title and its one line: a modest headline, tight. It follows the screen's height too, so
+     two lines always fit a pinned stage. */
+  .st-head {
     display: grid;
     gap: 0.75rem;
     min-width: 0;
   }
-  @media (min-width: 64rem) {
-    .st-talk {
-      --st-orb: clamp(9.5rem, 30vh, 17rem);
-      gap: 1.25rem;
+  @media (min-width: 48rem) {
+    .st-head {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+      align-items: end;
+      gap: 1rem 3rem;
     }
   }
-  .st-orb {
+  .st-title {
+    font-size: clamp(2rem, min(4.6vw, 7.4vh), 4rem);
+    line-height: 0.95;
+    font-weight: 500;
+    letter-spacing: -0.05em;
+    color: var(--color-ink);
+    hyphens: none;
+    text-wrap: balance;
+  }
+  /* Room inside the mask for accents above and descenders below. The margin takes all of it back
+     from below: two negative margins that meet collapse into the larger one, which would leave
+     the lines a tenth of an em too far apart. */
+  .st-title .st-mask {
+    margin-block: 0 -0.24em;
+    padding-block: 0.1em 0.14em;
+  }
+  .st-title:lang(zh) {
+    line-height: 1.12;
+  }
+  .st-line {
+    max-width: 30rem;
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+  /* What is left of a pinned stage, for a scene whose subject sits at its foot. */
+  .st-fill {
+    min-width: 0;
+  }
+  .st-scene[data-live] .st-fill {
+    display: grid;
+    flex: 1 1 0;
+    min-height: 0;
+    align-content: end;
+  }
+  /* Scenes 001, 002 and 004 keep their subject in the middle of the stage: the title goes to the
+     foot, bottom left like the page's first screen, with the line to its right. */
+  .st-scene[data-live]:is([data-scene="ask"], [data-scene="city"], [data-scene="languages"]) .st-head {
+    order: 3;
+  }
+  /* On a wide stage the head of scene 002 lies over the foot of the stage, out of the flow: the
+     gauge then has the whole height, and the head can step back once the first dial has been read
+     (SceneCity) without leaving a hole. */
+  @media (min-width: 64rem) {
+    .st-scene[data-live][data-scene="city"] .st-head {
+      position: absolute;
+      inset: auto max(1.5rem, env(safe-area-inset-right)) clamp(0.875rem, 3vh, 2rem) max(1.5rem, env(safe-area-inset-left));
+      pointer-events: none;
+    }
+  }
+  /* A pinned stage on a phone is short (a browser's bars leave about 660 px, less the page's own
+     bar): a title that fits one line takes one, and leaves its second line's room to the scene. */
+  @media (max-width: 47.99rem) {
+    .st-scene[data-live] .st-head {
+      gap: 0.5rem;
+    }
+    .st-scene[data-live] .st-title .st-mask {
+      display: inline-block;
+      vertical-align: top;
+    }
+    /* Side by side, the two halves need the space a line break stood for (Chinese sets none). */
+    .st-scene[data-live] .st-title:not(:lang(zh)) .st-mask:not(:last-child) {
+      margin-right: 0.2em;
+    }
+  }
+
+  /* Chinese labels are neither tracked nor capitalised (the app's global rule), so they are set a
+     little larger to carry the same weight. */
+  :is(.st-label, .st-idx, .st-status, .st-code, .st-mq-label, .st-tag, .st-btn, .st-dial-cap, .st-dial-own, .st-talk-step, .st-run-line, .st-yours-src):lang(zh) {
+    font-size: 0.875rem;
+  }
+
+  /* The label on everything that is not a live reading: a mono tag in a dashed box, like the app's
+     estimated minutes. */
+  .st-tag {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    border: 1px dashed rgb(221 221 221 / 0.5);
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.5rem;
+    background-color: var(--st-glass, rgb(5 5 5 / 0.78));
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* A hairline box with a bracket in each corner. */
+  .st-box {
+    --bk: linear-gradient(rgb(221 221 221 / 0.7), rgb(221 221 221 / 0.7));
+    position: relative;
+    border: 1px solid var(--st-hair-2);
+    border-radius: var(--radius-sm);
+    padding: 0.875rem 1rem;
+    background-color: var(--st-glass);
+    background-image: var(--bk), var(--bk), var(--bk), var(--bk), var(--bk), var(--bk), var(--bk), var(--bk);
+    background-repeat: no-repeat;
+    background-size:
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px;
+    background-position:
+      left top,
+      left top,
+      right top,
+      right top,
+      left bottom,
+      left bottom,
+      right bottom,
+      right bottom;
+    background-origin: border-box;
+    color: var(--color-ink);
+  }
+
+  /* A rectangular button: a hairline box that turns off-white, with black text, under the pointer. */
+  .st-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border: 1px solid rgb(221 221 221 / 0.5);
+    border-radius: var(--radius-sm);
+    padding: 0 1.125rem;
+    background-color: var(--st-glass);
+    color: var(--color-ink);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      background-color 200ms var(--ease-quart),
+      border-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart),
+      scale 140ms var(--ease-out-strong);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .st-btn:hover {
+      border-color: var(--color-ink);
+      background-color: var(--color-ink);
+      color: var(--color-bg);
+    }
+  }
+
+  /* The part of a line that is not written yet keeps its room (Decode.tsx). */
+  .st-unseen {
+    visibility: hidden;
+  }
+
+  /* A button that has the keyboard's focus is always in view, wherever the scroll has put the
+     part it sits in: the play button's group while its stage is still arriving, a job's box
+     before its turn to come up. Only for a focus that is shown (a press with a mouse changes
+     nothing), and important, because those positions are written inline. */
+  :is(.st-talk, .st-chip-cell):has(:focus-visible) {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* The gauge                                                         */
+  /* ---------------------------------------------------------------- */
+
+  /* A square box the drawings fill (Gauge.tsx). It is a size container, so what sits inside can be
+     sized by the gauge itself and a giant figure always fits its circle. */
+  .st-gauge {
     position: relative;
     display: grid;
-    flex-shrink: 0;
     place-items: center;
+    aspect-ratio: 1;
+    container-type: size;
+    color: var(--color-ink);
   }
-  /* A soft light behind the orb: there from the first paint, before the orb's canvas draws. */
+  .st-gauge > svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+  /* The arc: --st-fill of the way round, from twelve o'clock. */
+  .st-arc {
+    stroke: var(--color-accent);
+    stroke-width: 2.4;
+    /* The circle's pathLength is 1, so these are shares of the way round. Lengths, not bare numbers:
+       every browser takes a length inside calc() here. */
+    stroke-dasharray: 1px;
+    stroke-dashoffset: calc(1px - var(--st-fill, 0) * 1px);
+  }
+  .st-arc-end {
+    stroke: var(--color-accent);
+    stroke-width: 0.8;
+    transform: rotate(calc(var(--st-fill, 0) * 360deg));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 001 Ask                                                           */
+  /* ---------------------------------------------------------------- */
+
+  /* The orb in its gauge, the question and the reply. Stacked on a phone, with the Example label
+     beside the question; from 1024 px the question sits to the left of the gauge and the reply,
+     with the label under it, to its right. */
+  .st-talk {
+    --st-ring: clamp(6.5rem, 17vh, 11rem);
+    --st-orb: calc(var(--st-ring) * 0.56);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "core core"
+      "tag q"
+      "a a";
+    gap: 0.625rem 0.75rem;
+    min-width: 0;
+  }
+  .st-scene[data-live] .st-talk {
+    flex: 1 1 0;
+    min-height: 0;
+    align-content: center;
+  }
+  /* A tablet has the height for a larger gauge beside the status and the button. */
+  @media (min-width: 48rem) {
+    .st-talk {
+      --st-ring: clamp(9rem, 24vh, 15rem);
+    }
+  }
+  .st-talk-core {
+    grid-area: core;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .st-orb {
+    width: var(--st-ring);
+    flex-shrink: 0;
+  }
+  /* A soft white light behind the orb: there from the first paint, before the orb's canvas draws. */
   .st-orb-glow {
     position: absolute;
-    inset: -55%;
+    inset: 4%;
     border-radius: 9999px;
-    background: radial-gradient(closest-side, rgb(168 230 196 / 0.3), rgb(168 230 196 / 0.08) 46%, rgb(168 230 196 / 0) 74%);
+    background: radial-gradient(closest-side, rgb(221 221 221 / 0.26), rgb(221 221 221 / 0.07) 52%, rgb(221 221 221 / 0) 78%);
     pointer-events: none;
+  }
+  .st-talk-ctl {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-width: 0;
   }
   .st-status {
     min-height: 1.35em;
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
     color: var(--color-ink);
+  }
+  .st-talk-q {
+    grid-area: q;
+    justify-self: end;
+    max-width: min(100%, 24rem);
+    font-size: 1.0625rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  /* Stacked: the reply and its label are placed one by one (the wrapper itself draws nothing). */
+  .st-talk-a {
+    display: contents;
+  }
+  .st-talk-a > .st-box {
+    grid-area: a;
+    min-width: 0;
+  }
+  .st-talk-a > :last-child {
+    grid-area: tag;
+    align-self: center;
+  }
+  .st-talk-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 1.75rem;
+    margin-bottom: 0.625rem;
+    border-bottom: 1px solid var(--st-hair);
+    padding-bottom: 0.625rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: var(--color-ink);
+  }
+  .st-talk-reply {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
+  @media (min-width: 64rem) {
+    .st-talk {
+      --st-ring: clamp(15rem, min(46vh, 30vw), 27rem);
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-areas: "q core a";
+      align-items: center;
+      gap: clamp(1.5rem, 4vw, 4.5rem);
+    }
+    .st-talk-a {
+      grid-area: a;
+      display: flex;
+      flex-direction: column;
+      gap: 0.625rem;
+      min-width: 0;
+      max-width: 30rem;
+    }
+    .st-talk-a > .st-box,
+    .st-talk-a > :last-child {
+      grid-area: auto;
+      align-self: flex-start;
+    }
+    .st-talk-a > .st-box {
+      align-self: stretch;
+    }
+    .st-talk-core {
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .st-talk-ctl {
+      align-items: center;
+    }
+    /* The status word and the button hang under the gauge: this much is taken off the two boxes,
+       so they are level with the middle of the gauge and not of the whole column. */
+    .st-talk-q,
+    .st-talk-a {
+      margin-bottom: 5.75rem;
+    }
+    .st-talk-q {
+      font-size: 1.25rem;
+    }
+    .st-talk-reply {
+      font-size: 1.0625rem;
+    }
   }
   /* A bubble or a reply coming and going with the exchange. A state-driven transition, so
      scrolling back and forth retargets it instead of restarting it. The way out is the shorter one. */
   .st-pop {
     transition:
-      opacity 320ms var(--ease-out-strong),
-      translate 320ms var(--ease-out-strong);
+      opacity 320ms var(--ease-quart),
+      translate 320ms var(--ease-quart);
   }
   .st-pop[data-on="false"] {
     opacity: 0;
@@ -277,141 +531,242 @@
   }
 
   /* ---------------------------------------------------------------- */
-  /* 02 The city, live: the card stack                                 */
+  /* 002 The city, live: the dials                                     */
   /* ---------------------------------------------------------------- */
 
-  /* Six cells with no gap between them (each pads its card), so "100% of a cell" is exactly one
-     step of the grid and the pile can be written in percent (story/math.ts stackPose). */
-  .st-cards {
+  /* Still: a grid of cards, each with its own small gauge and the figure inside it. */
+  .st-dials {
+    display: grid;
+    gap: 0.875rem;
+    min-width: 0;
+  }
+  .st-dial-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: -0.25rem;
-  }
-  .st-cell {
-    position: relative;
-    min-width: 0;
-    padding: 0.25rem;
+    gap: 0.5rem;
   }
   @media (min-width: 40rem) {
-    .st-cards {
+    .st-dial-list {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin: -0.375rem;
-    }
-    .st-cell {
-      padding: 0.375rem;
     }
   }
-  @media (min-width: 80rem) {
-    .st-cards {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+  @media (min-width: 64rem) {
+    .st-dial-list {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
-  /* Live: the grid takes what is left of the stage (up to a cap) and sits at its foot; its rows
-     share that height, and each cell is a size container so a short card can drop its extras. */
-  .st-scene[data-live] .st-cards {
-    flex: 1 1 0;
-    min-height: 0;
-    max-height: 27rem;
-    margin-top: auto;
-    grid-auto-rows: minmax(0, 1fr);
+  .st-dial {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: start;
+    align-items: baseline;
+    gap: 0.75rem 0.5rem;
+    min-width: 0;
+    border: 1px solid var(--st-hair-2);
+    border-radius: var(--radius-sm);
+    padding: 0.875rem;
+    background-color: var(--st-glass);
   }
-  @media (min-width: 40rem) {
-    .st-scene[data-live] .st-cards {
-      max-height: 30rem;
-    }
+  .st-dial-name {
+    min-width: 0;
+    font-size: 1rem;
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
   }
-  @media (min-width: 80rem) {
-    .st-scene[data-live] .st-cards {
-      max-height: 20.5rem;
-    }
+  .st-dial-idx {
+    font-size: 1rem;
+    line-height: 1.15;
+    font-weight: 500;
+    color: var(--color-ink);
   }
-  .st-scene[data-live] .st-cell {
-    container: st-cell / size;
+  .st-dial > .st-gauge {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 11rem);
   }
-  .st-scene[data-live][data-active] .st-cell {
-    will-change: transform, opacity;
+  /* The figure and its unit, centred in the gauge. Sized by the gauge: two digits fill 40% of it,
+     longer figures are set smaller (--st-fit, dials.ts figureFit). */
+  .st-dial-roll {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    font-size: calc(var(--st-fit, 1) * 2.75rem);
+    font-size: calc(var(--st-fit, 1) * 40cqmin);
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: -0.05em;
+    color: var(--color-ink);
+    white-space: nowrap;
+  }
+  .st-dial-fig {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.375rem;
+  }
+  .st-dial-unit {
+    font-size: 0.75rem;
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--color-ink);
+  }
+  .st-dial-own {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-align: center;
+    color: var(--color-ink);
+  }
+  /* One line: where the figures come from. A place name is outside text and may be long: it wraps,
+     even in the middle of a word, and never pushes the stage wider. */
+  .st-dial-cap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.625rem;
+    min-width: 0;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
+  .st-dial-cap > span:last-child {
+    min-width: 0;
+  }
+  /* The live mark: for a real, current figure only. It pulses three times when its dial comes up. */
+  .st-live-dot {
+    position: relative;
+    width: 0.5rem;
+    height: 0.5rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background-color: var(--color-live);
+  }
+  .st-live-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-color: var(--color-live);
+    opacity: 0;
+  }
+  .st-dial[data-on] .st-live-dot::after {
+    animation: st-pulse 1100ms ease-out 3;
   }
 
-  .st-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    height: 100%;
-    min-width: 0;
-    overflow: hidden;
-    padding: 0.75rem;
-    transition:
-      translate 260ms var(--ease-out-strong),
-      border-color 200ms ease;
+  /* Live: one gauge in the middle of the stage, shared by every dial. The dials lie on top of each
+     other in the same grid, so the name at the far left, the figure in the gauge and the index at
+     the far right of each one land in the same places. Every track is a fixed measure: the shared
+     gauge and each dial's own box therefore agree to the pixel. */
+  .st-scene[data-live] .st-dials {
+    --st-cap: 2.75rem;
+    --st-cols: minmax(0, 1fr) 3rem;
+    --st-rows: 2.5rem minmax(0, 1fr) var(--st-cap);
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-columns: var(--st-cols);
+    grid-template-rows: var(--st-rows);
+    gap: 0;
   }
-  @media (min-width: 40rem) {
-    .st-card {
-      gap: 0.75rem;
-      padding: 1.125rem;
-    }
+  .st-scene[data-live] .st-dial-list {
+    grid-area: 1 / 1 / -1 / -1;
+    grid-template-columns: var(--st-cols);
+    grid-template-rows: var(--st-rows);
+    gap: 0;
   }
-  @media (hover: hover) and (pointer: fine) {
-    .st-cell:hover .st-card {
-      translate: 0 -6px;
-      border-color: var(--color-line-strong);
-    }
-  }
-  /* The Example label on a card is a short dashed mark; the word itself is shown once, in the key
-     beside the scene's line (SceneCity). Screen readers still get it on every card. */
-  .st-cards .st-tag {
-    width: 1.75rem;
-    height: 0.625rem;
-    overflow: hidden;
-    padding: 0;
-    color: transparent;
-    font-size: 0;
-  }
-  .st-key {
-    display: inline-flex;
+  .st-scene[data-live] .st-dial {
+    grid-area: 1 / 1 / -1 / -1;
+    grid-template-columns: var(--st-cols);
+    grid-template-rows: var(--st-rows);
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    color: var(--color-ink);
-    font-size: var(--text-meta);
-    font-weight: 500;
-    line-height: 1.5;
+    gap: 0;
+    border: 0;
+    padding: 0;
+    background: none;
+    pointer-events: none;
   }
-  .st-key-mark {
-    order: -1;
-    width: 1.75rem;
-    height: 0.625rem;
-    flex-shrink: 0;
-    border: 1px dashed var(--color-line-strong);
-    border-radius: 8px;
-    background-color: rgb(11 19 17 / 0.78);
+  .st-scene[data-live] :is(.st-gauge-shared, .st-dial > .st-gauge) {
+    grid-area: 2 / 1 / 3 / -1;
+    place-self: center;
+    width: auto;
+    height: min(100%, 86vw);
+    max-height: 34rem;
   }
-  /* A camera frame: the HUD's corner brackets, no picture. */
-  .st-cam {
-    --hb: linear-gradient(var(--color-hud), var(--color-hud));
-    background-image: var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb);
-    background-repeat: no-repeat;
-    background-size:
-      10px 1.5px,
-      1.5px 10px,
-      10px 1.5px,
-      1.5px 10px,
-      10px 1.5px,
-      1.5px 10px,
-      10px 1.5px,
-      1.5px 10px;
-    background-position:
-      left 5px top 5px,
-      left 5px top 5px,
-      right 5px top 5px,
-      right 5px top 5px,
-      left 5px bottom 5px,
-      left 5px bottom 5px,
-      right 5px bottom 5px,
-      right 5px bottom 5px;
+  /* The drum is cut to the circle: the figures above and below the middle one show as far as the
+     ring and no further. */
+  .st-scene[data-live] .st-dial > .st-gauge {
+    clip-path: circle(49.2%);
+  }
+  .st-scene[data-live] .st-dial-roll {
+    position: absolute;
+    /* One row of the drum, in the middle of the gauge. Each figure is moved by whole rows
+       (SceneCity LiveDial), so the one before and the one after stand just inside the ring. */
+    inset: 32cqh 0 auto;
+    height: 36cqh;
+    font-size: calc(var(--st-fit, 1) * 42cqmin);
+  }
+  .st-scene[data-live] .st-dial-unit {
+    font-size: clamp(0.875rem, 4.6cqmin, 1.375rem);
+  }
+  .st-scene[data-live] .st-dial-name,
+  .st-scene[data-live] .st-dial-idx {
+    grid-row: 1;
+    font-size: clamp(1.375rem, 3.3vw, 3rem);
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+  }
+  .st-scene[data-live] .st-dial-name {
+    grid-column: 1;
+    justify-self: start;
+  }
+  /* The name of the dial that has just come up is read once: it arrives in the accent and turns
+     off-white. One flat colour at a time, never a gradient. */
+  .st-scene[data-live] .st-dial[data-on] .st-dial-name {
+    animation: st-read 900ms var(--ease-quart) both;
+  }
+  .st-scene[data-live] .st-dial-idx {
+    grid-column: 2;
+    justify-self: end;
+  }
+  .st-scene[data-live] .st-dial-foot {
+    grid-area: 3 / 1 / 4 / -1;
+    justify-self: center;
+    align-self: end;
+  }
+  .st-scene[data-live] .st-dial-cap {
+    justify-content: center;
+    text-align: center;
+  }
+  .st-scene[data-live][data-active] .st-dial-roll {
+    will-change: transform, opacity;
+  }
+  /* From a tablet up the name and the index sit level with the middle of the gauge, at the two
+     edges of the stage, and the gauge has the full height between the head and the caption. */
+  @media (min-width: 48rem) {
+    .st-scene[data-live] .st-dials {
+      --st-cols: minmax(0, 1fr) minmax(0, 1fr);
+      --st-rows: minmax(0, 1fr) var(--st-cap);
+    }
+    .st-scene[data-live] :is(.st-gauge-shared, .st-dial > .st-gauge) {
+      grid-area: 1 / 1 / 2 / -1;
+      height: min(100%, 44vw);
+      max-height: 40rem;
+    }
+    .st-scene[data-live] .st-dial-foot {
+      grid-area: 2 / 1 / 3 / -1;
+    }
+    /* The gauge is at most 44vw wide: this keeps a long name clear of it, on two lines if need be. */
+    .st-scene[data-live] .st-dial-name {
+      max-width: calc(28vw - 2.5rem);
+    }
   }
 
   /* ---------------------------------------------------------------- */
-  /* 03 Real weather                                                   */
+  /* 003 Real weather                                                  */
   /* ---------------------------------------------------------------- */
 
   .st-reel {
@@ -422,18 +777,38 @@
   .st-steps {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    gap: 0.375rem;
   }
+  /* Four numbered marks: each is a button that goes to its sky; the one on screen is filled. */
   .st-step {
-    display: inline-flex;
+    display: inline-grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border: 1px solid rgb(221 221 221 / 0.5);
+    border-radius: var(--radius-sm);
+    background-color: var(--st-glass);
+    color: var(--color-ink);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 200ms var(--ease-quart),
+      border-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart),
+      scale 140ms var(--ease-out-strong);
   }
-  /* Four short bars: the one for the sky on screen is lit (SceneWeather Step). */
-  .st-step-dot {
-    width: 1.75rem;
-    height: 0.25rem;
-    flex-shrink: 0;
-    border-radius: 9999px;
+  .st-step[aria-current] {
+    border-color: var(--color-accent);
     background-color: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .st-step:hover:not([aria-current]) {
+      border-color: var(--color-ink);
+      background-color: var(--color-ink);
+      color: var(--color-bg);
+    }
   }
   /* The four words share one place. */
   .st-words {
@@ -450,8 +825,8 @@
     width: 100%;
     font-size: calc(var(--st-fit, 1) * clamp(3.75rem, min(19vw, 27vh), 19rem));
     line-height: 1;
-    font-weight: 600;
-    letter-spacing: -0.04em;
+    font-weight: 500;
+    letter-spacing: -0.05em;
     text-transform: uppercase;
     color: var(--color-accent);
     transform-origin: 0 100%;
@@ -460,7 +835,7 @@
   /* From a tablet up the word is the picture: as wide as the stage allows. */
   @media (min-width: 48rem) {
     .st-word {
-      font-size: calc(var(--st-fit, 1) * clamp(3.75rem, min(21vw, 34vh), 24rem));
+      font-size: calc(var(--st-fit, 1) * clamp(3.75rem, min(21vw, 36vh), 24rem));
     }
   }
   .st-outline {
@@ -476,35 +851,123 @@
   .st-scene[data-live][data-active] .st-word {
     will-change: transform, opacity;
   }
+  /* Still: the three skies as a legend. */
+  .st-sky-chip {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--st-hair-2);
+    border-radius: var(--radius-sm);
+    padding: 0 0.875rem;
+    background-color: var(--st-glass);
+    color: var(--color-ink);
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+  /* The visitor's own reading under the giant word, and who gave it. */
+  .st-yours {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 0.5rem;
+    min-width: 0;
+    font-size: 1rem;
+    line-height: 1.45;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
+  .st-yours-src {
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: var(--color-ink);
+  }
 
   /* ---------------------------------------------------------------- */
-  /* 04 Five languages                                                 */
+  /* 004 Five languages                                                */
   /* ---------------------------------------------------------------- */
 
   .st-codes {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem 1.5rem;
+    gap: 0.375rem;
   }
+  /* A language's code: a button that goes to its line and says it. The one on screen carries an
+     orange rule along its foot. */
   .st-code {
+    position: relative;
     display: inline-flex;
-    align-items: baseline;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
     gap: 0.5rem;
-    font-size: 0.8125rem;
-    line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    border: 1px solid rgb(221 221 221 / 0.5);
+    border-radius: var(--radius-sm);
+    padding: 0 0.75rem;
+    background-color: var(--st-glass);
     color: var(--color-ink);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      background-color 200ms var(--ease-quart),
+      border-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart),
+      scale 140ms var(--ease-out-strong);
   }
+  .st-code::after {
+    content: "";
+    position: absolute;
+    inset: auto -1px -1px;
+    height: 2px;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 250ms var(--ease-quart);
+  }
+  .st-code:is([aria-current], [data-sounding])::after {
+    transform: scaleX(1);
+  }
+  /* The page's bar shows the five codes on every screen, so the scene shows each language by its
+     name alone. The code stays for screen readers: every button is named "MN Монгол". */
   .st-code-name {
-    display: none;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
     text-transform: none;
   }
+  .st-code-id {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .st-code-icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+    opacity: 0.65;
+  }
+  .st-code[data-sounding] .st-code-icon {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .st-code:hover {
+      border-color: var(--color-ink);
+      background-color: var(--color-ink);
+      color: var(--color-bg);
+    }
+  }
+  /* The five buttons, then the place the five lines share. */
+  .st-morph {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
   @media (min-width: 40rem) {
-    .st-code-name {
-      display: inline;
+    .st-morph {
+      gap: 1.25rem;
     }
   }
   /* The five lines share one place; the tallest sets its height, so the crossfade moves nothing. */
@@ -518,9 +981,9 @@
   }
   .st-say {
     font-size: clamp(2.25rem, min(8.6vw, 15vh), 9.5rem);
-    line-height: 1.03;
+    line-height: 0.98;
     font-weight: 500;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.05em;
     color: var(--color-ink);
     hyphens: none;
     text-wrap: balance;
@@ -532,34 +995,64 @@
   .st-scene[data-live][data-active] .st-say {
     will-change: transform, opacity;
   }
+  /* Pinned, the question is the subject: dead centre of the stage in a hairline box with corner
+     brackets, as wide as the longest of the five lines, with the five buttons under it. */
+  .st-scene[data-live][data-scene="languages"] .st-fill {
+    align-content: center;
+  }
+  .st-scene[data-live] .st-morph {
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: clamp(0.75rem, 2.4vh, 1.5rem);
+  }
+  .st-scene[data-live] .st-codes {
+    justify-content: center;
+  }
+  .st-scene[data-live] .st-says {
+    max-width: 100%;
+    align-items: center;
+    padding: clamp(1rem, 4.5vh, 3rem) clamp(1rem, 4vw, 4rem);
+    text-align: center;
+  }
+  .st-scene[data-live] .st-say {
+    transform-origin: 50% 100%;
+  }
   /* Still: the same five lines as a list. */
   .st-lines {
     display: grid;
-    gap: 0.625rem;
+    border-top: 1px solid var(--st-hair-2);
   }
   .st-lines-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.875rem;
+    border-bottom: 1px solid var(--st-hair-2);
+    padding-block: 0.625rem;
     font-size: clamp(1.375rem, 1rem + 2.2vw, 2.75rem);
-    line-height: 1.2;
+    line-height: 1.15;
     font-weight: 500;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
     color: var(--color-ink);
   }
   .st-lines-code {
     flex-shrink: 0;
-    min-width: 2.25rem;
-    font-size: 0.8125rem;
-    letter-spacing: 0.16em;
-    color: var(--color-accent);
+    min-width: 5.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--color-ink);
   }
 
   /* ---------------------------------------------------------------- */
-  /* 05 It does the work                                               */
+  /* 005 It does the work                                              */
   /* ---------------------------------------------------------------- */
 
-  /* The reply and seven chips: four by two, or two by four on a phone. */
+  .st-work {
+    display: grid;
+    gap: 0.75rem;
+  }
+  /* The reply and seven boxes: four by two, or two by four on a phone. */
   .st-chips {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -568,57 +1061,66 @@
   @media (min-width: 64rem) {
     .st-chips {
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.875rem;
+      gap: 0.625rem;
     }
   }
-  .st-scene[data-live] .st-chips {
-    flex: 1 1 0;
-    min-height: 0;
-    max-height: 24rem;
-    margin-top: auto;
-    grid-auto-rows: minmax(0, 1fr);
+  .st-chip-cell {
+    display: grid;
+    min-width: 0;
   }
-  @media (min-width: 64rem) {
-    .st-scene[data-live] .st-chips {
-      max-height: 17rem;
-    }
-  }
-  /* On a phone the icon sits above the word, so a long word (Напоминания, Erinnerungen) has the
-     whole chip to itself; from 640 px they sit side by side. */
+  /* The icon and the word side by side. On a phone the boxes are low, so four rows of them and
+     the line under them fit a pinned stage; a long word (Напоминания, Erinnerungen) may hyphenate. */
   .st-chip,
   .st-ack {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 0.375rem;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
     min-width: 0;
-    padding: 0.625rem 0.75rem;
+    min-height: 3.25rem;
+    padding: 0.5rem 0.625rem;
     font-size: 1rem;
-    line-height: 1.25;
+    line-height: 1.2;
     font-weight: 500;
-    color: var(--color-ink);
+    letter-spacing: -0.01em;
+    text-align: left;
     hyphens: auto;
   }
   @media (min-width: 40rem) {
     .st-chip,
     .st-ack {
-      flex-direction: row;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 1rem;
-      padding: 1.125rem 1.25rem;
+      gap: 0.875rem;
+      min-height: clamp(4.25rem, 11vh, 6.5rem);
+      padding: 0.875rem 1rem;
       font-size: 1.125rem;
     }
   }
-  /* Four across leaves a long word (Erinnerungen, Напоминания) little room until the screen is wide. */
-  @media (min-width: 80rem) {
-    .st-chip,
-    .st-ack {
-      font-size: 1.25rem;
+  button.st-chip {
+    cursor: pointer;
+    transition:
+      border-color 200ms var(--ease-quart),
+      scale 140ms var(--ease-out-strong);
+  }
+  /* The box that is picked: an orange rule grows along its foot, from the left. */
+  .st-chip::after {
+    content: "";
+    position: absolute;
+    inset: auto -1px -1px;
+    height: 2px;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 250ms var(--ease-quart);
+  }
+  .st-chip[data-on]::after {
+    transform: scaleX(1);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    button.st-chip:hover {
+      border-color: rgb(221 221 221 / 0.6);
     }
   }
-  .st-scene[data-live][data-active] .st-chip {
+  .st-scene[data-live][data-active] .st-chip-cell {
     will-change: transform, opacity;
   }
   .st-chip-icon {
@@ -627,14 +1129,14 @@
     height: 2rem;
     flex-shrink: 0;
     place-items: center;
-    border-radius: 9999px;
-    background-color: var(--color-surface-3);
+    border: 1px solid var(--st-hair-2);
+    border-radius: var(--radius-sm);
     color: var(--color-accent);
   }
   @media (min-width: 40rem) {
     .st-chip-icon {
-      width: 3rem;
-      height: 3rem;
+      width: 2.25rem;
+      height: 2.25rem;
     }
   }
   /* Who is speaking: the orb's ring, small. */
@@ -645,13 +1147,62 @@
     border-radius: 9999px;
     border: 1.5px solid var(--color-accent);
     box-shadow:
-      inset 0 0 0 4px rgb(11 19 17 / 0.9),
+      inset 0 0 0 4px rgb(5 5 5 / 0.9),
       inset 0 0 0 12px var(--color-accent);
   }
   .st-ack-says {
     min-width: 0;
     font-weight: var(--font-weight-book);
     overflow-wrap: anywhere;
+  }
+  /* The line at the foot of the stage: what one might say for the box that is picked. */
+  .st-run {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.875rem;
+    min-height: 2.75rem;
+    border-top: 1px solid var(--st-hair-2);
+    padding-top: 0.625rem;
+  }
+  .st-run-line {
+    min-width: 0;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
+  .st-run-mark {
+    color: var(--color-accent);
+  }
+  /* The cursor after the line: it blinks only while the scene is on screen. */
+  .st-run-line::after {
+    content: "";
+    display: inline-block;
+    width: 0.5em;
+    height: 1em;
+    margin-left: 0.3em;
+    background-color: var(--color-accent);
+    vertical-align: -0.16em;
+  }
+  .st-scene[data-live][data-active] .st-run-line::after {
+    animation: st-caret 1000ms steps(2, jump-none) infinite;
+  }
+  /* Pinned, the boxes sit in the middle of the stage, and from a tablet up the typed line under
+     them is set large: it is what the scene is about. */
+  .st-scene[data-live] .st-work {
+    align-content: center;
+    gap: clamp(0.75rem, 3vh, 2rem);
+  }
+  @media (min-width: 48rem) {
+    .st-scene[data-live] .st-work .st-run {
+      padding-top: clamp(0.75rem, 2.4vh, 1.5rem);
+    }
+    .st-scene[data-live] .st-work .st-run-line {
+      font-size: clamp(1.5rem, 3vw, 2.75rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -663,9 +1214,9 @@
     position: relative;
     overflow: hidden;
     overflow: clip;
-    border-block: 1px solid var(--color-line);
+    border-block: 1px solid rgb(221 221 221 / 0.22);
     background-color: var(--color-bg);
-    padding-block: clamp(3.5rem, 9vw, 7rem);
+    padding-block: clamp(3rem, 8vw, 6rem);
   }
   .st-mq-label,
   .st-mq-note {
@@ -674,12 +1225,9 @@
     padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
   }
   .st-mq-label {
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-    color: var(--color-accent);
+    color: var(--color-ink);
   }
   .st-mq-note {
     font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
@@ -706,9 +1254,9 @@
     align-items: center;
     gap: 0.08em 0.4em;
     font-size: clamp(2rem, 5.5vw, 5.25rem);
-    line-height: 1.04;
-    font-weight: 600;
-    letter-spacing: -0.035em;
+    line-height: 1.02;
+    font-weight: 500;
+    letter-spacing: -0.05em;
     text-transform: uppercase;
   }
   /* Live: one long row of huge type, wider than the screen, that the scroll moves sideways. */
@@ -725,7 +1273,7 @@
   }
   /* Huge outlined type. The stroke is painted first and the fill (the band's own colour) over it:
      that leaves the outer edge only, and hides the overlapping shapes a variable font has inside
-     its letters. Aspire's home city is the one filled in. */
+     its letters. Aspire's home city is the one filled in, in the accent. */
   .st-mq-item {
     display: inline-flex;
     align-items: center;
@@ -733,147 +1281,52 @@
     white-space: nowrap;
     color: var(--color-bg);
     /* Half of this shows: a line of 1 to 1.5 px, by the size of the type. */
-    -webkit-text-stroke: clamp(2px, 0.03em, 3px) rgb(238 243 240 / 0.92);
+    -webkit-text-stroke: clamp(2px, 0.03em, 3px) rgb(221 221 221 / 0.92);
     paint-order: stroke fill;
   }
   .st-mq-item[data-home] {
     color: var(--color-accent);
     -webkit-text-stroke: 0;
   }
-  /* Between two names: the orb's ring, small. Drawn, not typed, so it is never read out. */
+  /* Between two names: a small cross, like the one at the centre of a gauge. Drawn, not typed, so
+     it is never read out. */
   .st-mq-item::after {
     content: "";
-    width: 0.17em;
-    height: 0.17em;
+    width: 0.2em;
+    height: 0.2em;
     flex-shrink: 0;
-    border: 2px solid var(--color-accent);
-    border-radius: 9999px;
+    background:
+      linear-gradient(var(--color-accent), var(--color-accent)) center / 100% 2px no-repeat,
+      linear-gradient(var(--color-accent), var(--color-accent)) center / 2px 100% no-repeat;
   }
 
   /* ---------------------------------------------------------------- */
-  /* The feature index                                                 */
+  /* The camera frame (cards.tsx)                                      */
   /* ---------------------------------------------------------------- */
 
-  .st-ix {
-    position: relative;
-    width: 100%;
-    max-width: 96rem;
-    margin-inline: auto;
-    padding-block: clamp(3rem, 8vw, 6.5rem);
-    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
-  }
-  @media (min-width: 40rem) {
-    .st-ix {
-      padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
-    }
-  }
-  .st-ix-head {
-    display: flex;
-    align-items: flex-end;
-    gap: clamp(0.625rem, 1.6vw, 1.5rem);
-    margin-bottom: clamp(0.75rem, 2vw, 1.5rem);
-  }
-  .st-ix-rows {
-    border-bottom: 1px solid rgb(238 243 240 / 0.18);
-  }
-  /* Number, big title, one line: stacked on a phone, three columns from 1024 px. */
-  .st-ix-row {
-    display: grid;
-    grid-template-columns: 2.75rem minmax(0, 1fr);
-    align-items: baseline;
-    gap: 0.25rem 0.75rem;
-    border-top: 1px solid rgb(238 243 240 / 0.18);
-    padding-block: clamp(0.875rem, 2.2vw, 1.75rem);
-  }
-  .st-ix-num {
-    font-size: 0.9375rem;
-    line-height: 1.35;
-    letter-spacing: 0.08em;
-    color: var(--color-accent);
-  }
-  .st-ix-title {
-    font-size: clamp(1.75rem, 1rem + 3.6vw, 4.5rem);
-    line-height: 1.03;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    color: var(--color-ink);
-    hyphens: none;
-    overflow-wrap: anywhere;
-  }
-  .st-ix-title:lang(zh) {
-    line-height: 1.15;
-  }
-  .st-ix-line {
-    grid-column: 2;
-    max-width: 30rem;
-    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
-    line-height: 1.45;
-    color: var(--color-ink);
-  }
-  @media (min-width: 64rem) {
-    .st-ix-row {
-      grid-template-columns: 5.5rem minmax(0, 1fr) minmax(0, 24rem);
-      column-gap: 2rem;
-    }
-    .st-ix-line {
-      grid-column: 3;
-    }
-  }
-  /* With a mouse: the row under the pointer steps forward and turns mint, the others fall back.
-     On the row's children, because the row's own opacity belongs to its entrance. */
-  @media (hover: hover) and (pointer: fine) {
-    .st-ix[data-live] .st-ix-row > * {
-      transition:
-        opacity 240ms var(--ease-out-strong),
-        translate 320ms var(--ease-out-strong),
-        color 200ms ease;
-    }
-    .st-ix[data-live] .st-ix-rows:hover .st-ix-row:not(:hover) > * {
-      opacity: 0.38;
-    }
-    .st-ix[data-live] .st-ix-row:hover .st-ix-title {
-      translate: 0.75rem 0;
-      color: var(--color-accent);
-    }
-  }
-  /* The picture that follows the pointer. Its position is a transform set by script; its coming and
-     going is a transition here (from 0.96, never from nothing; the way out is the shorter one). */
-  .st-ix-preview {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 5;
-    width: 18rem;
-    pointer-events: none;
-  }
-  .st-ix-card {
-    position: relative;
-    height: 12rem;
-    opacity: 0;
-    scale: 0.96;
-    transition:
-      opacity 150ms ease-out,
-      scale 150ms ease-out;
-  }
-  .st-ix-card.hud {
-    background-color: rgb(18 28 25 / 0.97);
-  }
-  .st-ix-preview[data-on="true"] .st-ix-card {
-    opacity: 1;
-    scale: 1;
-    transition:
-      opacity 240ms var(--ease-out-strong),
-      scale 320ms var(--ease-out-strong);
-  }
-  .st-ix-pic {
-    position: absolute;
-    inset: 1rem 1rem 1.25rem;
-    opacity: 0;
-    transition: opacity 140ms ease-out;
-  }
-  .st-ix-pic[data-on="true"] {
-    opacity: 1;
-    transition: opacity 220ms var(--ease-out-strong) 60ms;
+  /* A camera frame: the HUD's corner brackets, no picture. */
+  .st-cam {
+    --hb: linear-gradient(var(--color-hud), var(--color-hud));
+    background-image: var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb);
+    background-repeat: no-repeat;
+    background-size:
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px;
+    background-position:
+      left 5px top 5px,
+      left 5px top 5px,
+      right 5px top 5px,
+      right 5px top 5px,
+      left 5px bottom 5px,
+      left 5px bottom 5px,
+      right 5px bottom 5px,
+      right 5px bottom 5px;
   }
 
   /* ---------------------------------------------------------------- */
@@ -895,10 +1348,12 @@
       height: auto;
     }
     .st-pop,
-    .st-card,
-    .st-ix-card,
-    .st-ix-pic,
-    .st-ix-row > * {
+    .st-btn,
+    .st-step,
+    .st-code,
+    .st-code::after,
+    .st-chip,
+    .st-chip::after {
       transition: none;
     }
   }
@@ -913,11 +1368,12 @@
   :root[data-calm="true"] .st-scene[data-live] .st-inner {
     height: auto;
   }
-  :root[data-calm="true"] :is(.st-pop, .st-card, .st-ix-card, .st-ix-pic, .st-ix-row > *) {
+  :root[data-calm="true"] :is(.st-pop, .st-btn, .st-step, .st-code, .st-code::after, .st-chip, .st-chip::after) {
     transition: none;
   }
 
-  /* Windows high contrast: outlined type becomes plain type, hairlines stay visible. */
+  /* Windows high contrast: outlined type becomes plain type, hairlines and boxes stay visible, and
+     what is picked or on is told by the system's own highlight. */
   @media (forced-colors: active) {
     .st-mq-item {
       color: CanvasText;
@@ -929,50 +1385,49 @@
     .st-rule {
       background-color: CanvasText;
     }
+    .st-box,
+    .st-dial,
+    .st-btn,
+    .st-step,
+    .st-code,
+    .st-tag,
+    .st-sky-chip {
+      border-color: CanvasText;
+    }
+    .st-step[aria-current] {
+      border-color: Highlight;
+      background-color: Highlight;
+      color: HighlightText;
+    }
+    .st-arc,
+    .st-arc-end {
+      stroke: Highlight;
+    }
   }
 }
 
-/*
- * A card in a short cell (a pinned stage on a phone or a low window) drops its extras, so its main
- * figure and its Example label always fit: first the rows marked st-more, then st-less, and its
- * name is kept to one line. Outside any layer on purpose: these must also beat a Tailwind display
- * utility on the same element. They only apply inside a live scene's cells (the named container).
- */
-/* Six in a row on a 1280 px laptop: a little less padding and a slightly smaller name, so the
-   longest card names (Дараагийн автобус) still fit on one line. */
-@media (min-width: 80rem) and (max-width: 89.99rem) {
-  .st-card {
-    gap: 0.625rem;
-    padding: 0.875rem;
+/* The live dot's three pulses, and the cursor at the end of the typed line. */
+@keyframes st-pulse {
+  from {
+    opacity: 0.75;
+    transform: scale(1);
   }
-  .st-card h3 {
-    font-size: 0.875rem;
+  to {
+    opacity: 0;
+    transform: scale(3.4);
   }
 }
-
-@container st-cell (max-height: 16rem) {
-  .st-more {
-    display: none;
+/* A dial's name being read: from the accent to its own off-white. */
+@keyframes st-read {
+  from {
+    color: var(--color-accent);
   }
 }
-@container st-cell (max-height: 9.5rem) {
-  .st-less {
-    display: none;
+@keyframes st-caret {
+  from {
+    opacity: 1;
   }
-  .st-card {
-    gap: 0.375rem;
-    padding: 0.625rem;
-  }
-  /* The name alone on one line, a little smaller: "Ближайший автобус" then fits half a phone. */
-  .st-card h3 {
-    font-size: 0.8125rem;
-  }
-  .st-card h3 > span:first-child {
-    display: none;
-  }
-  .st-card h3 > span:last-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  to {
+    opacity: 0;
   }
 }

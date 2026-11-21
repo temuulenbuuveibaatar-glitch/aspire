@@ -1,8 +1,9 @@
 "use client";
 
 // What every scene of the scroll story is built from: the section that turns into a tall strip
-// with a pinned full-screen stage, its scroll progress, and the head (index numeral, label,
-// progress rule, giant title, one line).
+// with a pinned full-screen stage, its scroll progress, and the head (the label at the far left,
+// the three-digit index at the far right, a hairline that fills as the pin is used up, the title
+// and one line).
 //
 // Three numbers drive a scene, each 0 to 1: `enter` while its stage scrolls in, `pin` while the
 // stage is pinned, `exit` while it scrolls away. Without motion they rest at 1, 1 and 0: fully in,
@@ -17,9 +18,11 @@
 // How tall a scene is lives in CSS alone (--st-k-s and --st-k-l, story.css): the three numbers are
 // measured from the section itself, so script never needs to know.
 
-import { cubicBezier, motion, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
-import { useContext, useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { cubicBezier, motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/utils";
+import { Decode } from "./Decode";
+import { pinScrollTop } from "./math";
 import { ModeContext } from "./mode";
 
 /** Arriving: quick off the mark, a long soft landing. */
@@ -27,7 +30,17 @@ export const EASE_OUT = cubicBezier(0.22, 1, 0.36, 1);
 /** Scroll is followed closely: enough spring to take the steps out of a mouse wheel, no bounce. The hero's values. */
 export const SCROLL_SPRING = { stiffness: 260, damping: 36, mass: 0.35 } as const;
 
-const two = (n: number) => String(n).padStart(2, "0");
+/** A scene's index as the page prints it: 001 to 005. */
+export const sceneIndex = (n: number) => String(n).padStart(3, "0");
+
+const noJump = () => {};
+/** Scrolls the page until the scene around this stands at a pin progress (0..1). Does nothing outside a scene. */
+const JumpContext = createContext<(pin: number) => void>(noJump);
+
+/** For a step button inside a pinned scene: `jump(0.4)` scrolls that scene to 40% of its pin. */
+export function useSceneJump(): (pin: number) => void {
+  return useContext(JumpContext);
+}
 
 export interface SceneProgress {
   /** 0..1 while the stage scrolls in. At rest: 1. */
@@ -94,7 +107,7 @@ const nothing = () => {};
 type Offsets = NonNullable<NonNullable<Parameters<typeof useScroll>[0]>["offset"]>;
 
 /**
- * The same feed for a part that is not a pinned scene (the marquee, the feature index): `into`
+ * The same feed for a part that is not a pinned scene (the marquee): `into`
  * follows the scroll progress of `target` between two offsets while this is mounted, and goes back
  * to `rest` when it is not.
  */
@@ -121,6 +134,13 @@ export function SceneFrame({ id, scene, tall, className, children }: SceneFrameP
   // The way out is quieter than the way in: the stage dims and settles back a little as it leaves.
   const dim = useTransform(scene.exit, [0, 1], [1, 0.3]);
   const settle = useTransform(scene.exit, [0, 1], [1, 0.965]);
+  // Read at the moment of the press, so a resized window or a scene that grew is already counted.
+  const jump = useCallback((pin: number) => {
+    const section = target.current;
+    if (!section) return;
+    const top = section.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: pinScrollTop(top, section.offsetHeight, document.documentElement.clientHeight, pin), behavior: "smooth" });
+  }, []);
   return (
     <section
       ref={target}
@@ -134,38 +154,63 @@ export function SceneFrame({ id, scene, tall, className, children }: SceneFrameP
       {mode.live && <SceneLink target={target} scene={scene} smooth={mode.rich} />}
       <div className="st-stage">
         <motion.div className="st-inner" style={mode.rich ? { opacity: dim, scale: settle } : { opacity: 1, scale: 1 }}>
-          {children}
+          <JumpContext.Provider value={jump}>{children}</JumpContext.Provider>
         </motion.div>
       </div>
     </section>
   );
 }
 
-/** The band on top of a stage: the index numeral, the label, and a rule that fills as the pin is used up. */
-export function SceneBar({ n, label, scene }: { n: number; label: string; scene: SceneProgress }) {
+/**
+ * The faint giant numeral behind a stage while it arrives: a chapter mark that is gone again by
+ * the time the stage has pinned, so a settled scene never shows its index twice. Decoration, and
+ * only for a page that moves with a mouse on a wide screen.
+ */
+function Ghost({ n, scene }: { n: number; scene: SceneProgress }) {
+  const { enter } = scene;
+  const opacity = useTransform(enter, (e) => Math.min((e - 0.08) / 0.4, (1 - e) / 0.22, 1) * 0.1);
+  const shown = useTransform(opacity, (o) => (o > 0 ? o : 0));
+  const y = useTransform(enter, [0, 1], ["18%", "0%"], { ease: EASE_OUT });
+  return (
+    <motion.span aria-hidden className="st-ghost numeral" style={{ opacity: shown, y }}>
+      {sceneIndex(n)}
+    </motion.span>
+  );
+}
+
+/**
+ * The band on top of a stage: the label at the far left, the index at the far right, and under
+ * both a hairline that fills as the pin is used up (a pinned page would otherwise feel stuck).
+ * `ghost={false}`: a stage whose own subject is a giant figure arrives without the giant index.
+ */
+export function SceneBar({ n, label, scene, ghost = true }: { n: number; label: string; scene: SceneProgress; ghost?: boolean }) {
   const mode = useContext(ModeContext);
-  const rise = useTransform(scene.enter, [0.2, 0.78], ["70%", "0%"], { ease: EASE_OUT });
-  const numeral = useTransform(scene.enter, [0.2, 0.6], [0, 1]);
-  const words = useTransform(scene.enter, [0.42, 0.88], [0, 1]);
+  const words = useTransform(scene.enter, [0.3, 0.8], [0, 1]);
+  // The small index comes in as the giant one goes, so the number is never on the stage twice.
+  const index = useTransform(scene.enter, [0.9, 1], [0, 1]);
   const draw = useTransform(scene.enter, [0.35, 1], [0, 1], { ease: EASE_OUT });
+  // The label decodes once each time the stage comes in.
+  const [arrived, setArrived] = useState(false);
+  useMotionValueEvent(scene.enter, "change", (v) => setArrived(v > 0.55));
   // Without a mouse the bar is simply there (given by name, so nothing is left where a scroll put it).
   const rich = mode.rich;
   return (
-    <div className="st-bar">
-      <span className="st-mask" aria-hidden>
-        <motion.span className="st-num numeral" style={rich ? { y: rise, opacity: numeral } : { y: "0%", opacity: 1 }}>
-          {two(n)}
+    <>
+      <div className="st-bar">
+        <motion.p className="st-label readout v6-on-photo" style={{ opacity: rich ? words : 1 }}>
+          <span className="sr-only">{sceneIndex(n)} </span>
+          <Decode text={label} play={mode.live && arrived} />
+        </motion.p>{" "}
+        <motion.span aria-hidden className="st-idx readout v6-on-photo" style={{ opacity: rich ? index : 1 }}>
+          {sceneIndex(n)}
+        </motion.span>{" "}
+        <motion.span aria-hidden className="st-rule" style={{ scaleX: rich ? draw : 1 }}>
+          <motion.span className="st-rule-fill" style={{ scaleX: mode.live ? scene.pin : 0 }} />
         </motion.span>
-      </span>
-      <motion.p className="st-label v6-on-photo" style={{ opacity: rich ? words : 1 }}>
-        <span className="sr-only">{two(n)} </span>
-        {label}
-      </motion.p>
-      <motion.span aria-hidden className="st-rule" style={{ scaleX: rich ? draw : 1 }}>
-        {/* How much of this scene is left: a pinned page would otherwise feel stuck. */}
-        <motion.span className="st-rule-fill" style={{ scaleX: mode.live ? scene.pin : 0 }} />
-      </motion.span>
-    </div>
+      </div>
+      {/* Outside the bar: it is placed against the whole stage. */}
+      {ghost && rich && mode.live && <Ghost n={n} scene={scene} />}
+    </>
   );
 }
 
@@ -181,7 +226,7 @@ function TitleRow({ index, enter, children }: { index: number; enter: MotionValu
   );
 }
 
-/** The scene's heading: giant type, one mask per line. */
+/** The scene's heading: three short lines at most, one mask per line. */
 export function SceneTitle({ id, rows, scene, className }: { id: string; rows: string[]; scene: SceneProgress; className?: string }) {
   return (
     <h2 id={`story-${id}-title`} className={cn("st-title v6-on-photo", className)}>

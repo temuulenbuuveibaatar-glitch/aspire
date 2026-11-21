@@ -10,9 +10,12 @@ import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 // in the POST body, never in the URL, so request logs do not keep a location trail.
 //
 // Budget guard: every new place misses the caches and costs several Google calls, so the real
-// client (about one request per 10 minutes) is limited per user, and a user who asks for many
-// distinct places (1 km cells or cities) in an hour gets the network position instead.
-const PER_USER_PER_MIN = 6;
+// client (one request per open, then one every 3 minutes) is limited per user, and a user who asks
+// for many distinct places (1 km cells or cities) in an hour gets the network position instead.
+// The per-minute limit leaves room for a few reloads and a language switch: at 6 the fourth reload in
+// a minute left the dashboard empty. Repeat places come from the cache, and the places guard below
+// is what bounds the paid lookups.
+const PER_USER_PER_MIN = 20;
 const MAX_PLACES_PER_HOUR = 5;
 const HOUR_MS = 60 * 60_000;
 const places = new Map<string, { hour: number; keys: Set<string> }>();

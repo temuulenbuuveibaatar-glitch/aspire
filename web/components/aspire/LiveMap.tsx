@@ -306,8 +306,16 @@ export function LiveMap({ center, lang, stops = [], taxis = [], erdenet = false,
 
   useMarkers(gm, (ml) => {
     if (!here) return [];
-    const pulse = still ? "" : '<animate attributeName="r" values="8;20" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/>';
-    const svg = `<svg width="44" height="44" aria-hidden="true"><circle cx="22" cy="22" r="12" fill="${HUD}" opacity=".3">${pulse}</circle><circle cx="22" cy="22" r="7" fill="${HUD}" stroke="#fff" stroke-width="3"/></svg>`;
+    // The pulse (radius 8 to 20, fading out) is a CSS animation of transform and opacity on a plain element
+    // behind the dot: no layout. As SMIL <animate> tags on the circle's radius it forced a layout on every
+    // frame for as long as the map was mounted, and a CSS animation of a circle inside the SVG still cost
+    // one on every frame the page drew. At rest the ring is invisible (opacity 0), so nothing shows if the
+    // animation is ever switched off under it.
+    const ring = still
+      ? ""
+      : `<style>@keyframes aspire-here{from{transform:scale(.4);opacity:.55}to{transform:scale(1);opacity:0}}</style><span style="position:absolute;z-index:-1;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:${HUD};opacity:0;animation:aspire-here 2s linear infinite"></span>`;
+    const halo = still ? `<circle cx="22" cy="22" r="12" fill="${HUD}" opacity=".3"/>` : "";
+    const svg = `${ring}<svg width="44" height="44" aria-hidden="true">${halo}<circle cx="22" cy="22" r="7" fill="${HUD}" stroke="#fff" stroke-width="3"/></svg>`;
     const el = pin(t.you, svg);
     el.style.pointerEvents = "none";
     return [new ml.Marker({ element: el }).setLngLat([here.lng, here.lat])];

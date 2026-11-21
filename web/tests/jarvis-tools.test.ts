@@ -150,7 +150,29 @@ describe("air quality detail", () => {
     vi.stubGlobal("fetch", f);
     const { out } = await run("get_air_quality", { place: "" }, ctx({ location: { lat: 47.9187, lng: 106.9177 } }, { city: "Ulaanbaatar" }));
     expect(out).toMatchObject({ usAqi: 160, level: "unhealthy", source: "open-meteo", dominant: "pm25", pollutants: { pm25: 70 }, forecast: [{ date: "2026-11-22", maxAqi: 90 }] });
-    expect(String(f.mock.calls.at(-1)![0])).toContain("latitude=47.92&longitude=106.92");
+    // The detail request (the one that asks for the hourly forecast), whichever of the two went out last.
+    expect(String(f.mock.calls.find(([u]) => String(u).includes("hourly="))![0])).toContain("latitude=47.92&longitude=106.92");
+  });
+
+  it("get_air_quality asks for the reading and the detail together, not one after the other", async () => {
+    let open = 0;
+    let most = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      most = Math.max(most, ++open);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      open--;
+      return Response.json({ current: { us_aqi: 160, pm2_5: 70, us_aqi_pm2_5: 160 }, hourly: { time: ["2026-11-22T00:00"], us_aqi: [90] } });
+    }));
+    const { out } = await run("get_air_quality", { place: "" }, ctx({ location: { lat: 47.9187, lng: 106.9177 } }, { city: "Ulaanbaatar" }));
+    expect(most).toBe(2);
+    expect(out).toMatchObject({ usAqi: 160, dominant: "pm25" });
+  });
+
+  it("get_air_quality keeps the reading when the detail fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => (String(u).includes("hourly=") ? new Response("down", { status: 503 }) : Response.json({ current: { us_aqi: 42, pm2_5: 9, pm10: 20 } }))));
+    const { out } = await run("get_air_quality", { place: "" }, ctx({ location: { lat: 47.9187, lng: 106.9177 } }, { city: "Ulaanbaatar" }));
+    expect(out).toMatchObject({ usAqi: 42, level: "good", source: "open-meteo" });
+    expect(out.pollutants).toBeUndefined();
   });
 });
 

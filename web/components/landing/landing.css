@@ -1,8 +1,10 @@
 /*
- * The public opening page only (components/landing): the shell, the intro, the hero, the compact
- * sections and the close. Colours, radii and shadows are the app's tokens (app/globals.css @theme):
- * near-black green, mint, ink. The display face (Tektur) is for the wordmark and numerals, the sans
- * for everything else. Small labels are uppercase and wide-tracked; headlines are large and tight.
+ * The public opening page only (components/landing): the instrument bar, the intro, the hero, the
+ * compact sections, the close and the footer. Colours and radii are the app's tokens
+ * (app/globals.css @theme): black, off-white and one orange. Headlines are the sans at weight 500,
+ * tight and modest in size; the drama comes from giant figures and faint giant numerals. Small
+ * labels and readings are mono, uppercase and lightly tracked (Chinese drops both, see globals.css).
+ * Boxes are hairlines with square corners.
  *
  * Rules sit in the components layer, so a Tailwind utility on the same element still wins. The
  * layer order is repeated here so it holds whichever stylesheet the browser reads first.
@@ -44,7 +46,16 @@
     filter: blur(6px);
   }
 }
-/* The glow behind the core, breathing. */
+/* A line of readings printing in from the left, a few characters at a time. */
+@keyframes lp-print {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+/* The light behind the core, breathing. */
 @keyframes lp-breathe {
   from {
     opacity: 0.6;
@@ -105,14 +116,20 @@
     opacity: 0;
   }
 }
+/* A headline being read: from the accent to its own off-white (see .lp-h2). */
+@keyframes lp-read {
+  from {
+    color: var(--color-accent);
+  }
+}
 
 /* intro keyframes: generated, see INTRO_KEYFRAMES in Intro.tsx */
 @keyframes lp-iris {
   from {
-    clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(50% + 0vmax * 1.000) calc(var(--lp-core-y) + 0vmax * 0.000), calc(50% + 0vmax * 0.991) calc(var(--lp-core-y) + 0vmax * 0.131), calc(50% + 0vmax * 0.966) calc(var(--lp-core-y) + 0vmax * 0.259), calc(50% + 0vmax * 0.924) calc(var(--lp-core-y) + 0vmax * 0.383), calc(50% + 0vmax * 0.866) calc(var(--lp-core-y) + 0vmax * 0.500), calc(50% + 0vmax * 0.793) calc(var(--lp-core-y) + 0vmax * 0.609), calc(50% + 0vmax * 0.707) calc(var(--lp-core-y) + 0vmax * 0.707), calc(50% + 0vmax * 0.609) calc(var(--lp-core-y) + 0vmax * 0.793), calc(50% + 0vmax * 0.500) calc(var(--lp-core-y) + 0vmax * 0.866), calc(50% + 0vmax * 0.383) calc(var(--lp-core-y) + 0vmax * 0.924), calc(50% + 0vmax * 0.259) calc(var(--lp-core-y) + 0vmax * 0.966), calc(50% + 0vmax * 0.131) calc(var(--lp-core-y) + 0vmax * 0.991), calc(50% + 0vmax * 0.000) calc(var(--lp-core-y) + 0vmax * 1.000), calc(50% + 0vmax * -0.131) calc(var(--lp-core-y) + 0vmax * 0.991), calc(50% + 0vmax * -0.259) calc(var(--lp-core-y) + 0vmax * 0.966), calc(50% + 0vmax * -0.383) calc(var(--lp-core-y) + 0vmax * 0.924), calc(50% + 0vmax * -0.500) calc(var(--lp-core-y) + 0vmax * 0.866), calc(50% + 0vmax * -0.609) calc(var(--lp-core-y) + 0vmax * 0.793), calc(50% + 0vmax * -0.707) calc(var(--lp-core-y) + 0vmax * 0.707), calc(50% + 0vmax * -0.793) calc(var(--lp-core-y) + 0vmax * 0.609), calc(50% + 0vmax * -0.866) calc(var(--lp-core-y) + 0vmax * 0.500), calc(50% + 0vmax * -0.924) calc(var(--lp-core-y) + 0vmax * 0.383), calc(50% + 0vmax * -0.966) calc(var(--lp-core-y) + 0vmax * 0.259), calc(50% + 0vmax * -0.991) calc(var(--lp-core-y) + 0vmax * 0.131), calc(50% + 0vmax * -1.000) calc(var(--lp-core-y) + 0vmax * 0.000), calc(50% + 0vmax * -0.991) calc(var(--lp-core-y) + 0vmax * -0.131), calc(50% + 0vmax * -0.966) calc(var(--lp-core-y) + 0vmax * -0.259), calc(50% + 0vmax * -0.924) calc(var(--lp-core-y) + 0vmax * -0.383), calc(50% + 0vmax * -0.866) calc(var(--lp-core-y) + 0vmax * -0.500), calc(50% + 0vmax * -0.793) calc(var(--lp-core-y) + 0vmax * -0.609), calc(50% + 0vmax * -0.707) calc(var(--lp-core-y) + 0vmax * -0.707), calc(50% + 0vmax * -0.609) calc(var(--lp-core-y) + 0vmax * -0.793), calc(50% + 0vmax * -0.500) calc(var(--lp-core-y) + 0vmax * -0.866), calc(50% + 0vmax * -0.383) calc(var(--lp-core-y) + 0vmax * -0.924), calc(50% + 0vmax * -0.259) calc(var(--lp-core-y) + 0vmax * -0.966), calc(50% + 0vmax * -0.131) calc(var(--lp-core-y) + 0vmax * -0.991), calc(50% + 0vmax * -0.000) calc(var(--lp-core-y) + 0vmax * -1.000), calc(50% + 0vmax * 0.131) calc(var(--lp-core-y) + 0vmax * -0.991), calc(50% + 0vmax * 0.259) calc(var(--lp-core-y) + 0vmax * -0.966), calc(50% + 0vmax * 0.383) calc(var(--lp-core-y) + 0vmax * -0.924), calc(50% + 0vmax * 0.500) calc(var(--lp-core-y) + 0vmax * -0.866), calc(50% + 0vmax * 0.609) calc(var(--lp-core-y) + 0vmax * -0.793), calc(50% + 0vmax * 0.707) calc(var(--lp-core-y) + 0vmax * -0.707), calc(50% + 0vmax * 0.793) calc(var(--lp-core-y) + 0vmax * -0.609), calc(50% + 0vmax * 0.866) calc(var(--lp-core-y) + 0vmax * -0.500), calc(50% + 0vmax * 0.924) calc(var(--lp-core-y) + 0vmax * -0.383), calc(50% + 0vmax * 0.966) calc(var(--lp-core-y) + 0vmax * -0.259), calc(50% + 0vmax * 0.991) calc(var(--lp-core-y) + 0vmax * -0.131), calc(50% + 0vmax * 1.000) calc(var(--lp-core-y) + 0vmax * -0.000));
+    clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(var(--lp-core-x) + 0vmax * 1.000) calc(var(--lp-core-y) + 0vmax * 0.000), calc(var(--lp-core-x) + 0vmax * 0.991) calc(var(--lp-core-y) + 0vmax * 0.131), calc(var(--lp-core-x) + 0vmax * 0.966) calc(var(--lp-core-y) + 0vmax * 0.259), calc(var(--lp-core-x) + 0vmax * 0.924) calc(var(--lp-core-y) + 0vmax * 0.383), calc(var(--lp-core-x) + 0vmax * 0.866) calc(var(--lp-core-y) + 0vmax * 0.500), calc(var(--lp-core-x) + 0vmax * 0.793) calc(var(--lp-core-y) + 0vmax * 0.609), calc(var(--lp-core-x) + 0vmax * 0.707) calc(var(--lp-core-y) + 0vmax * 0.707), calc(var(--lp-core-x) + 0vmax * 0.609) calc(var(--lp-core-y) + 0vmax * 0.793), calc(var(--lp-core-x) + 0vmax * 0.500) calc(var(--lp-core-y) + 0vmax * 0.866), calc(var(--lp-core-x) + 0vmax * 0.383) calc(var(--lp-core-y) + 0vmax * 0.924), calc(var(--lp-core-x) + 0vmax * 0.259) calc(var(--lp-core-y) + 0vmax * 0.966), calc(var(--lp-core-x) + 0vmax * 0.131) calc(var(--lp-core-y) + 0vmax * 0.991), calc(var(--lp-core-x) + 0vmax * 0.000) calc(var(--lp-core-y) + 0vmax * 1.000), calc(var(--lp-core-x) + 0vmax * -0.131) calc(var(--lp-core-y) + 0vmax * 0.991), calc(var(--lp-core-x) + 0vmax * -0.259) calc(var(--lp-core-y) + 0vmax * 0.966), calc(var(--lp-core-x) + 0vmax * -0.383) calc(var(--lp-core-y) + 0vmax * 0.924), calc(var(--lp-core-x) + 0vmax * -0.500) calc(var(--lp-core-y) + 0vmax * 0.866), calc(var(--lp-core-x) + 0vmax * -0.609) calc(var(--lp-core-y) + 0vmax * 0.793), calc(var(--lp-core-x) + 0vmax * -0.707) calc(var(--lp-core-y) + 0vmax * 0.707), calc(var(--lp-core-x) + 0vmax * -0.793) calc(var(--lp-core-y) + 0vmax * 0.609), calc(var(--lp-core-x) + 0vmax * -0.866) calc(var(--lp-core-y) + 0vmax * 0.500), calc(var(--lp-core-x) + 0vmax * -0.924) calc(var(--lp-core-y) + 0vmax * 0.383), calc(var(--lp-core-x) + 0vmax * -0.966) calc(var(--lp-core-y) + 0vmax * 0.259), calc(var(--lp-core-x) + 0vmax * -0.991) calc(var(--lp-core-y) + 0vmax * 0.131), calc(var(--lp-core-x) + 0vmax * -1.000) calc(var(--lp-core-y) + 0vmax * 0.000), calc(var(--lp-core-x) + 0vmax * -0.991) calc(var(--lp-core-y) + 0vmax * -0.131), calc(var(--lp-core-x) + 0vmax * -0.966) calc(var(--lp-core-y) + 0vmax * -0.259), calc(var(--lp-core-x) + 0vmax * -0.924) calc(var(--lp-core-y) + 0vmax * -0.383), calc(var(--lp-core-x) + 0vmax * -0.866) calc(var(--lp-core-y) + 0vmax * -0.500), calc(var(--lp-core-x) + 0vmax * -0.793) calc(var(--lp-core-y) + 0vmax * -0.609), calc(var(--lp-core-x) + 0vmax * -0.707) calc(var(--lp-core-y) + 0vmax * -0.707), calc(var(--lp-core-x) + 0vmax * -0.609) calc(var(--lp-core-y) + 0vmax * -0.793), calc(var(--lp-core-x) + 0vmax * -0.500) calc(var(--lp-core-y) + 0vmax * -0.866), calc(var(--lp-core-x) + 0vmax * -0.383) calc(var(--lp-core-y) + 0vmax * -0.924), calc(var(--lp-core-x) + 0vmax * -0.259) calc(var(--lp-core-y) + 0vmax * -0.966), calc(var(--lp-core-x) + 0vmax * -0.131) calc(var(--lp-core-y) + 0vmax * -0.991), calc(var(--lp-core-x) + 0vmax * -0.000) calc(var(--lp-core-y) + 0vmax * -1.000), calc(var(--lp-core-x) + 0vmax * 0.131) calc(var(--lp-core-y) + 0vmax * -0.991), calc(var(--lp-core-x) + 0vmax * 0.259) calc(var(--lp-core-y) + 0vmax * -0.966), calc(var(--lp-core-x) + 0vmax * 0.383) calc(var(--lp-core-y) + 0vmax * -0.924), calc(var(--lp-core-x) + 0vmax * 0.500) calc(var(--lp-core-y) + 0vmax * -0.866), calc(var(--lp-core-x) + 0vmax * 0.609) calc(var(--lp-core-y) + 0vmax * -0.793), calc(var(--lp-core-x) + 0vmax * 0.707) calc(var(--lp-core-y) + 0vmax * -0.707), calc(var(--lp-core-x) + 0vmax * 0.793) calc(var(--lp-core-y) + 0vmax * -0.609), calc(var(--lp-core-x) + 0vmax * 0.866) calc(var(--lp-core-y) + 0vmax * -0.500), calc(var(--lp-core-x) + 0vmax * 0.924) calc(var(--lp-core-y) + 0vmax * -0.383), calc(var(--lp-core-x) + 0vmax * 0.966) calc(var(--lp-core-y) + 0vmax * -0.259), calc(var(--lp-core-x) + 0vmax * 0.991) calc(var(--lp-core-y) + 0vmax * -0.131), calc(var(--lp-core-x) + 0vmax * 1.000) calc(var(--lp-core-y) + 0vmax * -0.000));
   }
   to {
-    clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(50% + 92vmax * 1.000) calc(var(--lp-core-y) + 92vmax * 0.000), calc(50% + 92vmax * 0.991) calc(var(--lp-core-y) + 92vmax * 0.131), calc(50% + 92vmax * 0.966) calc(var(--lp-core-y) + 92vmax * 0.259), calc(50% + 92vmax * 0.924) calc(var(--lp-core-y) + 92vmax * 0.383), calc(50% + 92vmax * 0.866) calc(var(--lp-core-y) + 92vmax * 0.500), calc(50% + 92vmax * 0.793) calc(var(--lp-core-y) + 92vmax * 0.609), calc(50% + 92vmax * 0.707) calc(var(--lp-core-y) + 92vmax * 0.707), calc(50% + 92vmax * 0.609) calc(var(--lp-core-y) + 92vmax * 0.793), calc(50% + 92vmax * 0.500) calc(var(--lp-core-y) + 92vmax * 0.866), calc(50% + 92vmax * 0.383) calc(var(--lp-core-y) + 92vmax * 0.924), calc(50% + 92vmax * 0.259) calc(var(--lp-core-y) + 92vmax * 0.966), calc(50% + 92vmax * 0.131) calc(var(--lp-core-y) + 92vmax * 0.991), calc(50% + 92vmax * 0.000) calc(var(--lp-core-y) + 92vmax * 1.000), calc(50% + 92vmax * -0.131) calc(var(--lp-core-y) + 92vmax * 0.991), calc(50% + 92vmax * -0.259) calc(var(--lp-core-y) + 92vmax * 0.966), calc(50% + 92vmax * -0.383) calc(var(--lp-core-y) + 92vmax * 0.924), calc(50% + 92vmax * -0.500) calc(var(--lp-core-y) + 92vmax * 0.866), calc(50% + 92vmax * -0.609) calc(var(--lp-core-y) + 92vmax * 0.793), calc(50% + 92vmax * -0.707) calc(var(--lp-core-y) + 92vmax * 0.707), calc(50% + 92vmax * -0.793) calc(var(--lp-core-y) + 92vmax * 0.609), calc(50% + 92vmax * -0.866) calc(var(--lp-core-y) + 92vmax * 0.500), calc(50% + 92vmax * -0.924) calc(var(--lp-core-y) + 92vmax * 0.383), calc(50% + 92vmax * -0.966) calc(var(--lp-core-y) + 92vmax * 0.259), calc(50% + 92vmax * -0.991) calc(var(--lp-core-y) + 92vmax * 0.131), calc(50% + 92vmax * -1.000) calc(var(--lp-core-y) + 92vmax * 0.000), calc(50% + 92vmax * -0.991) calc(var(--lp-core-y) + 92vmax * -0.131), calc(50% + 92vmax * -0.966) calc(var(--lp-core-y) + 92vmax * -0.259), calc(50% + 92vmax * -0.924) calc(var(--lp-core-y) + 92vmax * -0.383), calc(50% + 92vmax * -0.866) calc(var(--lp-core-y) + 92vmax * -0.500), calc(50% + 92vmax * -0.793) calc(var(--lp-core-y) + 92vmax * -0.609), calc(50% + 92vmax * -0.707) calc(var(--lp-core-y) + 92vmax * -0.707), calc(50% + 92vmax * -0.609) calc(var(--lp-core-y) + 92vmax * -0.793), calc(50% + 92vmax * -0.500) calc(var(--lp-core-y) + 92vmax * -0.866), calc(50% + 92vmax * -0.383) calc(var(--lp-core-y) + 92vmax * -0.924), calc(50% + 92vmax * -0.259) calc(var(--lp-core-y) + 92vmax * -0.966), calc(50% + 92vmax * -0.131) calc(var(--lp-core-y) + 92vmax * -0.991), calc(50% + 92vmax * -0.000) calc(var(--lp-core-y) + 92vmax * -1.000), calc(50% + 92vmax * 0.131) calc(var(--lp-core-y) + 92vmax * -0.991), calc(50% + 92vmax * 0.259) calc(var(--lp-core-y) + 92vmax * -0.966), calc(50% + 92vmax * 0.383) calc(var(--lp-core-y) + 92vmax * -0.924), calc(50% + 92vmax * 0.500) calc(var(--lp-core-y) + 92vmax * -0.866), calc(50% + 92vmax * 0.609) calc(var(--lp-core-y) + 92vmax * -0.793), calc(50% + 92vmax * 0.707) calc(var(--lp-core-y) + 92vmax * -0.707), calc(50% + 92vmax * 0.793) calc(var(--lp-core-y) + 92vmax * -0.609), calc(50% + 92vmax * 0.866) calc(var(--lp-core-y) + 92vmax * -0.500), calc(50% + 92vmax * 0.924) calc(var(--lp-core-y) + 92vmax * -0.383), calc(50% + 92vmax * 0.966) calc(var(--lp-core-y) + 92vmax * -0.259), calc(50% + 92vmax * 0.991) calc(var(--lp-core-y) + 92vmax * -0.131), calc(50% + 92vmax * 1.000) calc(var(--lp-core-y) + 92vmax * -0.000));
+    clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(var(--lp-core-x) + 92vmax * 1.000) calc(var(--lp-core-y) + 92vmax * 0.000), calc(var(--lp-core-x) + 92vmax * 0.991) calc(var(--lp-core-y) + 92vmax * 0.131), calc(var(--lp-core-x) + 92vmax * 0.966) calc(var(--lp-core-y) + 92vmax * 0.259), calc(var(--lp-core-x) + 92vmax * 0.924) calc(var(--lp-core-y) + 92vmax * 0.383), calc(var(--lp-core-x) + 92vmax * 0.866) calc(var(--lp-core-y) + 92vmax * 0.500), calc(var(--lp-core-x) + 92vmax * 0.793) calc(var(--lp-core-y) + 92vmax * 0.609), calc(var(--lp-core-x) + 92vmax * 0.707) calc(var(--lp-core-y) + 92vmax * 0.707), calc(var(--lp-core-x) + 92vmax * 0.609) calc(var(--lp-core-y) + 92vmax * 0.793), calc(var(--lp-core-x) + 92vmax * 0.500) calc(var(--lp-core-y) + 92vmax * 0.866), calc(var(--lp-core-x) + 92vmax * 0.383) calc(var(--lp-core-y) + 92vmax * 0.924), calc(var(--lp-core-x) + 92vmax * 0.259) calc(var(--lp-core-y) + 92vmax * 0.966), calc(var(--lp-core-x) + 92vmax * 0.131) calc(var(--lp-core-y) + 92vmax * 0.991), calc(var(--lp-core-x) + 92vmax * 0.000) calc(var(--lp-core-y) + 92vmax * 1.000), calc(var(--lp-core-x) + 92vmax * -0.131) calc(var(--lp-core-y) + 92vmax * 0.991), calc(var(--lp-core-x) + 92vmax * -0.259) calc(var(--lp-core-y) + 92vmax * 0.966), calc(var(--lp-core-x) + 92vmax * -0.383) calc(var(--lp-core-y) + 92vmax * 0.924), calc(var(--lp-core-x) + 92vmax * -0.500) calc(var(--lp-core-y) + 92vmax * 0.866), calc(var(--lp-core-x) + 92vmax * -0.609) calc(var(--lp-core-y) + 92vmax * 0.793), calc(var(--lp-core-x) + 92vmax * -0.707) calc(var(--lp-core-y) + 92vmax * 0.707), calc(var(--lp-core-x) + 92vmax * -0.793) calc(var(--lp-core-y) + 92vmax * 0.609), calc(var(--lp-core-x) + 92vmax * -0.866) calc(var(--lp-core-y) + 92vmax * 0.500), calc(var(--lp-core-x) + 92vmax * -0.924) calc(var(--lp-core-y) + 92vmax * 0.383), calc(var(--lp-core-x) + 92vmax * -0.966) calc(var(--lp-core-y) + 92vmax * 0.259), calc(var(--lp-core-x) + 92vmax * -0.991) calc(var(--lp-core-y) + 92vmax * 0.131), calc(var(--lp-core-x) + 92vmax * -1.000) calc(var(--lp-core-y) + 92vmax * 0.000), calc(var(--lp-core-x) + 92vmax * -0.991) calc(var(--lp-core-y) + 92vmax * -0.131), calc(var(--lp-core-x) + 92vmax * -0.966) calc(var(--lp-core-y) + 92vmax * -0.259), calc(var(--lp-core-x) + 92vmax * -0.924) calc(var(--lp-core-y) + 92vmax * -0.383), calc(var(--lp-core-x) + 92vmax * -0.866) calc(var(--lp-core-y) + 92vmax * -0.500), calc(var(--lp-core-x) + 92vmax * -0.793) calc(var(--lp-core-y) + 92vmax * -0.609), calc(var(--lp-core-x) + 92vmax * -0.707) calc(var(--lp-core-y) + 92vmax * -0.707), calc(var(--lp-core-x) + 92vmax * -0.609) calc(var(--lp-core-y) + 92vmax * -0.793), calc(var(--lp-core-x) + 92vmax * -0.500) calc(var(--lp-core-y) + 92vmax * -0.866), calc(var(--lp-core-x) + 92vmax * -0.383) calc(var(--lp-core-y) + 92vmax * -0.924), calc(var(--lp-core-x) + 92vmax * -0.259) calc(var(--lp-core-y) + 92vmax * -0.966), calc(var(--lp-core-x) + 92vmax * -0.131) calc(var(--lp-core-y) + 92vmax * -0.991), calc(var(--lp-core-x) + 92vmax * -0.000) calc(var(--lp-core-y) + 92vmax * -1.000), calc(var(--lp-core-x) + 92vmax * 0.131) calc(var(--lp-core-y) + 92vmax * -0.991), calc(var(--lp-core-x) + 92vmax * 0.259) calc(var(--lp-core-y) + 92vmax * -0.966), calc(var(--lp-core-x) + 92vmax * 0.383) calc(var(--lp-core-y) + 92vmax * -0.924), calc(var(--lp-core-x) + 92vmax * 0.500) calc(var(--lp-core-y) + 92vmax * -0.866), calc(var(--lp-core-x) + 92vmax * 0.609) calc(var(--lp-core-y) + 92vmax * -0.793), calc(var(--lp-core-x) + 92vmax * 0.707) calc(var(--lp-core-y) + 92vmax * -0.707), calc(var(--lp-core-x) + 92vmax * 0.793) calc(var(--lp-core-y) + 92vmax * -0.609), calc(var(--lp-core-x) + 92vmax * 0.866) calc(var(--lp-core-y) + 92vmax * -0.500), calc(var(--lp-core-x) + 92vmax * 0.924) calc(var(--lp-core-y) + 92vmax * -0.383), calc(var(--lp-core-x) + 92vmax * 0.966) calc(var(--lp-core-y) + 92vmax * -0.259), calc(var(--lp-core-x) + 92vmax * 0.991) calc(var(--lp-core-y) + 92vmax * -0.131), calc(var(--lp-core-x) + 92vmax * 1.000) calc(var(--lp-core-y) + 92vmax * -0.000));
   }
 }
 @keyframes lp-reel-1 {
@@ -237,15 +254,23 @@
   .lp-intro {
     /* Side gutter, never inside a notch. */
     --lp-gutter: 1rem;
-    /* The core: the orb's box, and where its centre sits from the top of the page. The intro and
-       the hero both read these, so the circle that opens the page opens exactly on the orb. */
-    --lp-core: clamp(8rem, 20svh, 11rem);
-    --lp-core-y: max(14.75rem, 31svh);
+    /* The bar's height. Small screens: two rows (the wordmark and Sign in, then the languages). */
+    --lp-bar: calc(6rem + env(safe-area-inset-top, 0px));
+    /* The core: the orb's box, and where its centre sits on the page. The intro and the hero both
+       read these, so the circle that opens the page opens exactly on the orb. Small screens: high
+       on the right with the readings beside it, the whole outer ring on screen (it is 1.86 times
+       the core, so its centre stands half of that in from the gutter). */
+    --lp-core: clamp(5.5rem, 14svh, 7rem);
+    --lp-core-x: calc(100% - var(--lp-gutter) - var(--lp-core) * 0.93);
+    --lp-core-y: calc(var(--lp-bar) + 1.5rem + var(--lp-core) * 0.93);
     /* When the hero's entrance starts. The intro moves it to the moment the screen opens. */
     --lp-t0: 120ms;
     /* Arrivals: quick off the mark, long settle. Things that cross the screen: slow at both ends. */
     --lp-out: cubic-bezier(0.16, 1, 0.3, 1);
     --lp-through: cubic-bezier(0.7, 0, 0.2, 1);
+    /* Hairlines: off-white, never a grey of their own. */
+    --lp-hair: rgb(221 221 221 / 0.12);
+    --lp-hair-2: rgb(221 221 221 / 0.22);
   }
   .lp-root {
     position: relative;
@@ -257,6 +282,10 @@
   /* The page the intro's script was sent with (it marks the root it sits in). */
   .lp-root[data-lp-intro] {
     --lp-t0: 800ms;
+  }
+  /* A link into the page, and keyboard focus, never land under the bar (the two heights of --lp-bar). */
+  html:has(.lp-root) {
+    scroll-padding-top: calc(6.5rem + env(safe-area-inset-top, 0px));
   }
   /* Content above the sky. */
   .lp-page {
@@ -271,24 +300,26 @@
     padding-right: max(var(--lp-gutter), env(safe-area-inset-right));
     padding-left: max(var(--lp-gutter), env(safe-area-inset-left));
   }
-  /* The small label: uppercase, wide-tracked, mint. (Chinese drops both, see globals.css.) */
+  /* The small label: mono, uppercase, lightly tracked. Ink: it also sits straight on the sky. */
   .lp-label {
+    font-family: var(--font-mono);
     font-size: var(--text-meta);
     line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.24em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--color-accent);
+    color: var(--color-ink);
   }
 
   /* ---- The visitor's sky: one fixed layer behind the page ---- */
 
   .lp-sky {
-    /* What keeps text readable over any sky. The sky is first redrawn in the brand's own greens
-       (.lp-sky-art): its light and its weather stay, its colours do not. Night, rain and storm skies
-       come out dark and take the first scrim alone; every other sky is taken further down and gets
-       the lift on top. Ink and mint keep 4.5:1 on the lightest patch of each (tests/landing.test.ts
-       works it out from the numbers here). Text set straight on the sky is ink or mint, never muted. */
+    /* What keeps text readable over any sky. The sky is first drawn in greys (.lp-sky-art): its
+       light and its weather stay, its colours do not. Night, rain and storm skies come out dark and
+       take the first scrim alone; every other sky is taken further down and gets the lift on top.
+       On the lightest patch of each, ink keeps 4.5:1 and the accent 3:1 (tests/landing.test.ts works
+       it out from the numbers here). So text set straight on the sky is ink; the accent is for large
+       figures and for marks, never for small text on the sky. */
     --lp-scrim: 0.34;
     --lp-scrim-lift: 0.2;
     position: fixed;
@@ -302,27 +333,27 @@
   .lp-sky[data-off] {
     opacity: 0;
   }
-  /* One hue: the sky's light is kept and its colour is replaced by the page's green, so a dusk
-     reads as deep emerald and never turns the page pink. */
+  /* No hue at all: the sky's light and weather are kept and its colour is dropped, so every sky
+     is graphite and the one colour on the page is the accent. */
   .lp-sky-art {
     position: absolute;
     inset: 0;
-    filter: grayscale(1) sepia(1) hue-rotate(112deg) saturate(1.15) brightness(0.72) contrast(1.2);
+    filter: grayscale(1) brightness(0.6) contrast(1.2);
     transition: filter 1200ms cubic-bezier(0.45, 0, 0.55, 1);
   }
   /* A daytime sky is taken further down, so the page stays Aspire's dark screen at noon. */
   .lp-sky[data-tone="bright"] .lp-sky-art {
-    filter: grayscale(1) sepia(1) hue-rotate(112deg) saturate(1.15) brightness(0.5) contrast(1.3);
+    filter: grayscale(1) brightness(0.38) contrast(1.3);
   }
   /* A sky the story is showing off (always a night sky, scene.ts demoScene): full brightness and
      more contrast, so the sky goes black and the rain and snow on it stay light. */
   .lp-sky[data-demo] .lp-sky-art {
-    filter: grayscale(1) sepia(1) hue-rotate(112deg) saturate(1.15) brightness(1) contrast(1.5);
+    filter: grayscale(1) brightness(1) contrast(1.5);
   }
   .lp-scrim {
     position: absolute;
     inset: 0;
-    background-color: rgb(11 19 17 / var(--lp-scrim));
+    background-color: rgb(5 5 5 / var(--lp-scrim));
     transition: background-color 900ms cubic-bezier(0.45, 0, 0.55, 1);
   }
   /* While the story shows what a sky looks like (scene 03) the scrim lets go: the weather is the picture. */
@@ -336,14 +367,14 @@
     inset: 0;
     background:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .13 0 0 0 -.025'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 180px 180px,
-      radial-gradient(125% 100% at 50% 36%, rgb(4 9 8 / 0) 40%, rgb(4 9 8 / 0.58) 100%);
+      radial-gradient(125% 100% at 50% 36%, rgb(0 0 0 / 0) 40%, rgb(0 0 0 / 0.58) 100%);
   }
   /* The lift for bright skies fades in and out with the sky's own crossfade. */
   .lp-scrim::after {
     content: "";
     position: absolute;
     inset: 0;
-    background-color: rgb(11 19 17 / var(--lp-scrim-lift));
+    background-color: rgb(5 5 5 / var(--lp-scrim-lift));
     opacity: 0;
     transition: opacity 1200ms cubic-bezier(0.45, 0, 0.55, 1);
   }
@@ -351,22 +382,43 @@
     opacity: 1;
   }
 
-  /* ---- Header ---- */
+  /* ---- The instrument bar: fixed to the top of the screen ---- */
 
-  .lp-header {
-    position: absolute;
+  /* Solid, with a hairline under it: the page scrolls away beneath. Small screens: the wordmark and
+     Sign in on one row, the languages on the next, and a thin line for how far down the page is. */
+  .lp-bar {
+    position: fixed;
     inset: 0 0 auto;
-    z-index: 30;
-    display: flex;
-    flex-wrap: wrap;
+    z-index: 40;
+    height: var(--lp-bar);
+    padding-top: env(safe-area-inset-top, 0px);
+    background-color: var(--color-bg);
+  }
+  .lp-bar::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 1px;
+    background-color: var(--lp-hair-2);
+    pointer-events: none;
+  }
+  .lp-bar-in {
+    display: grid;
+    grid-template:
+      "mark . icon sign" 3.25rem
+      "langs langs langs langs" 2.75rem / auto 1fr auto auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 1rem;
-    padding-top: max(1rem, env(safe-area-inset-top));
+    column-gap: 0.5rem;
+    height: 100%;
+    max-width: 96rem;
+    margin-inline: auto;
+    padding-right: max(var(--lp-gutter), env(safe-area-inset-right));
+    padding-left: max(var(--lp-gutter), env(safe-area-inset-left));
   }
   .lp-wordmark {
+    grid-area: mark;
     display: inline-flex;
-    min-height: 3rem;
+    min-height: 2.75rem;
     align-items: center;
     font-family: var(--font-display);
     font-size: var(--text-wordmark);
@@ -376,31 +428,180 @@
     text-transform: uppercase;
     text-decoration: none;
     color: var(--color-ink);
+    transition: opacity 200ms var(--ease-quart);
+  }
+  /* While the wordmark fills the foot of the page (Cta.tsx marks the root), the small one in the
+     bar steps aside, so the name is on the screen once. It comes back for the keyboard. */
+  .lp-root[data-end] .lp-wordmark:not(:focus-visible) {
+    opacity: 0;
+  }
+  /* The place, its clock and the links to the scenes: wide screens only (see below). */
+  .lp-bar-mid,
+  .lp-ticks {
+    display: none;
+  }
+  /* How far down the page: a thin line along the foot of the bar (HeroScene.tsx scales it). */
+  .lp-progress {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 1;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .lp-progress > span {
+    display: block;
+    height: 100%;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+  }
+  .lp-langs {
+    grid-area: langs;
+    align-self: stretch;
+    border-top: 1px solid var(--lp-hair);
+  }
+  .lp-langs ul {
+    display: flex;
+    height: 100%;
+  }
+  .lp-langs li {
+    display: flex;
+    flex: 1;
+  }
+  .lp-lang {
+    position: relative;
+    display: inline-flex;
+    flex: 1;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: var(--color-ink-muted);
+  }
+  /* The page's language: ink, with an orange rule under it. The rule also grows under a hovered one. */
+  .lp-lang::after,
+  .lp-scenes a::after {
+    content: "";
+    position: absolute;
+    right: 0.625rem;
+    bottom: 0.5rem;
+    left: 0.625rem;
+    height: 2px;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform 220ms var(--ease-quart);
+  }
+  .lp-lang:hover,
+  .lp-lang[aria-current="true"] {
+    color: var(--color-ink);
+  }
+  .lp-lang:hover::after,
+  .lp-lang[aria-current="true"]::after {
+    transform: none;
+  }
+  /* The pause button: a hairline square. On hover the fill turns off-white and the icon black. */
+  .lp-icon {
+    grid-area: icon;
+    display: inline-grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border: 1px solid var(--lp-hair-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink);
+    transition:
+      scale 140ms var(--ease-out-strong),
+      background-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart);
+  }
+  .lp-icon svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .lp-icon:hover {
+    background-color: var(--color-ink);
+    color: var(--color-bg);
+  }
+  /* Sign in: orange on a faint orange ground, with a bracket in each corner. The bar is solid, so
+     small orange type keeps 4.5:1 here. On hover the fill turns orange and the type black. */
+  .lp-signin {
+    --b: linear-gradient(var(--color-accent), var(--color-accent));
+    grid-area: sign;
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0 1.125rem;
+    background-color: rgb(252 79 0 / 0.1);
+    background-image: var(--b), var(--b), var(--b), var(--b), var(--b), var(--b), var(--b), var(--b);
+    background-repeat: no-repeat;
+    background-position:
+      left top,
+      left top,
+      right top,
+      right top,
+      left bottom,
+      left bottom,
+      right bottom,
+      right bottom;
+    background-size:
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px,
+      7px 1px,
+      1px 7px;
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+    color: var(--color-accent);
+    transition:
+      scale 140ms var(--ease-out-strong),
+      background-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart);
+  }
+  .lp-signin:hover {
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
   }
 
-  /* ---- The core: the orb inside its two rings ---- */
+  /* ---- The core: the orb inside its gauge ---- */
 
   .lp-core {
     position: absolute;
     top: var(--lp-core-y);
-    left: 50%;
+    left: var(--lp-core-x);
     width: var(--lp-core);
     height: var(--lp-core);
     margin: calc(var(--lp-core) * -0.5) 0 0 calc(var(--lp-core) * -0.5);
     color: var(--color-accent);
     pointer-events: none;
   }
-  /* The core gives off light: a wide soft glow behind the rings that slowly breathes. */
+  /* The one light on the page: soft and white, behind the gauge, slowly breathing. It stays well
+     inside the gauge's own neighbourhood, so it never lifts the ground under the text. */
   .lp-core::before {
     content: "";
     position: absolute;
-    inset: -135%;
+    inset: -120%;
     border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(168 230 196 / 0.28), rgb(168 230 196 / 0.09) 42%, rgb(168 230 196 / 0) 72%);
+    background: radial-gradient(closest-side, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.1) 40%, rgb(255 255 255 / 0) 70%);
     animation: lp-breathe 5200ms ease-in-out infinite alternate;
   }
-  /* The hero off screen (HeroScene marks it): its rings and its glow rest. */
-  .lp-hero[data-away] :is(.lp-ring-ticks > svg, .lp-orbit),
+  /* The hero off screen (HeroScene marks it): its rings and its light rest. */
+  .lp-hero[data-away] :is(.lp-turn, .lp-orbit),
   .lp-hero[data-away] .lp-core::before {
     animation-play-state: paused;
   }
@@ -414,46 +615,12 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 46rem;
-    height: 46rem;
-    margin: -23rem 0 0 -23rem;
+    width: 40rem;
+    height: 40rem;
+    margin: -20rem 0 0 -20rem;
     border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(168 230 196 / 0.15), rgb(168 230 196 / 0) 70%);
+    background: radial-gradient(closest-side, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 70%);
     pointer-events: none;
-  }
-  /* The ring that trails the mouse (Cursor.tsx): it opens up over anything that can be pressed. The
-     arrow itself is never hidden. */
-  .lp-cursor {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 60;
-    width: 2.25rem;
-    height: 2.25rem;
-    margin: -1.125rem 0 0 -1.125rem;
-    pointer-events: none;
-  }
-  .lp-cursor::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1.5px solid rgb(168 230 196 / 0.85);
-    border-radius: 50%;
-    opacity: 0;
-    scale: 0.6;
-    transition:
-      opacity 180ms ease,
-      scale 260ms var(--lp-out),
-      background-color 180ms ease;
-  }
-  .lp-cursor[data-state="on"]::before {
-    opacity: 0.7;
-    scale: 1;
-  }
-  .lp-cursor[data-state="over"]::before {
-    opacity: 1;
-    scale: 1.9;
-    background-color: rgb(168 230 196 / 0.14);
   }
   .lp-core-in {
     animation: lp-core-in 1100ms var(--lp-out) both;
@@ -470,26 +637,56 @@
     height: var(--d);
     margin: calc(var(--d) * -0.5) 0 0 calc(var(--d) * -0.5);
     border-radius: 50%;
+    color: var(--color-ink);
   }
-  /* Both rings fade out toward the headline under them, like something setting behind a horizon:
-     the type never has to share its line with a ring. The fade stays put while the rings turn. */
+  /* The gauge: ticks that turn slowly, a hairline circle and four cross marks that do not, and a
+     bracket at each corner of the square it stands in. */
   .lp-ring-ticks {
-    --d: calc(var(--lp-core) * 1.7);
-    -webkit-mask-image: linear-gradient(180deg, #000 46%, rgb(0 0 0 / 0) 80%);
-    mask-image: linear-gradient(180deg, #000 46%, rgb(0 0 0 / 0) 80%);
+    --d: calc(var(--lp-core) * 1.86);
   }
-  .lp-ring-orbit {
-    --d: calc(var(--lp-core) * 1.34);
-    -webkit-mask-image: linear-gradient(180deg, #000 58%, rgb(0 0 0 / 0) 97%);
-    mask-image: linear-gradient(180deg, #000 58%, rgb(0 0 0 / 0) 97%);
-  }
-  /* The outer ring of ticks turns one way, slowly, and a point of light circles the inner ring the other way. */
   .lp-ring-ticks > svg {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;
+  }
+  .lp-turn {
     animation: lp-spin 160s linear infinite reverse;
   }
+  .lp-cross path {
+    color: var(--color-accent);
+  }
+  .lp-ring-ticks::before {
+    --b: linear-gradient(rgb(221 221 221 / 0.5), rgb(221 221 221 / 0.5));
+    content: "";
+    position: absolute;
+    inset: -0.875rem;
+    background-image: var(--b), var(--b), var(--b), var(--b), var(--b), var(--b), var(--b), var(--b);
+    background-repeat: no-repeat;
+    background-position:
+      left top,
+      left top,
+      right top,
+      right top,
+      left bottom,
+      left bottom,
+      right bottom,
+      right bottom;
+    background-size:
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px;
+  }
+  .lp-ring-orbit {
+    --d: calc(var(--lp-core) * 1.36);
+  }
+  /* A point of light circles the inner ring, against the turn of the ticks. */
   .lp-ring-line,
   .lp-orbit,
   .lp-comet {
@@ -498,14 +695,14 @@
     border-radius: 50%;
   }
   .lp-ring-line {
-    border: 1px solid rgb(168 230 196 / 0.2);
+    border: 1px solid rgb(221 221 221 / 0.2);
   }
   .lp-orbit {
     animation: lp-spin 34s linear infinite;
   }
   /* The tail: a hairline ring whose light fades away behind the point. */
   .lp-comet {
-    background: conic-gradient(from 0deg, rgb(168 230 196 / 0) 0deg, rgb(168 230 196 / 0) 220deg, rgb(168 230 196 / 0.95) 360deg);
+    background: conic-gradient(from 0deg, rgb(221 221 221 / 0) 0deg, rgb(221 221 221 / 0) 220deg, rgb(221 221 221 / 0.95) 360deg);
     -webkit-mask: radial-gradient(farthest-side, rgb(0 0 0 / 0) calc(100% - 1.75px), #000 calc(100% - 1px));
     mask: radial-gradient(farthest-side, rgb(0 0 0 / 0) calc(100% - 1.75px), #000 calc(100% - 1px));
   }
@@ -519,8 +716,8 @@
     border-radius: 50%;
     background-color: var(--color-ink);
     box-shadow:
-      0 0 0 1px rgb(168 230 196 / 0.5),
-      0 0 12px 2px rgb(168 230 196 / 0.6);
+      0 0 0 1px rgb(221 221 221 / 0.5),
+      0 0 12px 2px rgb(221 221 221 / 0.6);
   }
   .lp-orb {
     position: absolute;
@@ -533,7 +730,7 @@
     position: absolute;
     inset: -22%;
     border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(168 230 196 / 0.2), rgb(168 230 196 / 0.07) 52%, rgb(168 230 196 / 0) 100%);
+    background: radial-gradient(closest-side, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.07) 52%, rgb(255 255 255 / 0) 100%);
   }
   /* The drawing of the orb, with the light inside it (up and to the left, where the app lights it). */
   .lp-orb-still {
@@ -542,7 +739,7 @@
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: radial-gradient(36% 36% at 44% 42%, rgb(214 243 228 / 0.3) 0%, rgb(168 230 196 / 0.1) 55%, rgb(168 230 196 / 0) 100%);
+    background: radial-gradient(36% 36% at 44% 42%, rgb(255 255 255 / 0.28) 0%, rgb(255 255 255 / 0.09) 55%, rgb(255 255 255 / 0) 100%);
     transition: opacity 700ms var(--lp-out);
   }
   /* The live orb takes over from the drawing in a crossfade. */
@@ -553,7 +750,95 @@
     opacity: 0;
   }
 
-  /* ---- Intro: a dark screen that opens in a circle from the orb ---- */
+  /* ---- The mark that trails the mouse (Cursor.tsx). The arrow itself is never hidden. ---- */
+
+  .lp-cursor {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+  .lp-cursor-cross,
+  .lp-cursor-box {
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    transition:
+      opacity 160ms ease,
+      scale 220ms var(--ease-quart);
+  }
+  /* The crosshair: four short arms and a small ring where they would meet. */
+  .lp-cursor-cross {
+    --a: linear-gradient(var(--color-accent), var(--color-accent));
+    width: 21px;
+    height: 21px;
+    margin: -10.5px 0 0 -10.5px;
+    background-image: var(--a), var(--a), var(--a), var(--a);
+    background-repeat: no-repeat;
+    background-position:
+      left center,
+      right center,
+      center top,
+      center bottom;
+    background-size:
+      6px 1px,
+      6px 1px,
+      1px 6px,
+      1px 6px;
+  }
+  .lp-cursor-cross::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 1px solid var(--color-accent);
+    border-radius: 50%;
+  }
+  /* Over something that can be pressed the crosshair opens into four corner brackets. A thin dark
+     edge keeps them in sight on an orange or off-white button as well. */
+  .lp-cursor-box {
+    --a: linear-gradient(var(--color-accent), var(--color-accent));
+    filter: drop-shadow(0 0 1px rgb(5 5 5)) drop-shadow(0 0 1px rgb(5 5 5));
+    width: 38px;
+    height: 38px;
+    margin: -19px 0 0 -19px;
+    scale: 0.5;
+    background-image: var(--a), var(--a), var(--a), var(--a), var(--a), var(--a), var(--a), var(--a);
+    background-repeat: no-repeat;
+    background-position:
+      left top,
+      left top,
+      right top,
+      right top,
+      left bottom,
+      left bottom,
+      right bottom,
+      right bottom;
+    background-size:
+      8px 1.5px,
+      1.5px 8px,
+      8px 1.5px,
+      1.5px 8px,
+      8px 1.5px,
+      1.5px 8px,
+      8px 1.5px,
+      1.5px 8px;
+  }
+  .lp-cursor[data-state="on"] .lp-cursor-cross {
+    opacity: 1;
+  }
+  .lp-cursor[data-state="over"] .lp-cursor-cross {
+    scale: 0.4;
+  }
+  .lp-cursor[data-state="over"] .lp-cursor-box {
+    opacity: 1;
+    scale: 1;
+  }
+
+  /* ---- Intro: a black screen that opens in a circle from the orb ---- */
 
   /* The overlay only exists while the intro plays: the script in Intro.tsx adds it and takes it
      away again (no JavaScript, no intro). */
@@ -574,78 +859,83 @@
     content: "";
     position: absolute;
     top: var(--lp-core-y);
-    left: 50%;
+    left: var(--lp-core-x);
     width: 1px;
     height: 1px;
     border-radius: 50%;
     /* intro dust: generated once (44 points on a tilted disc, seeded) */
     box-shadow:
-      -25.3vmax 27.9vmax 0 0 rgb(168 230 196 / 0.25),
-      4.9vmax -18.3vmax 0 0 rgb(168 230 196 / 0.35),
-      20.5vmax 12.9vmax 0 0 rgb(168 230 196 / 0.26),
-      -24.3vmax -21.4vmax 0 0 rgb(168 230 196 / 0.11),
-      42.1vmax -20.8vmax 0 0 rgb(238 243 240 / 0.24),
-      36.3vmax -0.8vmax 0 0 rgb(168 230 196 / 0.23),
-      -8.7vmax -13.2vmax 0 0 rgb(238 243 240 / 0.36),
-      -42.6vmax -1.1vmax 0 0 rgb(168 230 196 / 0.28),
-      18.1vmax 17.9vmax 0 0 rgb(168 230 196 / 0.23),
-      17.6vmax 21.8vmax 0 0.6px rgb(238 243 240 / 0.17),
-      -51.0vmax 21.5vmax 0 0.6px rgb(168 230 196 / 0.09),
-      32.9vmax 16.7vmax 0 0 rgb(168 230 196 / 0.16),
-      42.7vmax -26.6vmax 0 0 rgb(238 243 240 / 0.15),
-      -15.3vmax -23.7vmax 0 0.6px rgb(238 243 240 / 0.23),
-      16.1vmax 23.2vmax 0 0 rgb(238 243 240 / 0.08),
-      -25.8vmax 17.1vmax 0 0 rgb(238 243 240 / 0.34),
-      -40.5vmax 5.8vmax 0 0 rgb(238 243 240 / 0.15),
-      -1.5vmax 17.8vmax 0 0.6px rgb(238 243 240 / 0.31),
-      -42.4vmax 24.4vmax 0 0 rgb(238 243 240 / 0.16),
-      -42.6vmax 9.6vmax 0 0 rgb(168 230 196 / 0.10),
-      -48.7vmax 3.4vmax 0 0 rgb(168 230 196 / 0.26),
-      -8.3vmax 24.5vmax 0 0 rgb(168 230 196 / 0.24),
-      24.3vmax -9.0vmax 0 0 rgb(238 243 240 / 0.29),
-      -25.2vmax 30.4vmax 0 0 rgb(238 243 240 / 0.18),
-      -1.5vmax -13.1vmax 0 0 rgb(168 230 196 / 0.25),
-      -31.7vmax -10.1vmax 0 0 rgb(168 230 196 / 0.29),
-      -37.6vmax -11.7vmax 0 0 rgb(238 243 240 / 0.14),
-      -44.6vmax -8.5vmax 0 0 rgb(238 243 240 / 0.13),
-      43.5vmax -29.3vmax 0 0.6px rgb(238 243 240 / 0.15),
-      31.8vmax -28.5vmax 0 0 rgb(168 230 196 / 0.14),
-      -5.4vmax 17.8vmax 0 0.6px rgb(238 243 240 / 0.24),
-      -34.8vmax -4.0vmax 0 0 rgb(168 230 196 / 0.21),
-      37.4vmax -2.6vmax 0 0 rgb(168 230 196 / 0.22),
-      21.4vmax 24.7vmax 0 0 rgb(238 243 240 / 0.09),
-      35.3vmax -5.2vmax 0 0 rgb(238 243 240 / 0.13),
-      -19.9vmax -8.7vmax 0 0 rgb(238 243 240 / 0.12),
-      -28.5vmax -10.0vmax 0 0 rgb(238 243 240 / 0.13),
-      4.4vmax -9.8vmax 0 0 rgb(168 230 196 / 0.40),
-      12.5vmax -18.6vmax 0 0 rgb(168 230 196 / 0.27),
-      15.8vmax -16.9vmax 0 0.6px rgb(238 243 240 / 0.29),
-      -26.3vmax 13.2vmax 0 0.6px rgb(238 243 240 / 0.18),
-      -5.7vmax 16.3vmax 0 0 rgb(168 230 196 / 0.22),
-      -26.4vmax 24.8vmax 0 0 rgb(238 243 240 / 0.12),
-      -49.6vmax 16.1vmax 0 0 rgb(238 243 240 / 0.20);
+      -25.3vmax 27.9vmax 0 0 rgb(221 221 221 / 0.25),
+      4.9vmax -18.3vmax 0 0 rgb(221 221 221 / 0.35),
+      20.5vmax 12.9vmax 0 0 rgb(221 221 221 / 0.26),
+      -24.3vmax -21.4vmax 0 0 rgb(221 221 221 / 0.11),
+      42.1vmax -20.8vmax 0 0 rgb(221 221 221 / 0.24),
+      36.3vmax -0.8vmax 0 0 rgb(221 221 221 / 0.23),
+      -8.7vmax -13.2vmax 0 0 rgb(221 221 221 / 0.36),
+      -42.6vmax -1.1vmax 0 0 rgb(221 221 221 / 0.28),
+      18.1vmax 17.9vmax 0 0 rgb(221 221 221 / 0.23),
+      17.6vmax 21.8vmax 0 0.6px rgb(221 221 221 / 0.17),
+      -51.0vmax 21.5vmax 0 0.6px rgb(221 221 221 / 0.09),
+      32.9vmax 16.7vmax 0 0 rgb(221 221 221 / 0.16),
+      42.7vmax -26.6vmax 0 0 rgb(221 221 221 / 0.15),
+      -15.3vmax -23.7vmax 0 0.6px rgb(221 221 221 / 0.23),
+      16.1vmax 23.2vmax 0 0 rgb(221 221 221 / 0.08),
+      -25.8vmax 17.1vmax 0 0 rgb(221 221 221 / 0.34),
+      -40.5vmax 5.8vmax 0 0 rgb(221 221 221 / 0.15),
+      -1.5vmax 17.8vmax 0 0.6px rgb(221 221 221 / 0.31),
+      -42.4vmax 24.4vmax 0 0 rgb(221 221 221 / 0.16),
+      -42.6vmax 9.6vmax 0 0 rgb(221 221 221 / 0.10),
+      -48.7vmax 3.4vmax 0 0 rgb(221 221 221 / 0.26),
+      -8.3vmax 24.5vmax 0 0 rgb(221 221 221 / 0.24),
+      24.3vmax -9.0vmax 0 0 rgb(221 221 221 / 0.29),
+      -25.2vmax 30.4vmax 0 0 rgb(221 221 221 / 0.18),
+      -1.5vmax -13.1vmax 0 0 rgb(221 221 221 / 0.25),
+      -31.7vmax -10.1vmax 0 0 rgb(221 221 221 / 0.29),
+      -37.6vmax -11.7vmax 0 0 rgb(221 221 221 / 0.14),
+      -44.6vmax -8.5vmax 0 0 rgb(221 221 221 / 0.13),
+      43.5vmax -29.3vmax 0 0.6px rgb(221 221 221 / 0.15),
+      31.8vmax -28.5vmax 0 0 rgb(221 221 221 / 0.14),
+      -5.4vmax 17.8vmax 0 0.6px rgb(221 221 221 / 0.24),
+      -34.8vmax -4.0vmax 0 0 rgb(221 221 221 / 0.21),
+      37.4vmax -2.6vmax 0 0 rgb(221 221 221 / 0.22),
+      21.4vmax 24.7vmax 0 0 rgb(221 221 221 / 0.09),
+      35.3vmax -5.2vmax 0 0 rgb(221 221 221 / 0.13),
+      -19.9vmax -8.7vmax 0 0 rgb(221 221 221 / 0.12),
+      -28.5vmax -10.0vmax 0 0 rgb(221 221 221 / 0.13),
+      4.4vmax -9.8vmax 0 0 rgb(221 221 221 / 0.40),
+      12.5vmax -18.6vmax 0 0 rgb(221 221 221 / 0.27),
+      15.8vmax -16.9vmax 0 0.6px rgb(221 221 221 / 0.29),
+      -26.3vmax 13.2vmax 0 0.6px rgb(221 221 221 / 0.18),
+      -5.7vmax 16.3vmax 0 0 rgb(221 221 221 / 0.22),
+      -26.4vmax 24.8vmax 0 0 rgb(221 221 221 / 0.12),
+      -49.6vmax 16.1vmax 0 0 rgb(221 221 221 / 0.20);
     /* end of intro dust */
     animation: lp-dust 1400ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
   }
+  /* The wordmark, where the bar has it. */
   .lp-intro-top {
     position: absolute;
     inset: 0 0 auto;
     display: flex;
-    padding-top: max(1rem, env(safe-area-inset-top));
+    height: var(--lp-bar);
+    max-width: 96rem;
+    align-items: center;
+    margin-inline: auto;
+    padding: env(safe-area-inset-top, 0px) max(var(--lp-gutter), env(safe-area-inset-right)) 0 max(var(--lp-gutter), env(safe-area-inset-left));
   }
   .lp-intro .lp-core {
     animation: lp-core-in 900ms var(--lp-out) both;
   }
-  /* The one line, under the outer ring, with the counter beside it. It leaves just before the opening. */
+  /* The one line, and under it the counter in giant figures, where the headline will stand. Both
+     leave just before the opening. */
   .lp-intro-line {
     position: absolute;
-    top: calc(var(--lp-core-y) + var(--lp-core) * 0.5 + 3.25rem);
-    right: 0;
-    left: 0;
+    bottom: 2.5rem;
+    left: max(var(--lp-gutter), env(safe-area-inset-left), calc(50% - 48rem + var(--lp-gutter)));
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1.25rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
     animation:
       lp-fade 420ms var(--lp-out) 60ms both,
       lp-leave 160ms cubic-bezier(0.4, 0, 1, 1) 720ms forwards;
@@ -655,12 +945,10 @@
     display: inline-flex;
     height: 1em;
     overflow: hidden;
-    font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    font-size: clamp(6rem, 14vw, 12.5rem);
+    font-weight: 500;
     line-height: 1;
-    letter-spacing: 0.12em;
+    letter-spacing: -0.05em;
     color: var(--color-ink);
   }
   .lp-reel {
@@ -681,25 +969,85 @@
 
   /* ---- Hero ---- */
 
+  /* One screen: the gauge on the right, the readings top left, the copy bottom left. The padding on
+     top keeps the copy clear of the gauge where the two share a column (small screens). */
   .lp-hero {
     position: relative;
     display: flex;
     min-height: 100svh;
     flex-direction: column;
-    align-items: center;
-    /* The copy starts under the core, wherever the core sits. */
-    padding: calc(var(--lp-core-y) + var(--lp-core) * 0.5 + 1.25rem) max(var(--lp-gutter), env(safe-area-inset-right)) 1.5rem max(var(--lp-gutter), env(safe-area-inset-left));
+    justify-content: flex-end;
+    padding: calc(var(--lp-core-y) + var(--lp-core) * 0.93 + 1.5rem) max(var(--lp-gutter), env(safe-area-inset-right)) 1.5rem max(var(--lp-gutter), env(safe-area-inset-left));
   }
-  /* Darker toward the corners: depth, and a firmer ground for the small readings. It lets go again
-     before the foot of the hero, so the page runs on into the story without an edge. */
+  /* Darker toward the side the text stands on: depth, and a firmer ground for the small readings.
+     It lets go again before the foot of the hero, so the page runs on into the story without an edge. */
   .lp-hero::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(120% 90% at 50% 32%, rgb(11 19 17 / 0) 38%, rgb(11 19 17 / 0.5) 100%);
+    background: linear-gradient(90deg, rgb(5 5 5 / 0.55) 0%, rgb(5 5 5 / 0.2) 46%, rgb(5 5 5 / 0) 72%);
     -webkit-mask-image: linear-gradient(180deg, #000 62%, rgb(0 0 0 / 0) 100%);
     mask-image: linear-gradient(180deg, #000 62%, rgb(0 0 0 / 0) 100%);
     pointer-events: none;
+  }
+  /* The readings: lines of telemetry between two frame marks, top left under the bar. */
+  .lp-readings {
+    position: absolute;
+    top: calc(var(--lp-bar) + 1.25rem);
+    left: max(var(--lp-gutter), env(safe-area-inset-left));
+    z-index: 1;
+    width: min(14rem, 54vw);
+  }
+  .lp-hud {
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-shadow:
+      0 1px 2px rgb(5 5 5 / 0.6),
+      0 0 12px rgb(5 5 5 / 0.4);
+  }
+  /* The two frame marks are decoration: dimmer than the readings between them. */
+  .lp-hud-mark {
+    color: var(--color-ink);
+    opacity: 0.55;
+    animation: lp-fade 600ms var(--lp-out) both;
+    animation-delay: calc(var(--lp-t0) + 200ms);
+  }
+  .lp-hud dl > div {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 0.75ch;
+    animation: lp-print 520ms steps(14, end) backwards;
+    animation-delay: calc(var(--lp-t0) + 260ms + var(--i, 0) * 90ms);
+  }
+  /* Every second line steps in, the way a readout indents what belongs to the line above. */
+  .lp-hud :is([data-row="position"], [data-row="time"], [data-row="wind"]) {
+    padding-left: 2ch;
+  }
+  .lp-hud dt {
+    color: var(--color-ink);
+  }
+  .lp-hud dt::after {
+    content: ":";
+  }
+  .lp-hud dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-ink);
+  }
+  /* Beside the gauge on a small screen there is room for the coordinates but not for their label
+     as well: the label stays for screen readers, and the figures keep to one line. */
+  @media (max-width: 47.99rem) {
+    .lp-hud [data-row="position"] dt {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
   .lp-copy {
     position: relative;
@@ -707,26 +1055,59 @@
     display: flex;
     width: 100%;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
+    align-items: flex-start;
   }
-  /* The headline: as large as its longer line allows (--w is that line's width in em, from Landing). */
+  /* The keyboard can reach a button here while the scroll has the copy dimmed and blurred (the
+     browser scrolls just far enough to show it): what has the focus is always fully there. */
+  .lp-copy:has(:focus-visible) {
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+  /* The small tag over the headline: a hairline box with an orange mark. */
+  .lp-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgb(221 221 221 / 0.5);
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.5rem;
+    background-color: rgb(5 5 5 / 0.5);
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+  }
+  .lp-tag::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    flex: none;
+    background-color: var(--color-accent);
+  }
+  /* The headline: three short lines, modest in size. --w is its longest line's width in em (from
+     Landing), so that line still fits the narrowest phone. */
   .lp-title {
-    font-size: min(calc(88vw / var(--w, 6)), 15vw, 17svh);
-    line-height: 0.98;
+    font-size: min(clamp(2.5rem, 5vw, 4.5rem), calc(88vw / var(--w, 6)));
+    line-height: 0.95;
     font-weight: 500;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.05em;
     hyphens: manual;
     color: var(--color-ink);
     text-shadow:
-      0 1px 2px rgb(11 19 17 / 0.5),
-      0 0 24px rgb(11 19 17 / 0.35);
+      0 1px 2px rgb(5 5 5 / 0.5),
+      0 0 24px rgb(5 5 5 / 0.35);
   }
-  /* Each line is a mask its text rises out of. The padding leaves room for descenders and the shadow. */
+  /* Each line is a mask its text rises out of. The padding leaves room for descenders and the
+     shadow, and the margin takes all of it back from below: two negative margins that meet would
+     collapse into the larger one and leave every line a tenth of an em too far apart. */
   .lp-line {
     display: block;
     overflow: hidden;
-    margin: -0.1em -0.08em -0.2em;
+    margin: 0 -0.08em -0.3em;
     padding: 0.1em 0.08em 0.2em;
   }
   .lp-line > span {
@@ -745,138 +1126,82 @@
     }
   }
   .lp-lead {
-    max-width: 40rem;
-    margin-top: clamp(1rem, 2.6svh, 1.75rem);
-    font-size: clamp(1.0625rem, 0.98rem + 0.45vw, 1.375rem);
+    max-width: 34rem;
+    margin-top: clamp(1rem, 2.4svh, 1.5rem);
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.1875rem);
     line-height: 1.45;
-    text-wrap: balance;
     color: var(--color-ink);
     text-shadow:
-      0 1px 2px rgb(11 19 17 / 0.6),
-      0 0 12px rgb(11 19 17 / 0.4);
+      0 1px 2px rgb(5 5 5 / 0.6),
+      0 0 12px rgb(5 5 5 / 0.4);
   }
   .lp-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
     gap: 0.75rem;
-    margin-top: clamp(1.25rem, 3.2svh, 2rem);
+    margin-top: clamp(1.25rem, 3svh, 1.75rem);
   }
+  /* Buttons are rectangles with mono type. On hover the fill turns off-white and the type black. */
   .lp-button {
     display: inline-flex;
     min-height: 3rem;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border-radius: 9999px;
-    padding: 0 1.5rem;
-    font-size: 1.0625rem;
+    gap: 0.625rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
     line-height: 1.2;
-    font-weight: 600;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     text-decoration: none;
+    transition:
+      scale 140ms var(--ease-out-strong),
+      background-color 200ms var(--ease-quart),
+      border-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart);
   }
   .lp-button svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1rem;
+    height: 1rem;
     flex: none;
   }
   .lp-button-primary {
     background-color: var(--color-accent);
     color: var(--color-on-accent);
-    box-shadow: var(--shadow-accent);
-  }
-  .lp-button-primary:hover {
-    background-color: var(--color-accent-2);
   }
   .lp-button-ghost {
-    border: 1px solid var(--color-line-strong);
-    background-color: rgb(26 38 34 / 0.78);
-    font-weight: 500;
+    border-color: rgb(221 221 221 / 0.5);
+    background-color: rgb(5 5 5 / 0.5);
     color: var(--color-ink);
   }
-  .lp-button-ghost:hover {
-    background-color: var(--color-surface-3);
+  .lp-button:hover {
+    border-color: var(--color-ink);
+    background-color: var(--color-ink);
+    color: var(--color-bg);
   }
-
-  /* The four readings. Small screens: a two by two block under the buttons. Wide screens: one in
-     each corner of the hero, each with a corner mark, like the frame of a viewfinder. */
-  .lp-hud,
-  .lp-hud-space {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 30rem;
-    margin-top: 2.25rem;
-  }
-  .lp-hud-space {
-    min-height: 6.75rem;
-  }
-  .lp-hud dl {
-    display: grid;
-    grid-template: "tl tr" auto "bl br" auto / minmax(0, 1fr) minmax(0, 1fr);
-    gap: 1.25rem 1.5rem;
-    border-top: 1px solid rgb(168 230 196 / 0.22);
-    padding-top: 1.25rem;
-  }
-  .lp-hud dl > div {
-    min-width: 0;
-    animation: lp-fade 900ms var(--lp-out) both;
-    animation-delay: calc(450ms + var(--i, 0) * 70ms);
-  }
-  .lp-hud [data-at="tl"] {
-    grid-area: tl;
-  }
-  .lp-hud [data-at="tr"] {
-    grid-area: tr;
-  }
-  .lp-hud [data-at="bl"] {
-    grid-area: bl;
-  }
-  .lp-hud [data-at="br"] {
-    grid-area: br;
-  }
-  .lp-hud :is([data-at="tr"], [data-at="br"]) {
-    text-align: right;
-  }
-  .lp-hud dt {
-    font-size: var(--text-meta);
-    line-height: 1.35;
-    font-weight: 500;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--color-accent);
-  }
-  .lp-hud dd {
-    margin-top: 0.25rem;
-    font-size: 0.9375rem;
-    line-height: 1.3;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
-    color: var(--color-ink);
-  }
-  /* The scroll line, at the foot of the hero: only where the hero has a screen to itself. It sits in
-     the flow (pushed down by its margin), so it can never land on the buttons. */
+  /* The scroll line, in the hero's far corner: only where the hero has a wide screen to itself. */
   .lp-hint {
-    position: relative;
+    position: absolute;
+    right: max(var(--lp-gutter), env(safe-area-inset-right), calc(50% - 48rem + var(--lp-gutter)));
+    bottom: 2.5rem;
     z-index: 1;
     display: none;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.625rem;
-    margin-top: auto;
-    padding-top: 1.5rem;
+    align-items: flex-end;
+    gap: 0.75rem;
   }
   .lp-hint > span {
     animation: lp-fade 900ms var(--lp-out) both;
     animation-delay: calc(var(--lp-t0) + 700ms);
   }
   .lp-hint-word {
+    font-family: var(--font-mono);
     font-size: var(--text-meta);
     line-height: 1;
-    font-weight: 500;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-ink);
   }
@@ -885,7 +1210,7 @@
     width: 1px;
     height: 2.25rem;
     overflow: hidden;
-    background-color: rgb(238 243 240 / 0.2);
+    background-color: rgb(221 221 221 / 0.24);
   }
   .lp-hint-line::after {
     content: "";
@@ -898,64 +1223,74 @@
   /* ---- The compact sections: how it works, run it yourself, questions ---- */
 
   /* A near-solid band over the sky: running text and muted captions need a calm ground. The sky
-     dissolves into it and out of it again (only labels and headings, set in mint and ink, sit in
-     the first stretch; only padding in the last). */
+     dissolves into it and out of it again (only labels and headings, set in ink, sit in the first
+     stretch; only padding in the last). */
   .lp-deck {
-    --deck: rgb(11 19 17 / 0.86);
+    --deck: rgb(5 5 5 / 0.86);
     position: relative;
-    background: linear-gradient(180deg, rgb(11 19 17 / 0) 0, var(--deck) 9rem, var(--deck) calc(100% - 3.5rem), rgb(11 19 17 / 0) 100%);
+    background: linear-gradient(180deg, rgb(5 5 5 / 0) 0, var(--deck) 9rem, var(--deck) calc(100% - 3.5rem), rgb(5 5 5 / 0) 100%);
   }
   .lp-section {
-    padding-block: clamp(3.5rem, 8vw, 7rem);
-    scroll-margin-top: 1rem;
+    padding-block: clamp(4rem, 9vw, 8rem);
   }
   .lp-section + .lp-section {
-    border-top: 1px solid var(--color-line);
+    border-top: 1px solid var(--lp-hair);
   }
   .lp-h2 {
-    margin-top: 0.75rem;
-    font-size: clamp(2.25rem, 1.4rem + 3.6vw, 4.75rem);
-    line-height: 1;
+    margin-top: 1rem;
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    line-height: 0.95;
     font-weight: 500;
-    letter-spacing: -0.035em;
+    letter-spacing: -0.05em;
     color: var(--color-ink);
   }
   .lp-section-lead {
-    max-width: 34rem;
-    margin-top: 1.25rem;
+    max-width: 30rem;
+    margin-top: 1.5rem;
     font-size: var(--text-body);
-    line-height: 1.55;
+    line-height: 1.5;
     color: var(--color-ink-muted);
   }
-  /* Three steps in a row, each under its own rule, numbered in outlined display numerals. */
+  /* Three lettered steps, each under a faint giant numeral, with a hairline between neighbours. */
   .lp-steps {
     display: grid;
-    margin-top: clamp(2rem, 5vw, 4rem);
+    margin-top: clamp(2.5rem, 6vw, 5rem);
+    border-top: 1px solid var(--lp-hair-2);
   }
   .lp-steps li {
-    border-top: 1px solid var(--color-line-strong);
-    padding: 1.25rem 0 1.75rem;
+    border-bottom: 1px solid var(--lp-hair-2);
+    padding: 1.5rem 0 2rem;
   }
   .lp-step-n {
     display: block;
-    font-size: clamp(2.75rem, 1.9rem + 2.8vw, 4.75rem);
-    line-height: 1;
-    font-weight: 600;
-    color: transparent;
-    -webkit-text-stroke: 1px rgb(168 230 196 / 0.75);
+    margin-left: -0.04em;
+    font-size: clamp(6rem, 14vw, 12.5rem);
+    line-height: 0.8;
+    font-weight: 500;
+    letter-spacing: -0.05em;
+    color: rgb(221 221 221 / 0.1);
   }
   .lp-steps h3 {
-    margin-top: 1rem;
-    font-size: 1.375rem;
-    line-height: 1.25;
+    margin-top: clamp(1.5rem, 4vw, 3.5rem);
+    font-size: 1.5rem;
+    line-height: 1.2;
     font-weight: 500;
+    letter-spacing: -0.02em;
     color: var(--color-ink);
   }
-  .lp-steps p,
-  .lp-points p {
-    margin-top: 0.375rem;
-    font-size: var(--text-small);
-    line-height: 1.5;
+  /* The letter is large enough (24 px) for the accent's 3:1. */
+  .lp-letter {
+    margin-right: 0.2em;
+    color: var(--color-accent);
+  }
+  .lp-steps p {
+    max-width: 32ch;
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--color-ink-muted);
   }
   /* A heading on one side, its rows on the other. */
@@ -964,17 +1299,18 @@
     gap: 2.5rem;
   }
   .lp-split .lp-button {
-    margin-top: 1.75rem;
+    margin-top: 2rem;
   }
+  /* Rows under hairlines: a boxed icon, a title, a line of running text. */
   .lp-points li {
     display: flex;
-    gap: 1rem;
-    border-top: 1px solid var(--color-line-strong);
-    padding: 1.25rem 0 1.5rem;
+    gap: 1.25rem;
+    border-top: 1px solid var(--lp-hair-2);
+    padding: 1.5rem 0 1.75rem;
   }
   .lp-points li:last-child,
   .lp-faq details:last-child {
-    border-bottom: 1px solid var(--color-line-strong);
+    border-bottom: 1px solid var(--lp-hair-2);
   }
   .lp-point-icon {
     display: grid;
@@ -982,65 +1318,104 @@
     height: 2.75rem;
     flex: none;
     place-items: center;
-    border: 1px solid var(--color-line-strong);
-    border-radius: 50%;
+    border: 1px solid var(--lp-hair-2);
+    border-radius: var(--radius-sm);
     color: var(--color-accent);
   }
   .lp-point-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.125rem;
+    height: 1.125rem;
   }
   .lp-points h3 {
-    font-size: 1.25rem;
-    line-height: 1.3;
+    font-size: 1.375rem;
+    line-height: 1.25;
     font-weight: 500;
+    letter-spacing: -0.02em;
     color: var(--color-ink);
   }
+  .lp-points p {
+    max-width: 40rem;
+    margin-top: 0.5rem;
+    font-size: var(--text-small);
+    line-height: 1.55;
+    color: var(--color-ink-muted);
+  }
+  /* A question is a row under a hairline. On hover an orange rule grows along it from the left;
+     open, its mark turns from a plus into a cross on an off-white ground. */
   .lp-faq details {
-    border-top: 1px solid var(--color-line-strong);
+    position: relative;
+    border-top: 1px solid var(--lp-hair-2);
+  }
+  .lp-faq details::before {
+    content: "";
+    position: absolute;
+    inset: -1px 0 auto;
+    height: 1px;
+    background-color: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform 250ms var(--ease-quart);
+  }
+  .lp-faq details:is(:hover, [open])::before {
+    transform: none;
   }
   .lp-faq summary {
     display: flex;
-    min-height: 4rem;
+    min-height: 4.5rem;
     cursor: pointer;
     list-style: none;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem 0;
-    font-size: clamp(1.125rem, 1rem + 0.6vw, 1.5rem);
-    line-height: 1.3;
+    padding: 0.875rem 0;
+    font-size: clamp(1.125rem, 1rem + 0.7vw, 1.625rem);
+    line-height: 1.25;
     font-weight: 500;
+    letter-spacing: -0.02em;
     color: var(--color-ink);
-    transition: color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .lp-faq summary::-webkit-details-marker {
     display: none;
   }
-  .lp-faq summary:hover {
-    color: var(--color-accent);
-  }
-  .lp-faq summary svg {
-    width: 1.25rem;
-    height: 1.25rem;
+  .lp-faq-mark {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
     flex: none;
-    color: var(--color-ink-muted);
-    transition: transform 260ms var(--lp-out);
+    place-items: center;
+    border: 1px solid var(--lp-hair-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-ink);
+    transition:
+      background-color 200ms var(--ease-quart),
+      color 200ms var(--ease-quart);
   }
-  .lp-faq details[open] summary svg {
-    transform: rotate(180deg);
+  .lp-faq-mark svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    transition: transform 250ms var(--ease-quart);
+  }
+  .lp-faq summary:hover .lp-faq-mark,
+  .lp-faq details[open] .lp-faq-mark {
+    background-color: var(--color-ink);
+    color: var(--color-bg);
+  }
+  .lp-faq details[open] .lp-faq-mark svg {
+    transform: rotate(45deg);
   }
   .lp-faq details > p {
     max-width: 44rem;
-    padding-bottom: 1.5rem;
+    padding-bottom: 1.75rem;
     font-size: var(--text-small);
-    line-height: 1.55;
+    line-height: 1.6;
     color: var(--color-ink-muted);
     animation: lp-answer 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   .lp-faq details > p a {
-    color: var(--color-accent);
+    color: var(--color-ink);
     text-decoration: underline;
+    text-decoration-color: var(--color-accent);
+    text-decoration-thickness: 2px;
   }
 
   /* ---- The close ---- */
@@ -1048,10 +1423,19 @@
   .lp-end {
     position: relative;
     overflow: hidden;
-    padding-top: clamp(4.5rem, 11vw, 10rem);
+    padding-top: clamp(5rem, 12vw, 11rem);
     text-align: center;
   }
+  /* The one place colour fills the air: an orange haze rising from the foot (Cta.tsx brings it up
+     with the scroll). Ink keeps better than 4.5:1 on its strongest part. */
+  .lp-haze {
+    position: absolute;
+    inset: 18% -20% 0;
+    background: radial-gradient(ellipse 60% 100% at 50% 100%, rgb(252 79 0 / 0.5) 0%, rgb(252 79 0 / 0.2) 46%, rgb(252 79 0 / 0) 72%);
+    pointer-events: none;
+  }
   .lp-end-top {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1059,14 +1443,14 @@
   .lp-end-line {
     max-width: 16ch;
     margin-top: 1rem;
-    font-size: clamp(2.25rem, 1.4rem + 3.8vw, 5rem);
-    line-height: 1;
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    line-height: 0.95;
     font-weight: 500;
-    letter-spacing: -0.035em;
+    letter-spacing: -0.05em;
     color: var(--color-ink);
     text-shadow:
-      0 1px 2px rgb(11 19 17 / 0.5),
-      0 0 24px rgb(11 19 17 / 0.35);
+      0 1px 2px rgb(5 5 5 / 0.5),
+      0 0 24px rgb(5 5 5 / 0.35);
   }
   /* The zone the button feels the mouse in: a little larger than the button itself. */
   .lp-magnet {
@@ -1076,21 +1460,26 @@
   }
   .lp-end-button {
     display: inline-flex;
-    min-height: 3.75rem;
+    min-height: 3.5rem;
     align-items: center;
-    gap: 0.875rem;
-    border-radius: 9999px;
-    padding: 0 0.625rem 0 1.75rem;
+    gap: 1rem;
+    border-radius: var(--radius-sm);
+    padding: 0 0.5rem 0 1.5rem;
     background-color: var(--color-accent);
-    font-size: 1.125rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
     line-height: 1.2;
-    font-weight: 600;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     text-decoration: none;
     color: var(--color-on-accent);
-    box-shadow: var(--shadow-accent);
+    transition:
+      scale 140ms var(--ease-out-strong),
+      background-color 200ms var(--ease-quart);
   }
   .lp-end-button:hover {
-    background-color: var(--color-accent-2);
+    background-color: var(--color-ink);
   }
   .lp-end-arrow {
     display: grid;
@@ -1098,20 +1487,26 @@
     height: 2.5rem;
     flex: none;
     place-items: center;
-    border-radius: 50%;
+    border-radius: var(--radius-xs);
     background-color: var(--color-on-accent);
     color: var(--color-accent);
-    transition: transform 320ms var(--lp-out);
+    transition: color 200ms var(--ease-quart);
   }
   .lp-end-arrow svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.125rem;
+    height: 1.125rem;
+    transition: transform 250ms var(--ease-quart);
   }
   .lp-end-button:hover .lp-end-arrow {
-    transform: rotate(45deg);
+    color: var(--color-ink);
   }
-  /* The wordmark, as wide as the screen: six letters spread from edge to edge, each in its own mask. */
+  .lp-end-button:hover .lp-end-arrow svg {
+    transform: translate3d(2px, -2px, 0);
+  }
+  /* The wordmark, as wide as the screen: six letters spread from edge to edge, each in its own
+     mask, in plain off-white. */
   .lp-mark {
+    position: relative;
     display: flex;
     justify-content: space-between;
     margin-top: clamp(1.5rem, 4vw, 3.5rem);
@@ -1122,6 +1517,7 @@
     font-weight: 700;
     line-height: 0.86;
     text-transform: uppercase;
+    color: var(--color-ink);
     user-select: none;
   }
   .lp-mark-letter {
@@ -1129,43 +1525,48 @@
     overflow: hidden;
     padding-top: 0.04em;
   }
-  /* Ink at the top, mint through the middle, fading out toward the footer. */
   .lp-mark-letter > span {
     display: block;
-    background: linear-gradient(180deg, var(--color-ink) 8%, var(--color-accent) 58%, rgb(168 230 196 / 0.14) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
   }
 
   /* ---- Footer: a solid band, so the small print never sits on the sky ---- */
 
   .lp-footer {
     position: relative;
-    border-top: 1px solid var(--color-line);
+    border-top: 1px solid var(--lp-hair-2);
     background-color: var(--color-bg);
   }
   .lp-footer .lp-wrap {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding-top: 2rem;
-    padding-bottom: max(2rem, env(safe-area-inset-bottom));
-    font-size: var(--text-small);
+    gap: 0.25rem;
+    padding-top: 1.25rem;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--color-ink-muted);
+  }
+  /* The device's own date, time and UTC offset (Cta.tsx): room is kept for it before it arrives. */
+  .lp-stamp {
+    min-height: 1.5em;
+    color: var(--color-ink);
   }
   .lp-footer nav {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.25rem;
+    margin-left: -0.5rem;
   }
   .lp-footer a {
     display: inline-flex;
     min-height: 2.75rem;
     align-items: center;
-    padding-inline: 0.25rem;
+    padding-inline: 0.5rem;
     text-decoration: underline;
     color: var(--color-ink-muted);
-    transition: color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: color 200ms var(--ease-quart);
   }
   .lp-footer a:hover {
     color: var(--color-ink);
@@ -1177,105 +1578,232 @@
     .lp-root,
     .lp-intro {
       --lp-gutter: 1.5rem;
-      --lp-core: clamp(9.5rem, 22svh, 15rem);
-      --lp-core-y: max(11.25rem, 26svh);
+      /* One row is enough from here on. */
+      --lp-bar: calc(3.5rem + env(safe-area-inset-top, 0px));
+      --lp-core: clamp(8.5rem, 22svh, 13rem);
+      --lp-core-x: 76%;
     }
-    .lp-ring-ticks {
-      --d: calc(var(--lp-core) * 1.9);
+    html:has(.lp-root) {
+      scroll-padding-top: calc(4rem + env(safe-area-inset-top, 0px));
     }
-    /* As tall as the language tabs beside it, so the wordmark sits on their centre line. */
-    .lp-wordmark {
-      min-height: 3.375rem;
+    .lp-bar-in {
+      grid-template: "mark langs . icon sign" 100% / auto auto 1fr auto auto;
+      column-gap: 0.75rem;
+    }
+    .lp-langs {
+      align-self: center;
+      margin-left: 0.75rem;
+      border-top: 0;
+    }
+    .lp-langs li,
+    .lp-lang {
+      flex: none;
+    }
+    .lp-readings {
+      left: max(var(--lp-gutter), env(safe-area-inset-left));
+      width: min(22rem, 46vw);
     }
     .lp-footer .lp-wrap {
       flex-direction: row;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
+      column-gap: 2rem;
+    }
+    .lp-stamp {
+      min-width: 28ch;
+    }
+  }
+  /* Where the bar shows a running clock, the stamp keeps to the date and the UTC offset. */
+  @media (min-width: 64rem) {
+    .lp-root:has(.lp-clock) .lp-stamp-time {
+      display: none;
     }
   }
   @media (min-width: 48rem) {
     .lp-steps {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      column-gap: clamp(1.5rem, 3vw, 3rem);
+    }
+    .lp-steps li {
+      border-bottom: 0;
+      border-left: 1px solid var(--lp-hair-2);
+      padding: 1.5rem 1.5rem 2.5rem;
+    }
+    .lp-steps li:first-child {
+      border-left: 0;
+      padding-left: 0;
     }
   }
   @media (min-width: 64rem) {
-    .lp-title {
-      font-size: min(calc(84vw / var(--w, 6)), 10.5vw, 13.6svh);
+    .lp-root,
+    .lp-intro {
+      /* The gauge is the subject: large, right of centre, in the middle of the screen under the bar. */
+      --lp-core: clamp(12rem, 34svh, 21rem);
+      --lp-core-x: 70%;
+      --lp-core-y: calc(var(--lp-bar) + (100svh - var(--lp-bar)) * 0.5);
+    }
+    /* The whole instrument: wordmark, the place and its clock over the links to the scenes, the
+       strip of ticks, the languages, the pause button, Sign in. */
+    .lp-bar-in {
+      grid-template: "mark mid ticks langs icon sign" 100% / auto auto 1fr auto auto auto;
+      column-gap: 1rem;
+    }
+    .lp-progress {
+      display: none;
+    }
+    .lp-langs {
+      margin-left: 0;
+    }
+    .lp-bar-mid {
+      grid-area: mid;
+      display: flex;
+      min-width: 11rem;
+      align-self: stretch;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.25rem;
+      border-left: 1px solid var(--lp-hair-2);
+      padding-left: 1rem;
+    }
+    /* Whose place, its name, and the time there. The clock keeps its width while the seconds run. */
+    .lp-where {
+      display: flex;
+      min-height: 1rem;
+      align-items: baseline;
+      gap: 0.75ch;
+      font-family: var(--font-mono);
+      font-size: var(--text-meta);
+      line-height: 1.35;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: var(--color-ink);
+    }
+    .lp-where-cap,
+    .lp-clock {
+      color: var(--color-ink-muted);
+    }
+    .lp-where-cap::after {
+      content: ":";
+    }
+    .lp-where-place {
+      max-width: 18ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* The comma sits right after the name, cut short or not. */
+    .lp-where-place + span {
+      margin-left: -0.75ch;
+    }
+    .lp-clock {
+      min-width: 8.5ch;
+    }
+    /* The scenes, by their index numbers. Each link is as tall as its row and 44 px wide; the one on
+       screen (and a hovered one) turns ink over an orange rule. */
+    .lp-scenes ul {
+      display: flex;
+      margin-left: -0.625rem;
+    }
+    .lp-scenes a {
+      position: relative;
+      display: inline-flex;
+      min-width: 2.75rem;
+      height: 1.5rem;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: var(--text-meta);
+      line-height: 1;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      color: var(--color-ink-muted);
+      transition: color 200ms var(--ease-quart);
+    }
+    /* The pressable area reaches past the row to 44 px, without moving anything. */
+    .lp-scenes a::before {
+      content: "";
+      position: absolute;
+      inset: -0.75rem 0 -0.5rem;
+    }
+    .lp-scenes a::after {
+      bottom: 0;
+      height: 1px;
+    }
+    .lp-scenes a:hover {
+      color: var(--color-ink);
+    }
+    .lp-scenes a:hover::after,
+    .lp-scenes a[data-on]::after {
+      transform: none;
+    }
+    /* The scene on screen prints its own index on its stage, so here its number gives way to an
+       orange block of the same width: the bar says where you are without saying the number twice. */
+    .lp-scenes a[data-on] {
+      color: rgb(221 221 221 / 0);
+    }
+    .lp-scenes a[data-on]::after {
+      bottom: calc(50% - 0.3125rem);
+      height: 0.625rem;
+    }
+    /* The strip of ticks: grey, filling in orange from the left with the scroll (HeroScene.tsx
+       moves the clip). */
+    .lp-ticks {
+      grid-area: ticks;
+      position: relative;
+      display: block;
+      min-width: 2rem;
+      align-self: stretch;
+      margin-block: 0.5rem;
+      background-image: repeating-linear-gradient(90deg, rgb(221 221 221 / 0.26) 0 1px, rgb(221 221 221 / 0) 1px 4px);
+    }
+    .lp-ticks-on {
+      position: absolute;
+      inset: 0;
+      background-color: rgb(252 79 0 / 0.1);
+      background-image: repeating-linear-gradient(90deg, var(--color-accent) 0 1px, rgb(252 79 0 / 0) 1px 4px);
+      clip-path: inset(0 100% 0 0);
+    }
+    .lp-hero {
+      padding: calc(var(--lp-bar) + 10rem) max(var(--lp-gutter), env(safe-area-inset-right), calc(50% - 48rem + var(--lp-gutter))) 2.5rem
+        max(var(--lp-gutter), env(safe-area-inset-left), calc(50% - 48rem + var(--lp-gutter)));
+    }
+    .lp-readings {
+      top: calc(var(--lp-bar) + 2rem);
+      left: max(var(--lp-gutter), env(safe-area-inset-left), calc(50% - 48rem + var(--lp-gutter)));
+      width: min(26rem, 40vw);
+    }
+    /* The bar shows the place and its clock here, so the readings do not say them twice. */
+    .lp-hud :is([data-row="place"], [data-row="time"]) {
+      display: none;
+    }
+    .lp-hud [data-row="position"] {
+      padding-left: 0;
+    }
+    .lp-hud [data-row="position"] ~ [data-row="now"] {
+      padding-left: 2ch;
+    }
+    /* The copy keeps to its side of the screen: the gauge has the other. */
+    .lp-copy {
+      max-width: min(44rem, 42vw);
     }
     .lp-split {
       grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
       align-items: start;
       gap: clamp(3rem, 6vw, 7rem);
     }
-    /* The readings move out to the hero's corners; they take no room in the flow. */
-    .lp-hud-space {
-      display: none;
-    }
-    /* Their corners are the corners of the page's column (96rem at most), under the header's ends. */
-    .lp-hud {
-      position: absolute;
-      inset: 5.75rem max(var(--lp-gutter), env(safe-area-inset-right), calc(50% - 48rem + var(--lp-gutter))) 2rem
-        max(var(--lp-gutter), env(safe-area-inset-left), calc(50% - 48rem + var(--lp-gutter)));
-      width: auto;
-      max-width: none;
-      margin: 0;
-      pointer-events: none;
-    }
-    .lp-hud dl {
-      height: 100%;
-      grid-template-rows: 1fr auto;
-      border: 0;
-      padding: 0;
-    }
-    /* In a corner a reading keeps to one line: a long place name is cut short with an ellipsis. */
-    .lp-hud dd {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .lp-hud dl > div {
-      --mark: rgb(168 230 196 / 0.6);
-      max-width: min(24rem, 34vw);
-      padding: 0.875rem 1rem;
-      background-image: linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark));
-      background-repeat: no-repeat;
-      background-size:
-        14px 1px,
-        1px 14px;
-    }
-    .lp-hud [data-at="tl"] {
-      align-self: start;
-      justify-self: start;
-      background-position:
-        left top,
-        left top;
-    }
-    .lp-hud [data-at="tr"] {
-      align-self: start;
-      justify-self: end;
-      background-position:
-        right top,
-        right top;
-    }
-    .lp-hud [data-at="bl"] {
-      align-self: end;
-      justify-self: start;
-      background-position:
-        left bottom,
-        left bottom;
-    }
-    .lp-hud [data-at="br"] {
-      align-self: end;
-      justify-self: end;
-      background-position:
-        right bottom,
-        right bottom;
-    }
   }
   @media (min-width: 64rem) and (min-height: 40rem) {
     .lp-hint {
       display: flex;
+    }
+  }
+  /* Small or touch screens: at most two things move at once (the orb and the sky), so the gauge
+     and its light stay still. */
+  @media (max-width: 47.99rem), (pointer: coarse) {
+    .lp-turn,
+    .lp-orbit,
+    .lp-core::before {
+      animation: none;
     }
   }
 
@@ -1293,6 +1821,22 @@
     }
   }
 
+  /* A section's headline is read as it comes up the screen: it arrives in the accent and turns
+     off-white at the pace of the scroll. One flat colour at a time, never a gradient. At rest, and
+     wherever scroll timelines are missing, it is plain off-white. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .lp-in > .lp-h2 {
+        animation: lp-read linear both;
+        animation-timeline: view();
+        animation-range: entry 30% cover 38%;
+      }
+      :root[data-calm="true"] .lp-in > .lp-h2 {
+        animation: none;
+      }
+    }
+  }
+
   /* ---- Preferences ---- */
 
   @media (prefers-contrast: more) {
@@ -1301,6 +1845,11 @@
     }
     .lp-deck {
       background: var(--color-bg);
+    }
+    .lp-root,
+    .lp-intro {
+      --lp-hair: rgb(221 221 221 / 0.4);
+      --lp-hair-2: rgb(221 221 221 / 0.6);
     }
   }
   @media (prefers-reduced-transparency: reduce) {
@@ -1330,13 +1879,15 @@
   :root[data-calm="true"] .lp-in {
     animation: none;
   }
-  /* Windows high contrast: outlined and gradient type becomes plain text again. */
+  /* Windows high contrast: faint numerals become plain text again, and the marks keep an edge. */
   @media (forced-colors: active) {
     .lp-step-n,
-    .lp-mark-letter > span {
-      background: none;
+    .lp-scenes a[data-on] {
       color: CanvasText;
-      -webkit-text-stroke: 0;
+    }
+    .lp-signin,
+    .lp-button {
+      border: 1px solid ButtonText;
     }
   }
 }

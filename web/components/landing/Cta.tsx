@@ -1,16 +1,19 @@
 "use client";
 
-// The close of the opening page: one line, the button, and the wordmark set as wide as the screen.
-// As the section scrolls in, the six letters rise out of their masks one after another, each tied
-// to the scroll position through a spring. The button leans toward a mouse that comes near it and
-// springs back when it leaves.
+// The close of the opening page: an orange haze rising from the foot, one line, the button, and the
+// wordmark set as wide as the screen. As the section scrolls in, the haze comes up and the six
+// letters rise out of their masks one after another, each tied to the scroll position through a
+// spring. The button leans toward a mouse that comes near it and springs back when it leaves.
 //
-// The server renders the letters in place and the button at rest, so without JavaScript, under
-// reduced motion and in Calm mode everything is simply there. Transform only.
+// The server renders the haze, the letters in place and the button at rest, so without JavaScript,
+// under reduced motion and in Calm mode everything is simply there. Transform and opacity only.
+//
+// Also here: the footer's stamp (the device's own date, time and UTC offset), which only the
+// browser can write.
 
 import { ArrowUpRight } from "lucide-react";
-import { motion, useMotionValue, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
-import { useRef, useSyncExternalStore, type PointerEvent, type ReactNode } from "react";
+import { motion, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type PointerEvent, type ReactNode } from "react";
 import { useMedia, useStill } from "@/lib/display-prefs";
 
 const LETTERS = ["A", "S", "P", "I", "R", "E"];
@@ -18,8 +21,14 @@ const LETTERS = ["A", "S", "P", "I", "R", "E"];
 const STEP = 0.09;
 const FIRST = 0.2;
 const RISE = 0.35;
+/** From this share of the section's scroll on, the first letter is well up and the bar's wordmark gives way. */
+const END_AT = 0.4;
 
 const never = () => () => {};
+/** Marks the page's root while the giant wordmark is up (landing.css reads the mark). */
+const markEnd = (section: HTMLElement | null, on: boolean) => {
+  section?.closest(".lp-root")?.toggleAttribute("data-end", on);
+};
 
 /** `mode`: "live" follows the scroll; "rest" is in place (motion switched off); "html" is the server's markup. */
 type Mode = "live" | "rest" | "html";
@@ -73,9 +82,21 @@ export function Cta({ label, line, cta }: { label: string; line: string; cta: st
   // 0 when the section's top reaches the bottom of the screen, 1 when its own bottom does.
   const { scrollYProgress } = useScroll({ target: root, offset: ["start end", "end end"] });
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 24, mass: 0.5 });
+  // The haze comes up from under the foot of the section as it is scrolled in.
+  const hazeY = useTransform(progress, [0, 1], ["42%", "0%"]);
+  const hazeOpacity = useTransform(progress, [0.05, 0.9], [0, 1]);
+  // While the giant wordmark is coming up, the page's root is marked: the small wordmark in the
+  // bar then steps aside (landing.css), so the name is on the screen once.
+  useMotionValueEvent(progress, "change", (p) => markEnd(root.current, p > END_AT));
+  useEffect(() => {
+    const section = root.current;
+    markEnd(section, progress.get() > END_AT);
+    return () => markEnd(section, false);
+  }, [progress]);
 
   return (
     <section ref={root} aria-labelledby="end-title" className="lp-end">
+      <motion.div aria-hidden className="lp-haze" style={mode === "live" ? { y: hazeY, opacity: hazeOpacity } : mode === "rest" ? { y: "0%", opacity: 1 } : undefined} />
       <div className="lp-wrap lp-end-top">
         <p className="lp-label">{label}</p>
         <h2 id="end-title" className="lp-end-line">
@@ -96,5 +117,64 @@ export function Cta({ label, line, cta }: { label: string; line: string; cta: st
         ))}
       </p>
     </section>
+  );
+}
+
+/* ---- the footer's stamp ---- */
+
+const subscribeMinute = (onChange: () => void) => {
+  const id = window.setInterval(onChange, 10_000);
+  return () => window.clearInterval(id);
+};
+/** Whole minutes since the epoch: the snapshot only changes when the stamp does. */
+const minuteNow = () => Math.floor(Date.now() / 60_000);
+const noMinute = () => null;
+const two = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * A clock's distance from UTC, from its minutes east of it: "UTC+8", "UTC+5:30", plain "UTC" at
+ * zero, and west of it a real minus sign (U+2212), like the temperatures.
+ */
+export function utcLabel(eastMinutes: number): string {
+  const east = Number.isFinite(eastMinutes) ? Math.round(eastMinutes) : 0;
+  if (east === 0) return "UTC";
+  const hours = Math.floor(Math.abs(east) / 60);
+  const rest = Math.abs(east) % 60;
+  return `UTC${east < 0 ? "−" : "+"}${hours}${rest ? `:${two(rest)}` : ""}`;
+}
+
+/** The date, the time and the UTC offset on this device, as plain figures every language reads. */
+function stampOf(minute: number): { iso: string; date: string; time: string; zone: string } {
+  const d = new Date(minute * 60_000);
+  return {
+    iso: d.toISOString(),
+    date: `${d.getFullYear()}.${two(d.getMonth() + 1)}.${two(d.getDate())}`,
+    time: `${two(d.getHours())}:${two(d.getMinutes())}`,
+    // getTimezoneOffset counts minutes west of UTC.
+    zone: utcLabel(-d.getTimezoneOffset()),
+  };
+}
+
+/**
+ * The stamp in the footer: the date, the time and the UTC offset of the device the page is open on.
+ * The server cannot know any of the three, so it writes an empty line and the browser fills it in
+ * after hydration: the two can never disagree. No JavaScript: the line stays empty.
+ */
+export function Stamp() {
+  const minute = useSyncExternalStore(subscribeMinute, minuteNow, noMinute);
+  const stamp = useMemo(() => (minute === null ? null : stampOf(minute)), [minute]);
+  return (
+    <p className="lp-stamp">
+      {stamp && (
+        <time dateTime={stamp.iso}>
+          {stamp.date}{" "}
+          {/* Left out where the bar already shows a running clock (landing.css). */}
+          <span className="lp-stamp-time">
+            <span aria-hidden>·</span> {stamp.time}{" "}
+          </span>
+          <span aria-hidden>·</span> {stamp.zone}
+        </time>
+      )}
+    </p>
   );
 }

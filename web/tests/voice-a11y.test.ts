@@ -1,5 +1,6 @@
 // Eyes-free voice: earcons, speak() reporting whether audio really played, the "tap to hear"
-// notice on a blocked play (and the tap that then plays it), and the daily briefing only counting a day it was actually heard.
+// notice on a blocked play (and the tap that then plays it), the silent clip that unlocks audio inside
+// the tap, and the daily briefing counting its day once the text is on screen.
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -149,7 +150,23 @@ describe("speak reports whether audio played", () => {
   });
 });
 
-describe("daily briefing counts only a day that was heard", () => {
+describe("unlocking audio inside the tap", () => {
+  it("plays the silent clip from a blob: URL, which the page's media policy allows (it refused data:)", () => {
+    let plays = 0;
+    FakeAudio.play = () => {
+      plays++;
+      return Promise.resolve();
+    };
+    const { v } = voiceWith();
+    v.unlock();
+    expect(FakeAudio.last!.src).toMatch(/^blob:/);
+    expect(plays).toBe(1);
+    v.unlock(); // the element is unlocked: nothing is loaded or played again
+    expect(plays).toBe(1);
+  });
+});
+
+describe("daily briefing counts its day once the text is on screen", () => {
   function briefingWith(speak: () => Promise<unknown>) {
     vi.stubGlobal("fetch", async () => Response.json({ text: "Good morning.", mailCount: null, gmailError: false }));
     const setLastDate = vi.fn();
@@ -159,8 +176,22 @@ describe("daily briefing counts only a day that was heard", () => {
     return { refresh, setLastDate };
   }
 
-  it("does not mark the day when playback was blocked", async () => {
+  it("marks the day while the voice is still speaking, so a reload meanwhile asks for no second briefing", async () => {
+    const { refresh, setLastDate } = briefingWith(() => new Promise(() => {}));
+    void refresh();
+    await vi.waitFor(() => expect(setLastDate).toHaveBeenCalledTimes(1));
+    expect(setLastDate.mock.calls[0][0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("marks the day when playback was blocked too (its notice asks for a tap, the card keeps the text)", async () => {
     const { refresh, setLastDate } = briefingWith(async () => "blocked");
+    await refresh();
+    expect(setLastDate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mark the day when no briefing came back", async () => {
+    const { refresh, setLastDate } = briefingWith(async () => "played");
+    vi.stubGlobal("fetch", async () => new Response("", { status: 503 }));
     await refresh();
     expect(setLastDate).not.toHaveBeenCalled();
   });

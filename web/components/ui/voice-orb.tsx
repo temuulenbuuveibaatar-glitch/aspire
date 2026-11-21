@@ -825,6 +825,9 @@ interface CanvasProps {
   reducedTransparency: boolean;
 }
 
+/** The frame cap wakes this long before a painting is due: a timer that fires a little late then still catches its frame. */
+const FRAME_LEAD_MS = 3;
+
 function OrbCanvas(props: CanvasProps) {
   const latest = React.useRef(props);
   React.useLayoutEffect(() => {
@@ -865,6 +868,8 @@ function OrbCanvas(props: CanvasProps) {
     aqi: null as string | null,
     /** Last painted frame (the frame cap) and the canvas size from the ResizeObserver. */
     lastPaint: 0,
+    /** The frame cap's timer while it waits for the next painting to be due (0 = none). */
+    sleep: 0,
     w: 0,
     h: 0,
     buf: sphereBuf(1, 1),
@@ -886,7 +891,13 @@ function OrbCanvas(props: CanvasProps) {
       const busy = p.state === "listening" || p.state === "speaking" || p.state === "thinking";
       const gap = busy ? 1000 / 60 - 2 : 1000 / 30 - 2;
       if (now - st.lastPaint < gap) {
-        st.raf = requestAnimationFrame(drawRef.current);
+        // Not due yet: sleep until just before it is, then take one frame. Asking for a frame on every
+        // screen refresh only to skip it here kept the main thread awake up to 180 times a second on a
+        // fast display, with the orb at rest.
+        st.sleep = window.setTimeout(() => {
+          st.sleep = 0;
+          st.raf = requestAnimationFrame(drawRef.current);
+        }, Math.max(0, gap - (now - st.lastPaint) - FRAME_LEAD_MS));
         return;
       }
     }
@@ -1098,7 +1109,9 @@ function OrbCanvas(props: CanvasProps) {
     (canvas: HTMLCanvasElement | null) => {
       const st = loop.current;
       if (st.raf) cancelAnimationFrame(st.raf);
+      window.clearTimeout(st.sleep);
       st.raf = 0;
+      st.sleep = 0;
       st.running = false;
       st.canvas = canvas;
       st.ctx = canvas?.getContext("2d") ?? null;
@@ -1146,7 +1159,9 @@ function OrbCanvas(props: CanvasProps) {
         document.removeEventListener("visibilitychange", onVisibility);
         window.removeEventListener(ORB_LIGHTNING_EVENT, onLightning);
         if (st.raf) cancelAnimationFrame(st.raf);
+        window.clearTimeout(st.sleep);
         st.raf = 0;
+        st.sleep = 0;
         st.running = false;
         st.last = 0;
         st.canvas = null;

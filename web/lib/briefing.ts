@@ -130,7 +130,9 @@ export function buildBriefingFacts(input: {
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 let client: Anthropic | null = null;
-const getClient = () => (client ??= new Anthropic());
+// 20 s and one retry, as in lib/brain/claude.ts: the SDK's defaults (10 minutes, two retries) outlast the
+// route's 60 s limit, and the plain briefing below is the answer when Claude stalls.
+const getClient = () => (client ??= new Anthropic({ timeout: 20_000, maxRetries: 1 }));
 const claudeConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
 // No tools on purpose: mail subjects are untrusted text, so the writer can only write.

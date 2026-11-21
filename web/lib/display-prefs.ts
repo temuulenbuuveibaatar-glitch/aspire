@@ -1,6 +1,6 @@
 "use client";
 // Display choices that belong to this device only (never synced to the cloud): sky effects,
-// text size, Calm mode, units and screen reader mode. Stored in localStorage and mirrored onto <html> so every
+// text size, Calm mode, units, spoken answers and screen reader mode. Stored in localStorage and mirrored onto <html> so every
 // component (and the CSS variants `still:` / `opaque:` / `calm:`) can follow them:
 //   data-text-size="lg" | "xl", data-calm="true", data-units="metric" | "imperial".
 import { useCallback, useEffect, useSyncExternalStore } from "react";
@@ -17,9 +17,17 @@ export interface DisplayPrefs {
   units: UnitsPref;
   /** Screen reader mode: replies go to the screen reader (one live region), not Aspire's own voice. */
   screenReader: boolean;
+  /**
+   * Spoken answers. Off = a text chat: no speech is requested (/api/speak is never called), no tones,
+   * and the orb gives way to a compact chat header. Absent in older saved prefs, which means on.
+   */
+  voice: boolean;
 }
 
-export const DEFAULT_PREFS: DisplayPrefs = { skyEffects: true, textSize: "md", calm: false, units: "auto", screenReader: false };
+/** Does Aspire speak? Only with spoken answers on and screen reader mode off (that mode has its own voice). */
+export const speaks = (p: Pick<DisplayPrefs, "voice" | "screenReader">): boolean => p.voice && !p.screenReader;
+
+export const DEFAULT_PREFS: DisplayPrefs = { skyEffects: true, textSize: "md", calm: false, units: "auto", screenReader: false, voice: true };
 
 const KEY = "aspire-display-v1";
 const EVENT = "aspire:display";
@@ -35,6 +43,7 @@ export function parsePrefs(raw: string | null): DisplayPrefs {
       calm: v.calm === true,
       units: v.units === "metric" || v.units === "imperial" ? v.units : "auto",
       screenReader: v.screenReader === true,
+      voice: v.voice !== false,
     };
   } catch {
     return DEFAULT_PREFS;

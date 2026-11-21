@@ -733,6 +733,24 @@ describe("/api/ambient", () => {
     expect(located).toEqual(["city", "city", "city", "city", "city", "network"]);
   });
 
+  it("one person may ask 20 times a minute (a few reloads); the next gets 429 and when to ask again", async () => {
+    mockFetch([
+      ["api.open-meteo.com/v1/forecast", OPEN_METEO],
+      ["air-quality-api.open-meteo.com", OPEN_METEO_AIR],
+    ]);
+    user.current = { id: "user_reloads", email: null };
+    const statuses: number[] = [];
+    let last: Response | null = null;
+    // Each from another address: the limit per address has its own test below.
+    for (let i = 0; i < 21; i++) {
+      last = await POST(post({ lang: "en" }, { "x-vercel-ip-latitude": "47.92", "x-vercel-ip-longitude": "106.92" }));
+      statuses.push(last.status);
+    }
+    expect(statuses.slice(0, 20)).toEqual(Array(20).fill(200));
+    expect(statuses[20]).toBe(429);
+    expect(last!.headers.get("Retry-After")).toBe("60");
+  });
+
   it("429 when rate limited", async () => {
     mockFetch([]);
     const headers = { "x-real-ip": "10.99.99.99" };

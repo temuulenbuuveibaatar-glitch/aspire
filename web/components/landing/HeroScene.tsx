@@ -1,26 +1,32 @@
 "use client";
 
-// The hero of the opening page: the app's voice orb as a core inside two slowly turning rings, with
-// the headline, the buttons and the four corner readings laid out around it (Landing renders those
-// on the server and passes them in, so every word is in the HTML before any script runs).
+// The first screen of the opening page, and the small live parts of the bar above it.
+//
+// The hero: the app's voice orb as the one subject, large and to the right, inside a gauge (a ring
+// of ticks, a hairline orbit with a point of light, four cross marks and corner brackets). The
+// readings sit top left, the headline bottom left; Landing renders both on the server and passes
+// them in, so every word is in the HTML before any script runs.
 //
 // What this file adds once it has hydrated, and only then:
 // - the live orb (the app's own VoiceOrb) fades in over its still drawing, and listens while the
 //   pointer is near it: the ring follows how fast the pointer moves, the way it follows a voice;
 // - a small pointer parallax on desktop: the orb, the rings and the copy sit at different depths,
 //   and a soft light follows the mouse across the hero;
-// - the way out on scroll: the copy lifts and blurs away, the rings open, the core dims.
+// - the way out on scroll: the copy lifts and blurs away, the gauge opens a little, the core dims.
 // Reduced motion or Calm mode: none of the three. No JavaScript: the still core and all the text.
-// Motion is transform, opacity and filter only; nothing here waits for an observer to be seen.
+// Motion is transform, opacity, filter and clip-path only; nothing here waits for an observer to be seen.
+//
+// The bar's parts: the clock at the place (PlaceTime), the pause button (MotionSwitch), the strip of
+// ticks that fills with the page's scroll (ScrollTicks) and the links to the five scenes (SceneNav).
 
 import { Pause, Play } from "lucide-react";
 import { motion, useMotionValue, useScroll, useSpring, useTransform } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { VoiceOrb } from "@/components/ui/voice-orb";
 import { useDisplayPrefs, useMedia, useStill } from "@/lib/display-prefs";
 import type { Lang } from "@/lib/lang";
 
-/* ---- the still core: the orb as a drawing, and its two rings ---- */
+/* ---- the still core: the orb as a drawing, and the gauge around it ---- */
 
 // Plain markup, as strings: the hero renders it on the server, and the intro's inline script builds
 // its own copy from the same strings before any other script has loaded (Intro.tsx). One source, so
@@ -61,11 +67,19 @@ export const ORB_STILL = (() => {
   );
 })();
 
-/** The outer ring: 72 fine ticks with a longer one every 30 degrees. It turns against the inner ring. */
+/**
+ * The gauge ring. One drawing turns slowly: 72 fine ticks with a longer one every 30 degrees. The
+ * other stays put: a hairline circle inside the ticks, and four cross marks pointing at the orb.
+ */
 export const TICK_RING =
-  `<span class="lp-ring lp-ring-ticks"><svg viewBox="-100 -100 200 200" ${SVG}>` +
-  `<circle r="97" stroke-opacity="0.3" stroke-width="3.2" pathLength="360" stroke-dasharray="0.28 4.72"/>` +
-  `<circle r="95.9" stroke-opacity="0.55" stroke-width="5.4" pathLength="360" stroke-dasharray="0.36 29.64"/>` +
+  `<span class="lp-ring lp-ring-ticks">` +
+  `<svg class="lp-turn" viewBox="-100 -100 200 200" ${SVG}>` +
+  `<circle r="97" stroke-opacity="0.34" stroke-width="3.2" pathLength="360" stroke-dasharray="0.28 4.72"/>` +
+  `<circle r="95.9" stroke-opacity="0.7" stroke-width="5.4" pathLength="360" stroke-dasharray="0.36 29.64"/>` +
+  `</svg>` +
+  `<svg class="lp-cross" viewBox="-100 -100 200 200" ${SVG}>` +
+  `<circle r="89" stroke-opacity="0.2" stroke-width="0.35"/>` +
+  `<path d="M-89 0H-74M74 0H89M0 -89V-74M0 74V89" stroke-opacity="0.6" stroke-width="0.45"/>` +
   `</svg></span>`;
 
 /** The inner ring: a hairline circle, and one point of light travelling round it with a fading tail. */
@@ -76,60 +90,7 @@ export const ORBIT_RING =
 /** The whole core, still: what the intro shows, in the place the hero's core takes. */
 export const CORE = `<div class="lp-core">${TICK_RING}${ORBIT_RING}<span class="lp-orb">${ORB_STILL}</span></div>`;
 
-/* ---- the clock in the corner ---- */
-
-const subscribeMinute = (onChange: () => void) => {
-  const id = window.setInterval(onChange, 10_000);
-  return () => window.clearInterval(id);
-};
-/** Whole minutes since the epoch: the snapshot only changes when the clock face does. */
-const minuteNow = () => Math.floor(Date.now() / 60_000);
-
-function clockFace(minute: number, timeZone: string): string {
-  try {
-    // A fixed locale: the server and the browser must write the same digits for the same minute.
-    return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(new Date(minute * 60_000));
-  } catch {
-    return "";
-  }
-}
-
-/**
- * The time at the place, to the minute. The server writes the minute it rendered at (`minute`), so
- * the time is in the HTML; the browser then keeps it running from the device's own clock.
- */
-export function PlaceTime({ timeZone, minute }: { timeZone: string; minute: number }) {
-  const now = useSyncExternalStore(subscribeMinute, minuteNow, () => minute);
-  const face = useMemo(() => clockFace(now, timeZone), [now, timeZone]);
-  return (
-    <time dateTime={new Date(now * 60_000).toISOString()} suppressHydrationWarning>
-      {face}
-    </time>
-  );
-}
-
-/* ---- the pause button ---- */
-
-/**
- * Stops and restarts everything that moves on the page (WCAG 2.2.2): the orb, the rings, the sky
- * and every scroll effect. It is the app's own Calm mode (lib/display-prefs.ts), so the choice is
- * kept for the app as well. Hidden when the system already asks for reduced motion.
- */
-export function MotionSwitch({ pause, play }: { pause: string; play: string }) {
-  const [prefs, setPrefs] = useDisplayPrefs();
-  const reduced = useMedia("(prefers-reduced-motion: reduce)");
-  if (reduced) return null;
-  const Icon = prefs.calm ? Play : Pause;
-  // The name says what a press does, so there is no pressed state to announce on top of it.
-  const name = prefs.calm ? play : pause;
-  return (
-    <button type="button" onClick={() => setPrefs({ calm: !prefs.calm })} aria-label={name} title={name} className="press v6-chip size-11 shrink-0 justify-center p-0">
-      <Icon aria-hidden className="size-4" />
-    </button>
-  );
-}
-
-/* ---- the hero ---- */
+/* ---- hydration ---- */
 
 const never = () => () => {};
 /** False on the server and while hydrating, true from the first render after. */
@@ -141,12 +102,177 @@ function useHydrated(): boolean {
   );
 }
 
+/* ---- the clock at the place ---- */
+
+const every = (ms: number) => (onChange: () => void) => {
+  const id = window.setInterval(onChange, ms);
+  return () => window.clearInterval(id);
+};
+const subscribeMinute = every(10_000);
+/** Four looks a second: the seconds turn over on time, and React only renders when one has. */
+const subscribeSecond = every(250);
+/** Seconds since the epoch, to the whole minute and to the whole second: a snapshot only changes when the clock face does. */
+const minuteNow = () => Math.floor(Date.now() / 60_000) * 60;
+const secondNow = () => Math.floor(Date.now() / 1000);
+
+function clockFace(second: number, timeZone: string, seconds: boolean): string {
+  try {
+    // A fixed locale: the server and the browser must write the same digits for the same moment.
+    return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: seconds ? "2-digit" : undefined, hourCycle: "h23", timeZone }).format(new Date(second * 1000));
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The time at the place. The server writes the minute it rendered at (`minute`), so the time is in
+ * the HTML; the browser then keeps it running from the device's own clock. With `seconds` the
+ * browser adds them once it has hydrated: the first client render still writes the server's hours
+ * and minutes, so the two can never disagree. Seconds stop with everything else that moves.
+ */
+export function PlaceTime({ timeZone, minute, seconds = false }: { timeZone: string; minute: number; seconds?: boolean }) {
+  const hydrated = useHydrated();
+  const still = useStill();
+  const ticking = seconds && hydrated && !still;
+  const now = useSyncExternalStore(ticking ? subscribeSecond : subscribeMinute, ticking ? secondNow : minuteNow, () => minute * 60);
+  const face = useMemo(() => clockFace(now, timeZone, ticking), [now, timeZone, ticking]);
+  return (
+    <time dateTime={new Date(now * 1000).toISOString()} suppressHydrationWarning>
+      {face}
+    </time>
+  );
+}
+
+/* ---- the pause button ---- */
+
+/**
+ * Stops and restarts everything that moves on the page (WCAG 2.2.2): the orb, the rings, the sky,
+ * the running seconds and every scroll effect. It is the app's own Calm mode (lib/display-prefs.ts),
+ * so the choice is kept for the app as well. Hidden when the system already asks for reduced motion.
+ */
+export function MotionSwitch({ pause, play }: { pause: string; play: string }) {
+  const [prefs, setPrefs] = useDisplayPrefs();
+  const reduced = useMedia("(prefers-reduced-motion: reduce)");
+  if (reduced) return null;
+  const Icon = prefs.calm ? Play : Pause;
+  // The name says what a press does, so there is no pressed state to announce on top of it.
+  const name = prefs.calm ? play : pause;
+  return (
+    <button type="button" onClick={() => setPrefs({ calm: !prefs.calm })} aria-label={name} title={name} className="press lp-icon">
+      <Icon aria-hidden />
+    </button>
+  );
+}
+
+/* ---- how far down the page ---- */
+
+/**
+ * The bar's strip of ticks: it fills in orange from the left as the page is scrolled (on small
+ * screens a thin line does the same). It follows the visitor's own scrolling and nothing else, so
+ * it stays on when motion is off. Clip-path and transform only; without JavaScript it stays empty.
+ */
+export function ScrollTicks() {
+  const { scrollYProgress } = useScroll();
+  const clip = useTransform(scrollYProgress, (v) => `inset(0 ${((1 - Math.min(1, Math.max(0, v))) * 100).toFixed(2)}% 0 0)`);
+  return (
+    <>
+      <span aria-hidden className="lp-ticks">
+        <motion.span className="lp-ticks-on" style={{ clipPath: clip }} />
+      </span>
+      <span aria-hidden className="lp-progress">
+        <motion.span style={{ scaleX: scrollYProgress }} />
+      </span>
+    </>
+  );
+}
+
+/* ---- the links to the scenes ---- */
+
+export interface SceneLink {
+  /** The id of the scene's section. */
+  id: string;
+  /** The scene's own label, for the link's name. */
+  name: string;
+}
+
+const three = (n: number) => String(n).padStart(3, "0");
+
+/**
+ * The five scenes of the scroll story, as their index numbers (the same three digits each scene
+ * shows on its own screen), named in full for screen readers and on hover. The one on screen is
+ * marked once the page has hydrated.
+ */
+export function SceneNav({ label, items }: { label: string; items: SceneLink[] }) {
+  const [at, setAt] = useState<string | null>(null);
+  const ids = items.map((item) => item.id).join(" ");
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    // A line across the middle of the screen: the scene that crosses it is the one being read.
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = entry.target.id;
+          if (entry.isIntersecting) setAt(id);
+          else setAt((current) => (current === id ? null : current));
+        }
+      },
+      { rootMargin: "-50% 0px -50% 0px" },
+    );
+    const watch = () => {
+      seen.disconnect();
+      for (const id of ids.split(" ")) {
+        const el = document.getElementById(id);
+        if (el) seen.observe(el);
+      }
+    };
+    watch();
+    // A scene that waits for the reading is drawn twice: first without it, then again in a new
+    // element once it has arrived. The sections are looked up again whenever their parent's list
+    // of children changes, so the one on the page is always the one being watched.
+    const parent = document.getElementById(ids.split(" ")[0] ?? "")?.parentElement;
+    const swapped = parent && typeof MutationObserver !== "undefined" ? new MutationObserver(watch) : null;
+    if (parent) swapped?.observe(parent, { childList: true });
+    return () => {
+      swapped?.disconnect();
+      seen.disconnect();
+    };
+  }, [ids]);
+
+  // A pinned scene starts to play when its top meets the top of the screen, a little further down
+  // than the browser stops for a link (it keeps the target clear of the bar). The link still does
+  // its own work (the address, where the keyboard goes on from); the last few pixels are added here.
+  const settle = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el?.hasAttribute("data-live")) window.scrollTo({ top: Math.round(el.getBoundingClientRect().top + window.scrollY) + 1 });
+    });
+  };
+
+  return (
+    <nav aria-label={label} className="lp-scenes">
+      <ul>
+        {items.map((item, i) => (
+          <li key={item.id}>
+            <a href={`#${item.id}`} title={item.name} data-on={at === item.id || undefined} onClick={(e) => settle(e, item.id)}>
+              <span>{three(i + 1)}</span>
+              <span className="sr-only">{` ${item.name}`}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+/* ---- the hero ---- */
+
 /** The pointer is followed loosely: a soft spring, no overshoot. */
 const POINTER = { stiffness: 90, damping: 20, mass: 0.6 } as const;
 /** Scroll is followed closely: enough spring to take the steps out of a mouse wheel, no more. */
 const SCROLL = { stiffness: 260, damping: 36, mass: 0.35 } as const;
 /** How far each layer moves with the pointer, in px at the edge of the screen: nearer layers move more. */
-const DEPTH = { orb: 7, orbit: 13, ticks: 21, copy: -5 } as const;
+const DEPTH = { orb: 8, orbit: 14, ticks: 22, copy: -5 } as const;
 /** How long a pointer movement keeps the orb's ring up, in ms. */
 const VOICE_FADE = 260;
 // At rest. Given by name when motion is switched off on a page that was moving (the pause button,
@@ -154,15 +280,15 @@ const VOICE_FADE = 260;
 const REST_LAYER = { x: 0, y: 0, scale: 1 } as const;
 const REST_CORE = { y: 0, opacity: 1 } as const;
 const REST_COPY = { x: 0, y: 0, opacity: 1, filter: "none" } as const;
-const REST_HINT = { opacity: 1 } as const;
+const REST_FADE = { opacity: 1 } as const;
 
 interface HeroSceneProps {
   lang: Lang;
-  /** The word under the scroll line. */
+  /** The word beside the scroll line. */
   hint: string;
-  /** The four corner readings (Landing streams them in when the weather arrives). */
+  /** The readings (Landing streams them in when the weather arrives). */
   hud?: ReactNode;
-  /** The headline, the line under it and the buttons. */
+  /** The tag, the headline, the line under it and the buttons. */
   children: ReactNode;
 }
 
@@ -174,7 +300,7 @@ export function HeroScene({ lang, hint, hud, children }: HeroSceneProps) {
   const fine = useMedia("(hover: hover) and (pointer: fine)");
   const live = hydrated && !still;
   // Scrolled away: the rings rest (landing.css) and the live orb is not drawn, so one orb canvas
-  // runs at a time (scene 01 of the story has its own).
+  // runs at a time (the first scene of the story has its own).
   const [away, setAway] = useState(false);
   useEffect(() => {
     const el = root.current;
@@ -192,11 +318,12 @@ export function HeroScene({ lang, hint, hud, children }: HeroSceneProps) {
   const copyY = useTransform(p, [0, 1], [0, -96]);
   const copyOpacity = useTransform(p, [0, 0.5], [1, 0]);
   const copyFilter = useTransform(p, (v) => (v < 0.02 ? "none" : `blur(${Math.min(8, v * 16).toFixed(2)}px)`));
-  const coreY = useTransform(p, [0, 1], [0, 140]);
+  const hudOpacity = useTransform(p, [0, 0.35], [1, 0]);
+  const coreY = useTransform(p, [0, 1], [0, 120]);
   const coreOpacity = useTransform(p, [0.3, 0.85], [1, 0]);
-  const orbScale = useTransform(p, [0, 1], [1, 1.12]);
-  const orbitScale = useTransform(p, [0, 1], [1, 1.4]);
-  const ticksScale = useTransform(p, [0, 1], [1, 1.8]);
+  const orbScale = useTransform(p, [0, 1], [1, 1.1]);
+  const orbitScale = useTransform(p, [0, 1], [1, 1.2]);
+  const ticksScale = useTransform(p, [0, 1], [1, 1.34]);
   const hintOpacity = useTransform(p, [0, 0.1], [1, 0]);
 
   // The pointer, as -1..1 across the hero. Each layer takes its own share of it.
@@ -219,7 +346,7 @@ export function HeroScene({ lang, hint, hud, children }: HeroSceneProps) {
   const spotY = useSpring(ly, POINTER);
   const spotOpacity = useSpring(lit, POINTER);
 
-  // The orb hears the pointer: while it is inside the rings, its speed is the level the ring draws.
+  // The orb hears the pointer: while it is inside the gauge, its speed is the level the ring draws.
   const voice = useRef({ level: 0, at: 0, x: 0, y: 0, near: false });
   const [near, setNear] = useState(false);
   const level = useCallback(() => {
@@ -280,13 +407,15 @@ export function HeroScene({ lang, hint, hud, children }: HeroSceneProps) {
         </div>
       </motion.div>
 
+      <motion.div className="lp-readings" style={live ? { opacity: hudOpacity } : rest(REST_FADE)}>
+        {hud}
+      </motion.div>
+
       <motion.div className="lp-copy" style={live ? { x: fine ? copyX : 0, y: copyY, opacity: copyOpacity, filter: fine ? copyFilter : "none" } : rest(REST_COPY)}>
         {children}
       </motion.div>
 
-      {hud}
-
-      <motion.p aria-hidden className="lp-hint" style={live ? { opacity: hintOpacity } : rest(REST_HINT)}>
+      <motion.p aria-hidden className="lp-hint" style={live ? { opacity: hintOpacity } : rest(REST_FADE)}>
         <span className="lp-hint-word">{hint}</span>
         <span className="lp-hint-line" />
       </motion.p>

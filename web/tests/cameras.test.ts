@@ -463,7 +463,7 @@ describe("findCameras sources", () => {
     expect(init?.method).toBe("POST");
     const query = decodeURIComponent(String(init?.body));
     expect(query).toContain('["contact:webcam"]');
-    expect(query).toContain("[timeout:9]"); // gives up before the client's 10 s
+    expect(query).toContain("[timeout:3]"); // the server gives up when our own 3 s budget ends
     expect(query).toContain("out 400;");
     await findCameras(ERDENET);
     expect(hits("overpass-api.de")).toHaveLength(1);
@@ -519,6 +519,26 @@ describe("findCameras sources", () => {
     clock.mockReturnValue(t0 + 5 * 60_000);
     expect((await findCameras(far)).unavailable).toContain("osm");
     expect(overpassCalls()).toBe(before);
+  });
+
+  it("(e) OpenStreetMap: the mirrors share one 3 s budget, so a silent Overpass cannot hold the panel for 9 s", async () => {
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+    const limits: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      limits.push(ms);
+      return new AbortController().signal;
+    });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (!/overpass/.test(url)) return Response.json({ items: [] });
+      clock.mockReturnValue(t0 + 2_500); // the first mirror said nothing for 2.5 s
+      throw new DOMException("no answer", "TimeoutError");
+    });
+    const r = await findCameras({ lat: 49.5, lng: 104.5 });
+    expect(r.unavailable).toContain("osm");
+    // The first mirror may take the whole budget; with under a second left the next one is not asked.
+    expect(Math.min(...limits)).toBe(3_000);
+    expect(fetchMock.mock.calls.filter(([u]) => /overpass/.test(u))).toHaveLength(1);
   });
 
   it("merges without duplicates and in source order", async () => {

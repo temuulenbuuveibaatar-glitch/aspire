@@ -5,6 +5,9 @@
 //   No headers (local dev, another host) or unusable values: Erdenet, with `local: false`.
 // - Weather: Open-Meteo only (free, no key), never Google's paid APIs. The position is rounded to
 //   1 decimal (about 11 km) before the call: one request per rounded cell per 10 minutes.
+// - Air quality: Open-Meteo's air quality API, asked for the same cell at the same moment and kept
+//   with the weather for the same 10 minutes. It is an extra with a shorter limit of its own: when
+//   it fails or is slow the weather still comes, with `aqi: null`.
 // - Nothing about a visitor is kept: the cache holds readings by cell, never a place name.
 // - ?sky= and ?hour= (/?sky=snow&hour=22) replace the sky or the hour, so a look can be checked
 //   without waiting for that weather. The answer then says `preview: true`: never call it live.
@@ -30,6 +33,18 @@ export interface LandingWeather {
   /** When Open-Meteo gave the reading (ISO). A cached reading keeps its own time. */
   at: string;
   source: "open-meteo";
+  /**
+   * US AQI now in the same cell, a whole number from 0 to 999; null when the air quality call
+   * failed, ran out of time or gave no usable figure. The scale ends at 500 and the worst smog
+   * reads past it, so draw a gauge to 500 and print the figure as it is. ?sky= and ?hour= leave
+   * it alone: under a preview it is still the real figure.
+   */
+  aqi?: number | null;
+  /**
+   * The cell the reading is for, exactly as it was asked: one decimal, about 11 km. `local` says
+   * whose it is: the visitor's network position, else Erdenet's. landingWeather() always gives it.
+   */
+  coords?: { lat: number; lng: number } | null;
 }
 
 const ERDENET = { place: "Erdenet", lat: 49.0347, lng: 104.0828, timeZone: "Asia/Ulaanbaatar" };
@@ -37,6 +52,14 @@ const TTL_MS = 10 * 60_000;
 /** A failed read is not asked again for a minute: an outage or a rate limit is not hit by every visit. */
 const RETRY_MS = 60_000;
 const TIMEOUT_MS = 2_500;
+/** Less than the weather's own limit: waiting for the air never makes a reading later than it could already be. */
+const AIR_TIMEOUT_MS = 2_000;
+/**
+ * The US scale ends at 500. Open-Meteo reads past it in the worst smog, and into four figures in a
+ * desert dust storm: up to 999 the figure is passed on as given, beyond that there is none (three
+ * digits is what the page's gauges are drawn for).
+ */
+const AQI_MAX = 999;
 const MAX_CELLS = 500;
 
 interface Reading {
@@ -49,6 +72,8 @@ interface Reading {
   windKph: number | null;
   cloudCover: number | null;
   timeZone: string | null;
+  /** US AQI, a whole number from 0 to AQI_MAX; null when the air quality call gave none. */
+  aqi: number | null;
 }
 
 // ponytail: per-instance memory. A shared cache ("use cache: remote") if traffic outgrows Open-Meteo's free quota.
@@ -67,12 +92,39 @@ const oneDecimal = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
 /** Day or night from a clock hour when no reading says (as lib/ambient.ts does). */
 const daylight = (hour: number) => hour >= 6 && hour < 18;
 
-/** One Open-Meteo call. Throws on a timeout, a redirect, an HTTP error or an answer with no usable temperature. */
+/**
+ * US AQI now for a cell, from Open-Meteo's air quality API (the CAMS model; free, no key): the
+ * same rounded position, nothing else. null when the answer holds no usable figure. Throws on a
+ * timeout, a redirect or an HTTP error.
+ */
+async function readAqi(lat: string, lng: string): Promise<number | null> {
+  const res = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=us_aqi`, {
+    redirect: "error",
+    headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(AIR_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`air-quality-api.open-meteo.com returned ${res.status}`);
+  const d = (await res.json()) as { current?: Record<string, unknown> | null } | null;
+  const aqi = finite(d?.current?.us_aqi);
+  if (aqi === null || aqi < 0) return null;
+  // Zero is a reading (clean air), and Math.max keeps "-0" out of it. Rounded first, so the limit is on what would be shown.
+  const whole = Math.max(0, Math.round(aqi));
+  return whole > AQI_MAX ? null : whole;
+}
+
+/**
+ * One reading: the weather call and, beside it, the air quality call. Throws on a timeout, a
+ * redirect, an HTTP error or an answer with no usable temperature. The air can only ever be
+ * missing: whatever goes wrong there leaves `aqi: null`, and it is not waited for when the weather fails.
+ */
 async function read(lat: string, lng: string): Promise<Reading> {
-  const res = await fetch(
+  const weather = fetch(
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code,is_day,cloud_cover,wind_speed_10m&timezone=auto`,
     { redirect: "error", headers: { "User-Agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) },
   );
+  // On its way before the weather answers, so the two overlap instead of adding up.
+  const air = readAqi(lat, lng).catch(() => null);
+  const res = await weather;
   if (!res.ok) throw new Error(`api.open-meteo.com returned ${res.status}`);
   const d = (await res.json()) as { timezone?: unknown; current?: Record<string, unknown> | null } | null;
   const c = d?.current ?? {};
@@ -92,10 +144,13 @@ async function read(lat: string, lng: string): Promise<Reading> {
     windKph: wind === null ? null : Math.max(0, wind),
     cloudCover,
     timeZone: validTimeZone(d?.timezone),
+    // Read last, so `at` above is when the weather came. An air miss stays with its reading for the
+    // 10 minutes: an outage there is not asked about on every visit either.
+    aqi: await air,
   };
 }
 
-/** The reading for a rounded cell: cached 10 minutes (a failure one), shared by visitors who arrive together. Never throws. */
+/** The reading for a rounded cell, air included: cached 10 minutes (a failure one), shared by visitors who arrive together. Never throws. */
 function readingFor(lat: string, lng: string): Promise<Reading | null> {
   const key = `${lat},${lng}`;
   const hit = cache.get(key);
@@ -156,7 +211,9 @@ export async function landingWeather(headers: Headers, override?: { sky?: unknow
     const net = await locate(new URLSearchParams(), headers);
     const city = cityName(net.city);
     const here = net.coords && city ? { place: city, ...net.coords, timeZone: net.timeZone, local: true } : { ...ERDENET, local: false };
-    const r = await readingFor(oneDecimal(here.lat), oneDecimal(here.lng));
+    const lat = oneDecimal(here.lat);
+    const lng = oneDecimal(here.lng);
+    const r = await readingFor(lat, lng);
     if (!r) return null;
     const kind = previewKind(override?.sky);
     const hour = previewHour(override?.hour);
@@ -176,6 +233,10 @@ export async function landingWeather(headers: Headers, override?: { sky?: unknow
       timeZone,
       at: new Date(r.at).toISOString(),
       source: "open-meteo",
+      // The air and the cell are the real ones under any ?sky= or ?hour=: a preview changes the look only.
+      aqi: r.aqi,
+      // The two numbers that were sent, read back from the strings: nothing finer than the cell goes to the page.
+      coords: { lat: Number(lat), lng: Number(lng) },
     };
   } catch {
     return null;

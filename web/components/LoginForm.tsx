@@ -94,22 +94,22 @@ const SMALL_TEXT = { fontSize: "1rem" } as const; // 16px floor: Clerk derives i
 
 const CLERK_APPEARANCE = {
   variables: {
-    colorBackground: "#0B1220",
-    colorPrimary: "#5EE7FF",
-    colorPrimaryForeground: "#0B1220",
-    colorForeground: "#F2F6FC",
-    colorMutedForeground: "#B6C2D6",
-    colorMuted: "#121C2E",
-    colorNeutral: "#F2F6FC",
-    colorInput: "#121C2E",
-    colorInputForeground: "#F2F6FC",
-    colorBorder: "rgb(242 246 252 / 0.28)",
-    colorRing: "#5EE7FF",
-    colorShadow: "rgb(2 6 16 / 0.65)",
-    colorModalBackdrop: "rgb(6 11 22 / 0.7)",
-    colorDanger: "#FF8A8A",
+    colorBackground: "#0d0d0d",
+    colorPrimary: "#fc4f00",
+    colorPrimaryForeground: "#050505",
+    colorForeground: "#dddddd",
+    colorMutedForeground: "#a8a8a8",
+    colorMuted: "#151515",
+    colorNeutral: "#dddddd",
+    colorInput: "#151515",
+    colorInputForeground: "#dddddd",
+    colorBorder: "rgb(221 221 221 / 0.28)",
+    colorRing: "#fc4f00",
+    colorShadow: "rgb(0 0 0 / 0.7)",
+    colorModalBackdrop: "rgb(0 0 0 / 0.72)",
+    colorDanger: "#ff6b6b",
     colorSuccess: "#5BE3A4",
-    colorWarning: "#F5C26B",
+    colorWarning: "#f5c542",
     borderRadius: "16px",
     fontSize: "1.125rem",
   },
@@ -218,7 +218,7 @@ function HaloClock({ minutes }: { minutes: number | null }) {
       ))}
       {minutes != null && (
         <g transform={`rotate(${angle} ${c} ${c})`}>
-          <circle cx={c} cy={c + r} r={3} fill="var(--color-accent, #5EE7FF)" />
+          <circle cx={c} cy={c + r} r={3} fill="var(--color-accent, #fc4f00)" />
         </g>
       )}
     </svg>

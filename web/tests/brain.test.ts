@@ -399,6 +399,32 @@ describe("brain v4: Jarvis persona, media, calendar, Erdenet live buses", () => 
     vi.doUnmock("@anthropic-ai/sdk");
   });
 
+  it("the Claude clients (questions and the briefing writer) give up after 20 s and retry once", async () => {
+    // The SDK's own defaults are 10 minutes and two retries: longer than the routes' 60 s, so a stalled
+    // Claude ended in an error instead of the next brain or the plain briefing.
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+    vi.stubEnv("BRAIN_ORDER", "claude");
+    const made: unknown[] = [];
+    const reply = { stop_reason: "end_turn", content: [{ type: "text", text: "Good morning, sir." }] };
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: class {
+        constructor(options: unknown) {
+          made.push(options);
+        }
+        beta = { messages: { create: async () => reply } };
+        messages = { create: async () => reply };
+      },
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 503 }))); // no news for the briefing
+    const { ask } = await import("@/lib/brain");
+    expect((await ask("Explain photosynthesis", "en")).reply).toBe("Good morning, sir.");
+    const { makeBriefing } = await import("@/lib/briefing");
+    const briefing = await makeBriefing({ lang: "en", title: "mr", reminders: [], accessToken: null, now: new Date("2026-11-20T07:30:00+08:00") });
+    expect(briefing.text).toBe("Good morning, sir.");
+    expect(made).toEqual([{ timeout: 20_000, maxRetries: 1 }, { timeout: 20_000, maxRetries: 1 }]);
+    vi.doUnmock("@anthropic-ai/sdk");
+  });
+
   it("forSpeech removes leaked control tags and keeps ordinary text", async () => {
     const { forSpeech } = await import("@/lib/brain/shared");
     expect(forSpeech("<thinking_mode>disabled</thinking_mode>Good morning, sir.")).toBe("Good morning, sir.");

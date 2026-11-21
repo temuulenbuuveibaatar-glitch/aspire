@@ -137,10 +137,13 @@ type SyncMode = "unknown" | "linked" | "off";
 /**
  * The signed-in person's stamped state. `userId` null = not known yet (state stays empty and
  * nothing is stored). When a bot is linked, changes are pushed to /api/sync and the cloud copy
- * is pulled on open, on SYNC_EVENT and when the tab becomes visible again.
+ * is pulled on open, on SYNC_EVENT and when the tab becomes visible again. `loaded` turns true once
+ * this user's saved copy has been read from the device: until then the empty state means "not known
+ * yet", not "nothing saved" (no place, never briefed).
  */
 export function useUserState(userId: string | null | undefined) {
   const [state, setState] = useState<UserState>(emptyState);
+  const [loaded, setLoaded] = useState(false);
   const ref = useRef(state);
   const sync = useRef<SyncMode>("unknown");
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,10 +211,12 @@ export function useUserState(userId: string | null | undefined) {
 
   // Load this user's copy when the id becomes known, then pull the cloud copy.
   useEffect(() => {
-    const loaded = userId ? loadState(userId) : emptyState();
-    ref.current = loaded;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only storage is read after mount
-    setState(loaded);
+    const saved = userId ? loadState(userId) : emptyState();
+    ref.current = saved;
+    /* eslint-disable react-hooks/set-state-in-effect -- browser-only storage is read after mount */
+    setState(saved);
+    setLoaded(!!userId);
+    /* eslint-enable react-hooks/set-state-in-effect */
     setMode("unknown");
     if (userId) void pull();
   }, [userId, pull, setMode]);
@@ -241,17 +246,17 @@ export function useUserState(userId: string | null | undefined) {
     [commit, push],
   );
 
-  return { state, update, linked };
+  return { state, update, linked, loaded };
 }
 
-/** The signed-in person's device context (plain, unstamped) for the assistant UI. */
+/** The signed-in person's device context (plain, unstamped) for the assistant UI; `loaded` as in useUserState. */
 export function useDevice() {
   const { userId } = useAuth();
-  const { state, update } = useUserState(userId);
+  const { state, update, loaded } = useUserState(userId);
   const device = useMemo(() => toDevice(state), [state]);
   const updateDevice = useCallback(
     (fn: (d: DeviceContext) => DeviceContext) => update((s) => fromDevice(s, fn(toDevice(s)), new Date())),
     [update],
   );
-  return { device, update: updateDevice };
+  return { device, update: updateDevice, loaded };
 }

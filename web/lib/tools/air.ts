@@ -105,10 +105,15 @@ export const airQuality: Tool = {
   description:
     "Air pollution for any place in the world: US AQI and level now, each pollutant (PM2.5, PM10, ozone, nitrogen dioxide, sulphur dioxide, carbon monoxide, in micrograms per cubic metre), which one dominates, and the worst AQI of today and the next 3 days. With an empty place it uses where the person is. Use it for 'is the air bad', 'can I go for a run', 'will the smog be better tomorrow'; give simple advice (mask, stay inside, air the room later) when AQI > 100: smog is a real health risk for elderly people and children.",
   async run(input, ctx) {
-    const out = (await reading.run(input, ctx)) as Record<string, unknown>;
+    // The reading and the detail do not depend on each other: asked together, the tool takes as long as
+    // the slower of the two, not their sum. A detail that fails is left out; the reading stands alone.
+    const [out, detail] = await Promise.all([
+      reading.run(input, ctx) as Promise<Record<string, unknown>>,
+      pointFor(str(input.place, 80), ctx)
+        .then((at) => (at ? airDetail(at.lat, at.lng) : null))
+        .catch(() => null),
+    ]);
     if (!out || "error" in out) return out ?? { error: NO_PLACE };
-    const at = await pointFor(str(input.place, 80), ctx);
-    const detail = at ? await airDetail(at.lat, at.lng).catch(() => null) : null;
     return detail ? { ...out, pollutants: detail.pollutants, dominant: detail.dominant, forecast: detail.forecast, detailSource: "open-meteo (CAMS)" } : out;
   },
 };

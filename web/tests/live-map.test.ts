@@ -65,6 +65,16 @@ describe("LiveMap", () => {
     expect(src).toContain("OpenStreetMap</a>");
   });
 
+  it("the 'you are here' pulse animates transform and opacity of a plain element, never a circle in the SVG", () => {
+    // A SMIL animation of the radius forced a layout on every frame for as long as the map was mounted;
+    // a CSS animation of the circle still cost one on every frame the page drew (measured in Chrome).
+    const src = readFileSync(fileURLToPath(new URL("../components/aspire/LiveMap.tsx", import.meta.url)), "utf8");
+    expect(src).not.toContain("attributeName=");
+    expect(src).toContain("@keyframes aspire-here{from{transform:scale(.4);opacity:.55}to{transform:scale(1);opacity:0}}");
+    expect(src).toMatch(/<span style="[^"]*animation:aspire-here 2s linear infinite"><\/span>/);
+    expect(src).not.toMatch(/<circle[^>]*animation:/);
+  });
+
   it("links the fallback to OpenStreetMap at the person's position", () => {
     expect(osmUrl({ lat: 49.03, lng: 104.04 })).toBe("https://www.openstreetmap.org/?mlat=49.03000&mlon=104.04000#map=16/49.03000/104.04000");
     expect(osmUrl(null)).toBe("https://www.openstreetmap.org/");

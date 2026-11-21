@@ -20,7 +20,7 @@
 // sign-out, and the device store with cloud sync. Inside Aspire Desktop an "open <app>" answer opens
 // straight away once the person allows it in the desktop's own dialog (lib/desktop-bridge).
 
-import { Bookmark, Fuel, LayoutDashboard, Map as MapIcon, MessageCircle, Newspaper, SquareParking } from "lucide-react";
+import { Bookmark, Fuel, LayoutDashboard, Map as MapIcon, MessageCircle, Newspaper, SquareParking, Volume2, VolumeX } from "lucide-react";
 import { MotionConfig, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
@@ -48,7 +48,7 @@ import { fill, textFor } from "@/components/v6/text";
 import { AQI_ORDER, SKY_KINDS, type Ambient, type AmbientSky, type SkyKind } from "@/lib/ambient-types";
 import { desktopOpenAction, inDesktopApp } from "@/lib/desktop-bridge";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
-import { isImperial, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
+import { isImperial, speaks, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
 import type { CityData } from "@/lib/erdenet-city";
 import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
@@ -57,7 +57,7 @@ import { PHOTO_IN_HISTORY } from "@/lib/photo";
 import { buildSuggestions } from "@/lib/suggestions";
 import type { CameraAction, Channel, ClientAction, OpenAppAction, Reminder, Title } from "@/lib/tools/types";
 import { UI } from "@/lib/ui-text";
-import { devicePosition, forgetPhoto, heroPhoto, nearPhoto, roundedPosition, useAmbient, useCachedPhoto, usePoll } from "@/lib/use-ambient";
+import { devicePosition, forgetPhoto, heroPhoto, nearPhoto, roundedPosition, useAmbient, useCachedPhoto, usePoll, within } from "@/lib/use-ambient";
 import { useVoice } from "@/lib/use-voice";
 import { cn } from "@/lib/utils";
 import { isAllowedWebhook } from "@/lib/webhooks";
@@ -76,6 +76,8 @@ const NO_CITY_EVERY_MS = 30 * 60_000;
 const BUSES_EVERY_MS = 30_000;
 /** An average walk, 80 m a minute: the walk to the stop in "Leave in N min". */
 const WALK_M_PER_MIN = 80;
+/** A question waits this long for the device position, then is sent without it: the lookup can take seconds. */
+const ASK_FIX_WAIT_MS = 300;
 const LANG_KEY = "aspire-lang";
 const WHERE_KEY = "aspire-where";
 const ENGINE: Record<string, string> = { elevenlabs: "ElevenLabs", azure: "Azure", gemini: "Gemini", omnivoice: "OmniVoice" };
@@ -226,16 +228,31 @@ export default function Assistant() {
   const [whereAsked, setWhereAsked] = useState<boolean | null>(null);
   const [consented, setConsented] = useState(true);
   const [ready, setReady] = useState(false);
-  const { device, update } = useDevice();
+  // `loaded`: the saved settings (place, last briefing day) have been read. That happens only once the
+  // user id is known, later than `ready`; until then "no place" and "never briefed" mean nothing.
+  const { device, update, loaded } = useDevice();
   const deviceRef = useRef(device);
   useEffect(() => {
     deviceRef.current = device;
   }, [device]);
 
   const [prefs, setPrefs] = useDisplayPrefs();
-  const desktop = useMedia("(min-width: 1024px)");
-  // Wide screens: the map and the news get their own column (the grid's min-[1800px] matches this).
-  const wide = useMedia("(min-width: 1800px)");
+  // Does Aspire speak? Not with spoken answers off (a text chat) and not in screen reader mode. Either way
+  // the one live region says replies, errors and the briefing instead, and /api/speak is never called.
+  const speechOn = speaks(prefs);
+  const quietRef = useRef(!speechOn);
+  useEffect(() => {
+    quietRef.current = !speechOn;
+  }, [speechOn]);
+  // The same queries as the CSS, in rem like Tailwind's own breakpoints (lg = 64rem).
+  const desktop = useMedia("(min-width: 64rem)");
+  // Wide screens: the map and the news get their own column. The grid spells it min-[112.5rem] (1800 px):
+  // Tailwind emits a px breakpoint BEFORE the rem ones, where lg: then wins, which left wide screens with
+  // two columns and the agent panel wrapped under the cards.
+  const wide = useMedia("(min-width: 112.5rem)");
+  // A short screen (a laptop, a scaled 1080p display; the same 52rem as AgentPanel's own rules): the agent
+  // panel is compact from the start.
+  const short = useMedia("(max-height: 52rem)");
   const tabs = desktop && !wide;
   const now = useNow();
   const minute = now == null ? null : Math.floor(now / 60_000);
@@ -276,7 +293,7 @@ export default function Assistant() {
     // "Not now" lasts this session only, so the question comes back until a place is set.
     setWhereAsked(store.get(WHERE_KEY) === "1" || session.get(WHERE_KEY) === "1");
     setConsented(store.get("aspire-consent") === "1" || store.get("emee-consent") === "1");
-    setReady(true); // useDevice loads stored data in its own earlier effect
+    setReady(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
   const chooseLang = useCallback((l: Lang) => {
@@ -306,15 +323,18 @@ export default function Assistant() {
 
   // ---- location: ask once on first open (no silent network guess before the person answers) ----
   const located = settings.shareLocation === true || !!settings.city;
-  const whereOpen = ready && whereAsked === false && !located;
+  // Only once the saved settings are known: a place saved earlier must not be asked for again.
+  const whereOpen = ready && loaded && whereAsked === false && !located;
   const answerWhere = (forGood = true) => {
     (forGood ? store : session).set(WHERE_KEY, "1");
     setWhereAsked(true);
   };
-  const setShareLocation = async (on: boolean): Promise<boolean> => {
-    // Turning it on asks the browser right away (inside the tap); refused = stays off.
-    if (on && !(await devicePosition())) {
-      setNotice(t.hud.noLocation);
+  /** `say` false: the caller reports a failure itself (the Where prompt, in its sheet), so the notice stays empty. */
+  const setShareLocation = async (on: boolean, say = true): Promise<boolean> => {
+    // Turning it on asks the browser right away (inside the tap); refused = stays off. The person asked,
+    // so a lookup that found nothing a moment ago is tried again.
+    if (on && !(await devicePosition(4, { retry: true }))) {
+      if (say) setNotice(t.hud.noLocation);
       return false;
     }
     update((d) => ({ ...d, settings: { ...d.settings, shareLocation: on } }));
@@ -326,7 +346,9 @@ export default function Assistant() {
     update((d) => ({ ...d, settings: { ...d.settings, city: city || undefined } }));
   };
 
-  const ambientOn = langReady && whereAsked !== null && (whereAsked || located);
+  // The first dashboard request waits for the saved settings, so it carries the person's place: asked
+  // earlier it went out without one, was thrown away, and the real request queued behind it.
+  const ambientOn = langReady && loaded && whereAsked !== null && (whereAsked || located);
   const {
     data: ambient,
     at: ambientAt,
@@ -339,6 +361,7 @@ export default function Assistant() {
     onHeard: (text, l) => askBrain(text, l),
     onNotice: setNotice,
     onError: flashError,
+    muted: () => quietRef.current,
     onEngine: (engine, v, l) => {
       const name = ENGINE[engine];
       if (!name || name === lastEngine.current) return;
@@ -346,7 +369,11 @@ export default function Assistant() {
       showFlash(UI[l].hud.voiceVia.replace("{name}", `${v === "friday" ? "Friday" : "Jarvis"} (${name})`));
     },
   });
-  const { phase, setPhase, speak } = voice;
+  const { phase, setPhase, speak, stop: stopSpeech } = voice;
+  // Spoken answers switched off (here, in Settings, or in another tab): silence a reply that is playing or still loading.
+  useEffect(() => {
+    if (!speechOn) stopSpeech();
+  }, [speechOn, stopSpeech]);
   useEffect(
     () => () => {
       window.clearTimeout(timers.current.error);
@@ -355,12 +382,8 @@ export default function Assistant() {
     [],
   );
 
-  // ---- screen reader mode: Aspire's own voice stays quiet; the one live region (below the status
-  // region, outside the inert root) says replies, errors and the briefing instead ----
-  const srRef = useRef(prefs.screenReader);
-  useEffect(() => {
-    srRef.current = prefs.screenReader;
-  }, [prefs.screenReader]);
+  // ---- quiet (spoken answers off, or screen reader mode): Aspire's own voice stays quiet; the one live
+  // region (below the status region, outside the inert root) says replies, errors and the briefing instead ----
   const [said, setSaid] = useState<{ id: string; text: string; lang: Lang } | null>(null);
 
   // ---- morning briefing: first open of the day ----
@@ -368,15 +391,16 @@ export default function Assistant() {
     lang,
     reminders: device.reminders,
     speak: (text: string, l: Lang) => {
-      if (!srRef.current) return speak(text, l);
+      if (!quietRef.current) return speak(text, l);
       setSaid({ id: uid(), text, lang: l });
       return true;
     },
     lastDate: settings.lastBriefingDate,
     setLastDate: (date) => update((d) => ({ ...d, settings: { ...d.settings, lastBriefingDate: date } })),
     title,
-    // Wait for the snapshot, so the briefing names the person's place, not the IP guess.
-    ready: ready && !whereOpen && ambient !== null,
+    // Wait for the saved settings (the last briefing day: unread, every open looked like the day's first)
+    // and for the snapshot, so the briefing names the person's place, not the IP guess.
+    ready: ready && loaded && !whereOpen && ambient !== null,
     city: ambient?.place ?? settings.city ?? null,
     location: settings.shareLocation === true ? roundedPosition : undefined,
   });
@@ -384,7 +408,7 @@ export default function Assistant() {
   // Who opened a sheet, for focus to return to. Nothing focused (a spoken question): the orb.
   const rememberOpener = useCallback(() => {
     const active = document.activeElement;
-    opener.current = active instanceof HTMLElement && active !== document.body ? active : document.getElementById("aspire-core");
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : (document.getElementById("aspire-core") ?? document.getElementById("aspire-mic"));
   }, []);
 
   // ---- thinking ----
@@ -397,6 +421,7 @@ export default function Assistant() {
     async (text: string, l: Lang, image?: string) => {
       setNotice("");
       chooseLang(l);
+      stopSpeech(); // a new question cuts short the last answer's voice (playing or still loading)
       setPhase("thinking");
       const history = messages
         .filter((m) => !m.error)
@@ -408,8 +433,9 @@ export default function Assistant() {
       const connected: Channel[] = ["sms", "email"];
       if (hooks.discord && isAllowedWebhook("discord", hooks.discord)) connected.push("discord");
       if (hooks.slack && isAllowedWebhook("slack", hooks.slack)) connected.push("slack");
-      // The fix is cached (lib/use-ambient), and 3 decimals (about 100 m) is all the server keeps.
-      const location = d.settings?.shareLocation ? await devicePosition(3) : null;
+      // The fix is cached (lib/use-ambient), and 3 decimals (about 100 m) is all the server keeps. A lookup
+      // still running after ASK_FIX_WAIT_MS is not waited for: the question goes without the position.
+      const location = d.settings?.shareLocation ? await within(devicePosition(3), ASK_FIX_WAIT_MS) : null;
       let tz: string | undefined;
       try {
         tz = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
@@ -455,10 +481,11 @@ export default function Assistant() {
       if (!res?.ok || !data?.reply) {
         const msg = data?.error === "brain_not_configured" ? UI[l].brainOffline : UI[l].error;
         setMessages((m) => [...m, { id: uid(), role: "assistant", text: msg, lang: l, error: true }]);
+        setRail("agent"); // never left behind the Map or News tab
         setPhase("idle");
         flashError();
         // Eyes-free: the failure is said, not only shown in red.
-        if (srRef.current) setSaid({ id: uid(), text: msg, lang: l });
+        if (quietRef.current) setSaid({ id: uid(), text: msg, lang: l });
         else void speak(msg, l);
         return;
       }
@@ -476,15 +503,15 @@ export default function Assistant() {
       const app = actions.find((a): a is OpenAppAction => a.type === "open_app");
       if (app && inDesktopApp()) void desktopOpenAction(app);
       setMessages((m) => [...m, { id: uid(), role: "assistant", text: data.reply!, lang: l, steps: data.steps ?? [], cards, sources: data.sources ?? [] }]);
-      const replyLang = speechLang(data.reply, l);
-      if (!srRef.current) {
-        await speak(data.reply, replyLang);
-        return;
-      }
-      setSaid({ id: uid(), text: data.reply, lang: replyLang });
+      // The answer is on screen: show the Ask tab if another one is open, and free the composer now. The
+      // voice (when on) loads and plays after that; it never holds back the text or the next question.
+      setRail("agent");
       setPhase("idle");
+      const replyLang = speechLang(data.reply, l);
+      if (quietRef.current) setSaid({ id: uid(), text: data.reply, lang: replyLang });
+      else void speak(data.reply, replyLang);
     },
-    [messages, speak, setPhase, update, chooseLang, flashError, rememberOpener],
+    [messages, speak, stopSpeech, setPhase, update, chooseLang, flashError, rememberOpener],
   );
 
   // ---- reminders: checked every 15 s, spoken when due (shown only while the mic or the brain is busy) ----
@@ -499,7 +526,7 @@ export default function Assistant() {
       update(() => next);
       setAlarm(due[0]);
       // Screen reader mode: the banner (role="alert") is what says it.
-      if (srRef.current || phaseRef.current === "listening" || phaseRef.current === "thinking") return;
+      if (quietRef.current || phaseRef.current === "listening" || phaseRef.current === "thinking") return;
       void speak(due[0].text, detectTextLanguage(due[0].text));
     }, 15_000);
     return () => clearInterval(id);
@@ -516,14 +543,15 @@ export default function Assistant() {
   };
   const send = (text: string) => {
     const q = text.trim();
-    if (!q || phase !== "idle") return;
-    voice.unlock(); // inside the tap, before any await: iOS plays the reply only then
+    // A typed question is never ignored while Aspire is talking: it cuts the speech short and is sent.
+    if (!q || (phase !== "idle" && phase !== "speaking")) return;
+    voice.unlock(); // inside the tap, before any await: iOS plays the reply only then (nothing with spoken answers off)
     acceptConsent();
     setDraft("");
     void askBrain(q, detectTextLanguage(q, lang));
   };
   const sendPhoto = (text: string, image: string | null) => {
-    if (phase !== "idle") return;
+    if (phase !== "idle" && phase !== "speaking") return;
     if (!image) return setNotice(t.error);
     voice.unlock();
     acceptConsent();
@@ -694,12 +722,6 @@ export default function Assistant() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Phones: the conversation sits under the cards, so a new message brings it into view.
-  const count = messages.length;
-  useEffect(() => {
-    if (count && !desktop) document.getElementById("aspire-agent")?.scrollIntoView({ block: "end", behavior: prefs.calm ? "auto" : "smooth" });
-  }, [count, desktop, prefs.calm]);
-
   // ---- live feeds ----
   const coords = ambient?.coords ?? null;
   const erdenet = (!!coords && isErdenet(coords.lat, coords.lng)) || ambient?.nextBus?.source === "erdenet-live";
@@ -729,6 +751,14 @@ export default function Assistant() {
   // ---- derived view state ----
   const empty = messages.length === 0;
   const busy = phase !== "idle";
+  // Compact panel (the orb in the header row, the opener scrolling with the thread): once a conversation
+  // exists, on a short desktop screen, and always with spoken answers off (a text chat has no orb).
+  const compact = !empty || !speechOn || (desktop && short);
+  const toggleVoice = () => {
+    const on = !prefs.voice;
+    setPrefs({ voice: on });
+    showFlash(on ? t.voiceOn : t.voiceOff); // the status region says it; the header shows it for a moment
+  };
   const orbState: VoiceOrbState = orbError && phase === "idle" ? "error" : phase;
   const word = voiceOrbWord(orbState, lang);
   const deviceHour = minute == null ? null : new Date(minute * 60_000).getHours();
@@ -764,7 +794,8 @@ export default function Assistant() {
   // An IP guess is said to be one, and the place picker lets the person fix it.
   const approx = ambient?.locatedBy === "network";
   const place = ambient?.place ? (approx ? `${ambient.place}, ${t.hud.approx}` : ambient.place) : (settings.city ?? null);
-  const loading: CardState | undefined = ambient === null && ambientOn ? "loading" : undefined;
+  // Loading also while the saved settings are still being read (the request waits for them), not "no data".
+  const loading: CardState | undefined = ambient === null && (ambientOn || (ready && !loaded)) ? "loading" : undefined;
   const timeZone = ambient?.timeZone ?? null;
 
   // Source and age of every figure (each card's source line; the agent's source chips).
@@ -940,26 +971,41 @@ export default function Assistant() {
       onExpand={desktop ? () => setAgentWide((x) => !x) : undefined}
       // Desktop: fills the right column under its tabs; hidden (kept mounted) while Map or News is shown.
       className={cn("lg:min-h-0 lg:flex-1", tabs && rail !== "agent" && "hidden")}
+      compact={compact}
+      status={pill || undefined}
+      voice={{
+        on: speechOn,
+        label: t.voiceReplies,
+        hint: prefs.screenReader ? t.voiceRepliesSr : speechOn ? t.voiceOn : t.voiceOff,
+        disabled: prefs.screenReader,
+        onToggle: toggleVoice,
+      }}
       orb={
-        // In a conversation the orb shrinks and its state word sits beside it: on a laptop-height screen the
-        // tall orb, its label and the source chips left the thread about 40 px, so a reply could not be seen.
-        <div className={cn("flex items-center gap-2", empty ? "flex-col" : "flex-row justify-center")}>
-          {/* A name that never changes while focused (a new name would be read over the open mic); the
-              state is aria-pressed, the tones and the status region. */}
-          <button id="aspire-core" type="button" onClick={onCore} aria-label={t.voice} aria-pressed={phase === "listening" || phase === "speaking"} aria-keyshortcuts="Space Escape" className="press grid place-items-center rounded-full">
-            <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={empty ? 96 : 56} weather={orbWeather} lang={lang} label={word} />
+        // Spoken answers off: no orb at all (a text chat; the composer keeps its mic for dictation).
+        !speechOn ? null : compact ? (
+          // Compact: a small orb in the header row; the state word sits beside the name.
+          <button id="aspire-core" type="button" onClick={onCore} aria-label={t.voice} aria-pressed={phase === "listening" || phase === "speaking"} aria-keyshortcuts="Space Escape" className="press grid size-11 place-items-center rounded-full">
+            <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={36} weather={orbWeather} lang={lang} label={word} />
           </button>
-          <p aria-hidden className={cn("min-h-6 text-meta tracking-[0.12em] text-ink-muted uppercase", !pill && "invisible")}>
-            {pill || " "}
-          </p>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            {/* A name that never changes while focused (a new name would be read over the open mic); the
+                state is aria-pressed, the tones and the status region. */}
+            <button id="aspire-core" type="button" onClick={onCore} aria-label={t.voice} aria-pressed={phase === "listening" || phase === "speaking"} aria-keyshortcuts="Space Escape" className="press grid place-items-center rounded-full">
+              <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={96} weather={orbWeather} lang={lang} label={word} />
+            </button>
+            <p aria-hidden className={cn("min-h-6 text-meta tracking-[0.12em] text-ink-muted uppercase", !pill && "invisible")}>
+              {pill || " "}
+            </p>
+          </div>
+        )
       }
       opener={empty ? <h2 id="aspire-greeting">{minute == null ? " " : greetingText}</h2> : undefined}
       messages={
         <>
           {empty && (
             <>
-              <p className="text-copy text-ink-muted">{t.tapOrSay}</p>
+              <p className="text-copy text-ink-muted">{speechOn ? t.tapOrSay : t.typeBelow}</p>
               <ul aria-label={t.suggestionsLabel} className="mt-3 flex flex-col gap-2">
                 {starters.map((s) => (
                   <li key={s.kind}>
@@ -988,7 +1034,7 @@ export default function Assistant() {
             busy={busy}
             thinking={phase === "thinking"}
             webhooks={settings.webhooks ?? {}}
-            onReplay={(m) => voice.replay(m.text, m.lang)}
+            onReplay={speechOn ? (m) => voice.replay(m.text, m.lang) : undefined}
             onOpenConnections={() => openSheet("connections")}
             onCameras={openCameras}
             onRetry={(q) => {
@@ -998,11 +1044,15 @@ export default function Assistant() {
             }}
             address={title}
             briefing={briefing ? { text: briefing.text, lang: briefing.lang, gmailError: briefing.gmailError, headlines: briefing.headlines } : null}
-            onReplayBriefing={() => {
-              if (!briefing || phase !== "idle") return;
-              voice.unlock();
-              void speak(briefing.text, briefing.lang);
-            }}
+            onReplayBriefing={
+              speechOn
+                ? () => {
+                    if (!briefing || phase !== "idle") return;
+                    voice.unlock();
+                    void speak(briefing.text, briefing.lang);
+                  }
+                : undefined
+            }
             alarm={alarm}
             onDismissAlarm={() => setAlarm(null)}
             reducedMotion={prefs.calm || undefined}
@@ -1012,7 +1062,7 @@ export default function Assistant() {
       }
       // The chips wrap to three rows in a narrow panel: shown before a conversation, not during one.
       sources={empty ? sources : []}
-      composer={desktop ? composer("pointer-events-auto w-full") : null}
+      composer={desktop ? composer("pointer-events-auto w-full pb-0") : null}
     />
   );
 
@@ -1031,7 +1081,7 @@ export default function Assistant() {
           {t.skipToConversation}
         </a>
         {/* Desktop: the orb. Phones: the composer's mic in the dock. */}
-        <a href={desktop ? "#aspire-core" : "#aspire-mic"} inert={covered} onClick={skipTo("aspire-core")} className="skip-link">
+        <a href={desktop && speechOn ? "#aspire-core" : "#aspire-mic"} inert={covered} onClick={skipTo(desktop && speechOn ? "aspire-core" : "aspire-mic")} className="skip-link">
           {t.skipToMic}
         </a>
 
@@ -1050,7 +1100,7 @@ export default function Assistant() {
 
           <div
             style={{ "--agent-w": agentWide ? "clamp(480px,40vw,760px)" : "clamp(360px,28vw,520px)" } as CSSProperties}
-            className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_var(--agent-w)] min-[1800px]:grid-cols-[minmax(0,1fr)_clamp(380px,22vw,600px)_var(--agent-w)]"
+            className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_var(--agent-w)] min-[112.5rem]:grid-cols-[minmax(0,1fr)_clamp(380px,22vw,600px)_var(--agent-w)]"
           >
             <main tabIndex={-1} className="@container flex min-w-0 flex-col gap-5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               <HeroCard
@@ -1147,7 +1197,7 @@ export default function Assistant() {
             style={{ bottom: "var(--kb, 0px)", paddingBottom: "var(--kb-pad, max(8px, env(safe-area-inset-bottom)))" }}
           >
             {composer("pointer-events-auto w-full pb-0")}
-            <nav aria-label={v6.tabBar} className="v6-dock-nav pointer-events-auto mt-2 grid grid-cols-4 gap-1">
+            <nav aria-label={v6.tabBar} className="v6-dock-nav pointer-events-auto mt-2 grid grid-cols-5 gap-1">
               {(
                 [
                   [
@@ -1162,14 +1212,25 @@ export default function Assistant() {
                   ["map", v6.tabMap, MapIcon, openFullMap],
                   ["saved", v6.tabSaved, Bookmark, () => openSheet("memory")],
                   ["agent", t.hud.agent, MessageCircle, toAgent],
+                  // Spoken answers on/off: the same switch as the speaker button in the agent panel's header.
+                  // One name that never changes ("Voice"); the state is aria-pressed, the icon and the colour.
+                  ["voice", t.voice, speechOn ? Volume2 : VolumeX, toggleVoice],
                 ] as const
               ).map(([id, label, Icon, onClick]) => (
                 <button
                   key={id}
                   type="button"
-                  onClick={onClick}
+                  onClick={id === "voice" && prefs.screenReader ? undefined : onClick}
                   onPointerDown={id === "map" ? () => void prefetchMap() : undefined}
-                  className="press flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] text-meta text-ink-muted hover:text-ink"
+                  aria-pressed={id === "voice" ? speechOn : undefined}
+                  aria-disabled={(id === "voice" && prefs.screenReader) || undefined}
+                  title={id === "voice" ? (prefs.screenReader ? t.voiceRepliesSr : speechOn ? t.voiceOn : t.voiceOff) : undefined}
+                  // String concatenation, not cn(): the class merger drops text-meta when a text colour follows it.
+                  className={
+                    "press flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-sm)] text-meta hover:text-ink " +
+                    (id === "voice" && speechOn ? "text-accent" : "text-ink-muted") +
+                    (id === "voice" && prefs.screenReader ? " opacity-60" : "")
+                  }
                 >
                   <Icon aria-hidden className="size-5" />
                   <span className="max-w-full text-center leading-tight [overflow-wrap:anywhere]">{label}</span>
@@ -1202,7 +1263,7 @@ export default function Assistant() {
           <WherePrompt
             t={t}
             onAllow={() =>
-              setShareLocation(true).then((ok) => {
+              setShareLocation(true, false).then((ok) => {
                 if (ok) answerWhere();
                 return ok;
               })
@@ -1219,7 +1280,7 @@ export default function Assistant() {
           <WherePrompt
             t={t}
             onAllow={() =>
-              setShareLocation(true).then((ok) => {
+              setShareLocation(true, false).then((ok) => {
                 if (ok) closeSheet();
                 return ok;
               })

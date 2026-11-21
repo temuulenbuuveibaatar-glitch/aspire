@@ -120,8 +120,8 @@ export interface MessageListProps {
   thinking: boolean;
   /** Saved Discord / Slack webhooks, passed to the send-for-me cards. */
   webhooks: { discord?: string; slack?: string };
-  /** Hear a reply again. */
-  onReplay: (message: ChatMessage) => void;
+  /** Hear a reply again. Omit to hide every "Hear again" button (spoken answers off). */
+  onReplay?: (message: ChatMessage) => void;
   /** Opens Settings > Connections (send-for-me cards and the briefing's "Reconnect Gmail"). */
   onOpenConnections: () => void;
   /** Opens the camera sheet again for a find_cameras answer. Omit to hide those buttons. */
@@ -424,11 +424,47 @@ export function MessageList({
   const [showJump, setShowJump] = useState(false);
   const list = useRef<HTMLOListElement>(null);
 
+  /** Desktop: the thread's own scroll box inside the agent panel. Phones: null (the page scrolls). */
+  const threadBox = useCallback((): HTMLElement | null => {
+    const desktop = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 64rem)").matches;
+    return desktop ? (bottom.current?.closest<HTMLElement>("[data-thread-scroll]") ?? null) : null;
+  }, []);
+
   const followNow = useCallback(() => {
     programmaticUntil.current = performance.now() + (reduced ? 100 : 900);
     nearBottom.current = true;
-    bottom.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
-  }, [reduced]);
+    const behavior = reduced ? "auto" : "smooth";
+    const box = threadBox();
+    // Desktop: scroll the box itself. scrollIntoView would also move the page behind the sticky panel.
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior });
+    else bottom.current?.scrollIntoView({ behavior, block: "end" });
+  }, [reduced, threadBox]);
+
+  /**
+   * A new reply is shown from its first line: one that fits is shown whole, a longer one starts at the
+   * top of the view (never at its tail, with the answer scrolled out above).
+   */
+  const revealReply = useCallback(
+    (li: HTMLElement) => {
+      programmaticUntil.current = performance.now() + (reduced ? 100 : 900);
+      const behavior = reduced ? "auto" : "smooth";
+      const box = threadBox();
+      if (!box) {
+        // The page scrolls: html's scroll-padding (top edge, dock, keyboard) frames the reply.
+        li.scrollIntoView({ behavior, block: "nearest" });
+        nearBottom.current = true;
+        return;
+      }
+      const pad = parseFloat(getComputedStyle(box).scrollPaddingTop) || 0;
+      // offsetTop ignores the entrance transform; the box is the offset parent (it is position: relative).
+      const liTop = li.offsetParent === box ? li.offsetTop : li.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+      const end = box.scrollHeight - box.clientHeight;
+      const top = Math.min(Math.max(0, liTop - pad), end);
+      box.scrollTo({ top, behavior });
+      nearBottom.current = end - top <= NEAR_BOTTOM_PX;
+    },
+    [reduced, threadBox],
+  );
 
   // The pill unmounts once used: focus moves to the newest message, not to <body>.
   const scrollToEnd = useCallback(() => {
@@ -448,7 +484,7 @@ export function MessageList({
     const readClearance = () => {
       const el = bottom.current;
       clearance = el ? parseFloat(getComputedStyle(el).scrollMarginBottom) || 0 : 0;
-      const desktop = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1024px)").matches;
+      const desktop = typeof window.matchMedia === "function" && window.matchMedia("(min-width: 64rem)").matches;
       box = desktop ? (el?.closest<HTMLElement>("[data-thread-scroll]") ?? null) : null;
     };
     readClearance();
@@ -487,10 +523,19 @@ export function MessageList({
   }, []);
 
   const last = messages[messages.length - 1];
+  const revealed = useRef<string | null>(null);
   useEffect(() => {
     if (!autoScroll || (!last && !thinking)) return;
-    // The person's own new question always brings the thread to the bottom.
-    const follow = nearBottom.current || last?.role === "user";
+    // A reply that just arrived: bring its first line into view, once.
+    if (last?.role === "assistant" && revealed.current !== last.id) {
+      revealed.current = last.id;
+      const li = list.current?.lastElementChild;
+      if (li instanceof HTMLElement) revealReply(li);
+      setShowJump(false);
+      return;
+    }
+    // The person's own new question (typed, or being transcribed) always brings the thread to the bottom.
+    const follow = nearBottom.current || last?.role === "user" || thinking;
     if (follow) followNow();
     setShowJump(!follow);
     // `reduced` is deliberately not a trigger: switching Calm mode must not move the thread.
@@ -525,9 +570,13 @@ export function MessageList({
           <BriefingCard
             text={clean(briefing.text)}
             t={t}
-            onReplay={() => {
-              if (!busy) onReplayBriefing?.();
-            }}
+            onReplay={
+              onReplayBriefing
+                ? () => {
+                    if (!busy) onReplayBriefing();
+                  }
+                : undefined
+            }
             gmailError={briefing.gmailError}
             onReconnect={onOpenConnections}
             headlines={briefing.headlines}
@@ -727,7 +776,7 @@ function AssistantMessage({
   reduced: boolean;
   webhooks: { discord?: string; slack?: string };
   question: ChatMessage | undefined;
-  onReplay: (m: ChatMessage) => void;
+  onReplay?: (m: ChatMessage) => void;
   onRetry?: (q: ChatMessage, r: ChatMessage) => void;
   onCopy?: (m: ChatMessage) => void | Promise<void>;
   onOpenConnections: () => void;
@@ -745,7 +794,6 @@ function AssistantMessage({
     <div className="flex w-full flex-col gap-3">
       <div className={cn("panel p-5", m.error && "border-danger/60")}>
         <span className="sr-only">Aspire: </span>
-        {!!m.steps?.length && <ToolLedger steps={m.steps} lang={m.lang} s={s} reduced={reduced} />}
 
         {m.error ? (
           <p className="flex max-w-[65ch] items-start gap-3 text-reply text-danger">
@@ -772,6 +820,9 @@ function AssistantMessage({
           </>
         )}
 
+        {/* After the answer, on one wrapping line: the answer itself is what must be on screen first. */}
+        {!!m.steps?.length && <ToolLedger steps={m.steps} lang={m.lang} s={s} reduced={reduced} />}
+
         {m.error ? (
           canRetry && (
             <button
@@ -788,18 +839,20 @@ function AssistantMessage({
           )
         ) : (
           <div className="mt-3 -mb-2 -ml-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!busy) onReplay(m);
-              }}
-              aria-disabled={busy || undefined}
-              aria-label={t.repeat}
-              title={t.repeat}
-              className={actionBtn}
-            >
-              <Volume2 className="size-5" aria-hidden />
-            </button>
+            {onReplay && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!busy) onReplay(m);
+                }}
+                aria-disabled={busy || undefined}
+                aria-label={t.repeat}
+                title={t.repeat}
+                className={actionBtn}
+              >
+                <Volume2 className="size-5" aria-hidden />
+              </button>
+            )}
             {!!text && <CopyButton m={m} text={text} s={s} onCopy={onCopy} />}
             {canRetry && (
               <button
@@ -862,7 +915,7 @@ function AssistantMessage({
 
 function ToolLedger({ steps, lang, s, reduced }: { steps: ChatStep[]; lang: Lang; s: S; reduced: boolean }) {
   return (
-    <ul aria-label={s.steps} className="mb-3 flex flex-col gap-1 border-b border-line pb-3">
+    <ul aria-label={s.steps} className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-2">
       {steps.map((step, i) => {
         const Icon = toolIcon(step.tool);
         const label = TOOL_TEXT[step.tool]?.[lang] ?? (clean(step.label) || step.tool);

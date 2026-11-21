@@ -7,7 +7,10 @@ import { addSource, type AgentRun, type Brain, contextNote, fallbackLine, forSpe
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 
 let client: Anthropic | null = null;
-const getClient = () => (client ??= new Anthropic());
+// 20 s and one retry per step. The SDK's own defaults (10 minutes, two retries) outlast the route's 60 s
+// limit, so a stalled Claude ended in an error instead of the next brain answering. The SDK retries a
+// timeout, so one step can take 40 s.
+const getClient = () => (client ??= new Anthropic({ timeout: 20_000, maxRetries: 1 }));
 
 const toolsFor = (run: AgentRun): Anthropic.Beta.BetaToolUnion[] => [
   { type: "web_search_20260209", name: "web_search", max_uses: 5 },

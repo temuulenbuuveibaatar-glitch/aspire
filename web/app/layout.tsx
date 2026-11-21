@@ -1,7 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/ui/themes";
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_SC, Tektur } from "next/font/google";
+import { Inter, JetBrains_Mono, Noto_Sans_SC, Tektur } from "next/font/google";
 import { ServiceWorker } from "@/components/aspire/PushToggle";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
@@ -20,9 +20,16 @@ const body = Inter({
   display: "swap",
 });
 
-// Tektur: wordmark and the HUD clock only. The wdth axis gives condensed numerals. Other values
-// use --font-mono (system monospace, globals.css), so no third font downloads.
-// Digits, the degree sign and U+2212 minus are all in its latin file; Cyrillic loads on demand.
+// JetBrains Mono: the small uppercase labels, telemetry lines and readouts (--font-mono in
+// globals.css). It has the full Cyrillic set, so Mongolian and Russian labels stay in one face.
+// Only the Latin file is preloaded; Cyrillic downloads when a Cyrillic label is on the page.
+const code = JetBrains_Mono({
+  variable: "--font-code",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+// Tektur: the wordmark only. Cyrillic loads on demand.
 const brand = Tektur({
   variable: "--font-brand",
   subsets: ["latin"],
@@ -79,7 +86,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b1311", // = --color-bg (globals.css): the status bar blends into the page
+  themeColor: "#050505", // = --color-bg (globals.css): the status bar blends into the page
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
@@ -102,7 +109,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // lang="en": English is the app's own fallback. Assistant and LoginForm set the real
     // language on <html> after mount, Landing sets it with an inline script, and the legal
     // sections carry their own lang attributes.
-    <html lang="en" className={`${body.variable} ${brand.variable} ${cjk.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${body.variable} ${code.variable} ${brand.variable} ${cjk.variable}`} suppressHydrationWarning>
       <head>
         {/* Display prefs before first paint: Calm mode, text size and units apply on every page
             (including /login) and from the very first frame, not only after hydration. */}
@@ -114,17 +121,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           appearance={{
             theme: dark,
             variables: {
-              colorBackground: "#0B1220",
-              colorPrimary: "#5EE7FF",
-              colorPrimaryForeground: "#0B1220",
-              colorForeground: "#F2F6FC",
-              colorMutedForeground: "#B6C2D6",
-              colorNeutral: "#F2F6FC",
-              colorInput: "#121C2E",
-              colorInputForeground: "#F2F6FC",
-              colorDanger: "#FF8A8A",
-              colorSuccess: "#5BE3A4",
-              borderRadius: "16px",
+              // The app's own tokens (globals.css): the sign-in screen is the same product.
+              colorBackground: "#0d0d0d",
+              colorPrimary: "#fc4f00",
+              colorPrimaryForeground: "#050505",
+              colorForeground: "#dddddd",
+              colorMutedForeground: "#a8a8a8",
+              colorNeutral: "#dddddd",
+              colorInput: "#151515",
+              colorInputForeground: "#dddddd",
+              colorDanger: "#ff6b6b",
+              colorSuccess: "#5be3a4",
+              borderRadius: "3px",
               fontSize: "1.125rem",
             },
           }}

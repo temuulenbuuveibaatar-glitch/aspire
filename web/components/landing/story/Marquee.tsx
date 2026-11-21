@@ -22,14 +22,14 @@ const LEAN = 5;
 const MAX_LEAN = 7;
 const LEAN_SPRING = { stiffness: 180, damping: 28, mass: 0.4 } as const;
 
-function Row({ names, home, moving, reverse, progress, lean }: { names: string[]; home: boolean; moving: boolean; reverse: boolean; progress: MotionValue<number>; lean: MotionValue<number> }) {
+function Row({ names, home, moving, reverse, progress, lean }: { names: string[]; home: string | null; moving: boolean; reverse: boolean; progress: MotionValue<number>; lean: MotionValue<number> }) {
   const [from, to] = reverse ? [TRAVEL[1], TRAVEL[0]] : TRAVEL;
   // Still: the row is a wrapped list and stays where it is.
   const x = useTransform(progress, (p) => (moving ? `${(from + (to - from) * p).toFixed(3)}%` : "0%"));
   return (
     <motion.ul className="st-mq-track" style={{ x, skewX: lean }}>
-      {names.map((name, i) => (
-        <li key={name} className="st-mq-item" data-home={(home && i === 0) || undefined}>
+      {names.map((name) => (
+        <li key={name} className="st-mq-item" data-home={name === home || undefined}>
           {name}
         </li>
       ))}
@@ -57,15 +57,20 @@ export function CityMarquee({ lang }: { lang: Lang }) {
   const tilt = useTransform(velocity, (v) => (rich ? Math.max(-MAX_LEAN, Math.min(MAX_LEAN, v * LEAN)) : 0));
   const lean = useSpring(tilt, LEAN_SPRING);
   const half = Math.ceil(c.cities.length / 2);
+  const home = c.cities[0] ?? null;
+  const first = c.cities.slice(0, half);
+  // A moving row starts a little off the left edge and travels further left, so its first name is
+  // never seen: the home city, the one name filled in, then stands third, well inside the screen.
+  const lead = mode.moving && first.length > 2 ? [...first.slice(1, 3), first[0], ...first.slice(3)] : first;
   return (
     <section ref={root} aria-labelledby="story-cities-label" className="st-mq" data-live={mode.moving || undefined}>
       {mode.moving && <ScrollFeed target={root} offset={["start end", "end start"]} into={progress} rest={0.5} smooth={mode.rich} />}
-      <p id="story-cities-label" className="st-mq-label v6-on-photo">
+      <p id="story-cities-label" className="st-mq-label readout v6-on-photo">
         {c.label}
       </p>
       <div className="st-mq-rows">
-        <Row names={c.cities.slice(0, half)} home moving={mode.moving} reverse={false} progress={progress} lean={lean} />
-        <Row names={c.cities.slice(half)} home={false} moving={mode.moving} reverse progress={progress} lean={lean} />
+        <Row names={lead} home={home} moving={mode.moving} reverse={false} progress={progress} lean={lean} />
+        <Row names={c.cities.slice(half)} home={null} moving={mode.moving} reverse progress={progress} lean={lean} />
       </div>
       <p className="st-mq-note v6-on-photo">{c.note}</p>
     </section>

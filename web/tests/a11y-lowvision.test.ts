@@ -26,9 +26,9 @@ const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
 describe("hero photo text contrast (item 7, WCAG 1.4.3)", () => {
   const css = src("app/globals.css");
   it("the scrim's base layer is .5, and More contrast darkens it evenly", () => {
-    expect(css).toMatch(/rgb\(11 19 17 \/ 0\.5\);\s*\}/);
+    expect(css).toMatch(/rgb\(5 5 5 \/ 0\.5\);\s*\}/);
     const more = css.slice(css.lastIndexOf("@media (prefers-contrast: more)"));
-    expect(more.slice(0, more.indexOf("@media", 10))).toMatch(/\.v6-scrim\s*\{\s*background: linear-gradient\(180deg, rgb\(11 19 17 \/ 0\.6\), rgb\(11 19 17 \/ 0\.85\)\);/);
+    expect(more.slice(0, more.indexOf("@media", 10))).toMatch(/\.v6-scrim\s*\{\s*background: linear-gradient\(180deg, rgb\(5 5 5 \/ 0\.6\), rgb\(5 5 5 \/ 0\.85\)\);/);
   });
 
   it("text over the photo uses full ink, not muted ink", () => {
