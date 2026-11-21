@@ -35,6 +35,9 @@ export interface SkyProps {
   overlay?: boolean;
   /** The https photo under the overlay: rain, drizzle and storm then also bead on the glass and refract it (WebGL). */
   photo?: string | null;
+  /** Cap on the canvas pixel ratio (default 2; 1.5 on low-end devices). A full-page background passes 0.5:
+   *  a quarter of the pixels, softer but cheap to draw. */
+  maxDpr?: number;
 }
 
 export type Family = "clear" | "cloud" | "fog" | "rain" | "storm" | "snow";
@@ -241,7 +244,7 @@ function streakSprite(rgb: string): HTMLCanvasElement {
   return c;
 }
 
-function createEngine(canvas: HTMLCanvasElement, tier: number) {
+function createEngine(canvas: HTMLCanvasElement, tier: number, maxDpr = tier < 1 ? 1.5 : 2) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   const MAX = tier < 1 ? 260 : 520;
@@ -474,7 +477,7 @@ function createEngine(canvas: HTMLCanvasElement, tier: number) {
     const nw = Math.max(1, Math.round(rect.width || window.innerWidth));
     const nh = Math.max(1, Math.round(rect.height || window.innerHeight));
     // At most about 4 MP of backing store, so a big high-DPI screen costs no more than a laptop.
-    const ndpr = Math.min(window.devicePixelRatio || 1, tier < 1 ? 1.5 : 2, Math.sqrt(4e6 / (nw * nh)));
+    const ndpr = Math.min(window.devicePixelRatio || 1, maxDpr, Math.sqrt(4e6 / (nw * nh)));
     if (nw === w && nh === h && ndpr === dpr) return;
     const sx = w ? nw / w : 1, sy = h ? nh / h : 1;
     [w, h, dpr] = [nw, nh, ndpr];
@@ -588,7 +591,7 @@ const EASE = "cubic-bezier(0.45, 0, 0.55, 1)";
 
 /* ---- component ---- */
 
-export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phase: phaseProp, cloudCover, className, overlay = false, photo }: SkyProps) {
+export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phase: phaseProp, cloudCover, className, overlay = false, photo, maxDpr }: SkyProps) {
   const still = useStill();
   const tier = useSyncExternalStore(noop, getTier, () => 1);
 
@@ -610,13 +613,13 @@ export function Sky({ kind: kindProp, intensity, isDay, windKph, localHour, phas
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<ReturnType<typeof createEngine>>(null);
   useEffect(() => {
-    const eng = canvasRef.current ? createEngine(canvasRef.current, tier) : null;
+    const eng = canvasRef.current ? createEngine(canvasRef.current, tier, maxDpr) : null;
     engineRef.current = eng;
     return () => {
       eng?.destroy();
       engineRef.current = null;
     };
-  }, [tier]);
+  }, [tier, maxDpr]);
 
   const starVis = !DARK.has(fine) ? 0 : (kind === "clear" ? 1 : kind === "partly" ? 0.7 : 0) * (overlay ? 0.75 : 1);
   const bright = !night && (family === "snow" || family === "fog");

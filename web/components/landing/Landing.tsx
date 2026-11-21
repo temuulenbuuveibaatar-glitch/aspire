@@ -187,7 +187,7 @@ export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<Land
                 <SkyChip weather={weather} />
               </Suspense>
             )}
-            <p className="text-label text-accent">{t.eyebrow}</p>
+            <p className="text-reply font-semibold text-accent">{t.eyebrow}</p>
             {/* The brand sits in the h1 so "Aspire" + keyword searches match title, h1 and body. */}
             <h1 id="hero-title" className="mt-3 text-city text-ink">
               <span className="sr-only">Aspire</span>{" "}
