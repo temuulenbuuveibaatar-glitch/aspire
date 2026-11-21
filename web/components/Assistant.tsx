@@ -941,11 +941,13 @@ export default function Assistant() {
       // Desktop: fills the right column under its tabs; hidden (kept mounted) while Map or News is shown.
       className={cn("lg:min-h-0 lg:flex-1", tabs && rail !== "agent" && "hidden")}
       orb={
-        <div className="flex flex-col items-center gap-2">
+        // In a conversation the orb shrinks and its state word sits beside it: on a laptop-height screen the
+        // tall orb, its label and the source chips left the thread about 40 px, so a reply could not be seen.
+        <div className={cn("flex items-center gap-2", empty ? "flex-col" : "flex-row justify-center")}>
           {/* A name that never changes while focused (a new name would be read over the open mic); the
               state is aria-pressed, the tones and the status region. */}
           <button id="aspire-core" type="button" onClick={onCore} aria-label={t.voice} aria-pressed={phase === "listening" || phase === "speaking"} aria-keyshortcuts="Space Escape" className="press grid place-items-center rounded-full">
-            <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={empty ? 96 : 72} weather={orbWeather} lang={lang} label={word} />
+            <VoiceOrb state={orbState} level={voice.level} bands={voice.bands} size={empty ? 96 : 56} weather={orbWeather} lang={lang} label={word} />
           </button>
           <p aria-hidden className={cn("min-h-6 text-meta tracking-[0.12em] text-ink-muted uppercase", !pill && "invisible")}>
             {pill || " "}
@@ -1008,7 +1010,8 @@ export default function Assistant() {
           />
         </>
       }
-      sources={sources}
+      // The chips wrap to three rows in a narrow panel: shown before a conversation, not during one.
+      sources={empty ? sources : []}
       composer={desktop ? composer("pointer-events-auto w-full") : null}
     />
   );

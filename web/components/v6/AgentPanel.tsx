@@ -45,7 +45,8 @@ export function AgentPanel({ lang, name = "Aspire", orb, opener, messages, compo
         )}
       </header>
       <div className="grid shrink-0 place-items-center text-accent">{orb}</div>
-      {opener && <div className="shrink-0 text-[1.5rem] leading-tight font-medium text-ink">{opener}</div>}
+      {/* Short screens (laptops): a smaller opener and no chips, so the starters and the thread keep their room. */}
+      {opener && <div className="shrink-0 text-[1.5rem] leading-tight font-medium text-ink [@media(max-height:52rem)]:lg:text-[1.125rem]">{opener}</div>}
       {/* Desktop: the thread scrolls in its own region under the orb. Top padding plus a fade taller than a
           line means a line scrolled past the top melts away instead of showing half cut; scroll-padding keeps
           a focused or followed message clear of that fade. Phones scroll the page, so no mask there (it
@@ -54,7 +55,7 @@ export function AgentPanel({ lang, name = "Aspire", orb, opener, messages, compo
         {messages}
       </div>
       {sources.length > 0 && (
-        <ul aria-label={t.sources} className="flex shrink-0 flex-wrap gap-1.5">
+        <ul aria-label={t.sources} className="flex shrink-0 flex-wrap gap-1.5 [@media(max-height:52rem)]:lg:hidden">
           {sources.map((s) => (
             <li key={s.label} className="v6-chip max-w-full gap-1.5 px-2.5 py-1 text-meta" title={`${s.label} · ${s.source}`}>
               {s.kind === "live" && <LiveDot />}
