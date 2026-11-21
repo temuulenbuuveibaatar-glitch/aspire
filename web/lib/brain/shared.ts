@@ -171,6 +171,10 @@ export function contextNote(lang: Lang, run: AgentRun): string {
   );
   parts.push(`If they ask you to do a task, begin with: "${ON_IT[title === "mr" || title === "mrs" ? title : ""][lang]}"`);
   parts.push(placeAndTime(run.ctx));
+  // Tools report Celsius and km; say them in the units the person's screen shows.
+  parts.push((device.settings as { units?: string } | undefined)?.units === "imperial"
+    ? "Units: say temperatures in Fahrenheit (F = C x 9/5 + 32, rounded) and distances in miles."
+    : "Units: say temperatures in Celsius and distances in kilometres.");
   parts.push(mem.length ? `Saved on this person's device:\n${mem.map(([k, v]) => `- ${k}: ${v}`).join("\n")}` : "Nothing saved in memory yet.");
   if (device.reminders.length) parts.push(`They have ${device.reminders.length} reminder(s); use list_reminders for details.`);
 

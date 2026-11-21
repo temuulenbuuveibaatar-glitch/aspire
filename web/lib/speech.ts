@@ -69,10 +69,10 @@ async function firstWorking<T>(what: string, run: Partial<Record<Engine, () => P
   throw lastError instanceof SpeechOffline ? lastError : new SpeechOffline(String(lastError));
 }
 
-export async function transcribe(audio: Blob): Promise<SttResult> {
+export async function transcribe(audio: Blob, hint?: Lang): Promise<SttResult> {
   return firstWorking("listen", {
     omnivoice: () => omnivoiceTranscribe(audio),
-    azure: () => azureTranscribe(audio),
+    azure: () => azureTranscribe(audio, hint),
     gemini: () => geminiTranscribe(audio),
   });
 }
@@ -225,14 +225,24 @@ export function pickShortClip(
 
 const isShort = (text: string) => text.replace(/[\p{P}\p{S}\s]/gu, "").length <= 12;
 
-async function azureTranscribe(audio: Blob): Promise<SttResult> {
+async function azureTranscribe(audio: Blob, hint?: Lang): Promise<SttResult> {
   let lid: AzurePass | null = null;
   try {
     lid = await azureRequest(audio, Object.values(AZURE_LOCALES));
   } catch (e) {
     if (!(e instanceof NoLanguageHeard)) throw e;
   }
-  if (lid && !isShort(lid.text)) return lidResult(lid);
+  if (lid && !isShort(lid.text)) {
+    const first = lidResult(lid);
+    // Azure often hears Mongolian as Russian. When the person has been speaking Mongolian and Azure
+    // says Russian, transcribe again as Mongolian only and keep it unless clearly less confident.
+    if (hint === "mn" && first.language === "ru") {
+      const mn = await azureRequest(audio, [AZURE_LOCALES.mn]).catch(() => null);
+      const conf = (r: AzurePass) => { const c = r.phrases.map((p) => p.confidence ?? 0); return c.length ? c.reduce((a, b) => a + b, 0) / c.length : 0; };
+      if (mn && mn.text.trim() && conf(mn) + 0.1 >= conf(lid)) return { text: mn.text, language: "mn", probs: { mn: 0.9 } };
+    }
+    return first;
+  }
 
   const detected = lid ? (lidResult(lid).language as Lang) : null;
   const tries = await Promise.all(

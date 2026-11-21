@@ -31,7 +31,7 @@ import { skyFamily } from "@/components/aspire/Sky";
 import { VoiceOrb, voiceOrbWord, type VoiceOrbState } from "@/components/ui/voice-orb";
 import { AQI_ORDER, SKY_KINDS, type AmbientSky, type SkyKind } from "@/lib/ambient-types";
 import { applyActions, takeDue, useDevice } from "@/lib/device-store";
-import { useDisplayPrefs, useMedia } from "@/lib/display-prefs";
+import { isImperial, useDisplayPrefs, useMedia } from "@/lib/display-prefs";
 import { isErdenet } from "@/lib/geo";
 import { greeting, notableFrom, notableSentence } from "@/lib/greeting";
 import { detectTextLanguage, HTML_LANG, isLang, type Lang } from "@/lib/lang";
@@ -325,7 +325,12 @@ export default function Assistant() {
             routines: d.routines ?? [],
             lessons: d.lessons ?? [],
             connected,
-            settings: { voice: d.settings?.voice, title: d.settings?.title ?? "mr" },
+            settings: {
+              voice: d.settings?.voice,
+              title: d.settings?.title ?? "mr",
+              // The same units as the screen (Settings, mirrored on <html data-units>), so spoken numbers match.
+              units: isImperial(document.documentElement.dataset.units === "imperial" ? "imperial" : document.documentElement.dataset.units === "metric" ? "metric" : "auto") ? "imperial" : "metric",
+            },
             ...(location ? { location } : {}),
           },
         }),
@@ -385,7 +390,7 @@ export default function Assistant() {
     voice.unlock(); // inside the tap, before any await: iOS plays the reply only then
     acceptConsent();
     setDraft("");
-    void askBrain(q, detectTextLanguage(q));
+    void askBrain(q, detectTextLanguage(q, lang));
   };
 
   // ---- sheets: remember the opener ourselves (the app root turns inert while a sheet is open) ----
@@ -494,7 +499,7 @@ export default function Assistant() {
     () => buildSuggestions({ ambient: shown, hour: localHour, lang, tags: deviceTags ? deviceTags.split(",") : [] }),
     [shown, localHour, lang, deviceTags],
   );
-  const imperial = prefs.units === "imperial" || (prefs.units === "auto" && /-(US|LR|MM)$/i.test(deviceTags.split(",")[0] ?? ""));
+  const imperial = isImperial(prefs.units);
   const readouts = hudReadouts(shown, t, { imperial, openMap, openLocation: () => openSheet("settings"), now: minute == null ? null : minute * 60_000 });
   const erdenet = (!!ambient?.coords && isErdenet(ambient.coords.lat, ambient.coords.lng)) || ambient?.nextBus?.source === "erdenet-live";
   const mapStops = erdenet ? [] : (ambient?.stops ?? []).flatMap((s) => (s.lat != null && s.lng != null ? [{ name: s.name, lat: s.lat, lng: s.lng }] : []));

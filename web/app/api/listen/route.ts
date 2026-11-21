@@ -1,4 +1,4 @@
-import { chooseSpokenLanguage } from "@/lib/lang";
+import { chooseSpokenLanguage, isLang } from "@/lib/lang";
 import { SpeechOffline, transcribe } from "@/lib/speech";
 
 import { requireUser, signedOut } from "@/lib/auth";
@@ -21,9 +21,12 @@ export async function POST(req: Request) {
   if (audio.size > 4_000_000) return Response.json({ error: "audio too long" }, { status: 413 });
 
   try {
-    const stt = await transcribe(audio);
+    // The language the person has been using (validated): settles Mongolian vs Russian close calls.
+    const h = form?.get("hint");
+    const hint = isLang(h) ? h : undefined;
+    const stt = await transcribe(audio, hint);
     const text = stt.text.trim();
-    return Response.json({ text, lang: chooseSpokenLanguage(text, stt.probs) });
+    return Response.json({ text, lang: chooseSpokenLanguage(text, stt.probs, hint) });
   } catch (e) {
     if (e instanceof SpeechOffline) {
       console.error("listen:", e.message);

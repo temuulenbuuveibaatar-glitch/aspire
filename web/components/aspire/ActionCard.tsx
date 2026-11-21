@@ -28,7 +28,7 @@ import { useState } from "react";
 import { CALENDAR, hasScope } from "@/components/aspire/GmailConnect";
 import { temp } from "@/components/aspire/readouts";
 import { useStillMotion } from "@/components/aspire/Sheet";
-import { useDisplayPrefs } from "@/lib/display-prefs";
+import { isImperial, useDisplayPrefs } from "@/lib/display-prefs";
 import { HTML_LANG, LANGS, type Lang } from "@/lib/lang";
 import { gmailComposeUrl, isGoogleMapsUrl, mailtoUrl, smsUrl, telegramShareUrl, telUrl } from "@/lib/links";
 import type { Channel, ClientAction } from "@/lib/tools/types";
@@ -571,7 +571,7 @@ function MessageCard({
 
 function WeatherCard({ action, t }: { action: Extract<Card, { type: "weather" }>; t: T }) {
   const [prefs] = useDisplayPrefs();
-  const deg = (c: number) => temp(c, prefs.units === "imperial", false);
+  const deg = (c: number) => temp(c, isImperial(prefs.units), false);
   if (typeof action.tempC !== "number" || !Number.isFinite(action.tempC)) return null;
   const lang = langOf(t);
   const name = (k: string) => t.hud.kinds[k as keyof T["hud"]["kinds"]] ?? "";

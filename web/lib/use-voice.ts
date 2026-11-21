@@ -252,6 +252,7 @@ export function useVoice(handlers: VoiceHandlers) {
       const form = new FormData();
       const type = rec.mimeType || chunks[0]?.type || "audio/webm";
       form.append("audio", new Blob(chunks, { type }), type.includes("mp4") ? "speech.m4a" : "speech.webm");
+      form.append("hint", h.current.lang); // the language in use: settles Mongolian vs Russian
       const res = await fetch("/api/listen", { method: "POST", body: form }).catch(() => null);
       const data = (await res?.json().catch(() => null)) as { text?: string; lang?: Lang; error?: string } | null;
       if (!res?.ok || !data?.text || !data.lang) {

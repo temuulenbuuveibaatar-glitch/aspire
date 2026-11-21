@@ -81,10 +81,11 @@ function cleanDevice(raw: RawDevice | undefined): DeviceContext {
         .slice(0, 30)
         .map((r) => ({ id: r.id.slice(0, 40), text: r.text.slice(0, 200), at: r.at.slice(0, 40), repeatDaily: r.repeatDaily === true }))
     : [];
-  const s = (raw?.settings ?? {}) as { voice?: unknown; title?: unknown };
+  const s = (raw?.settings ?? {}) as { voice?: unknown; title?: unknown; units?: unknown };
   const settings = {
     voice: s.voice === "friday" ? ("friday" as const) : ("jarvis" as const),
     title: (s.title === "mr" || s.title === "mrs" ? s.title : "") as Title,
+    units: s.units === "imperial" ? ("imperial" as const) : ("metric" as const),
   };
   const routines: Routine[] = Array.isArray(raw?.routines)
     ? raw.routines

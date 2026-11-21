@@ -74,8 +74,62 @@ function countHits(words: string[], tokens: string[]): number {
   return tokens.reduce((n, t) => n + (set.has(t) ? 1 : 0), 0);
 }
 
-/** Detect the language of typed or transcribed text. */
-export function detectTextLanguage(text: string): Lang {
+// Common Mongolian words with no ө/ү (those letters alone already decide). Kept to words Russian lacks.
+const MN_MORE = [
+  "би", "бид", "та", "тань", "танд", "надад", "надтай", "чамд", "тэд", "бол", "байх", "байсан", "байгаа", "байдаг",
+  "байна", "бна", "уу", "юу", "вэ", "бэ", "яах", "яагаад", "яасан", "ямар", "хэн", "хэнд", "хэрэг", "хэрэгтэй",
+  "хаана", "хаашаа", "хаанаас", "хэзээ", "хэдэн", "хэд", "хэр", "хир", "аль", "ийм", "тийм", "энд", "тэнд", "одоо",
+  "дараа", "маргааш", "заавал", "болох", "болно", "болсон", "болж", "гэж", "гэсэн", "гэх", "гэнэ", "гээд", "ч",
+  "нь", "ба", "бас", "дахин", "дахиад", "тэгээд", "тэгвэл", "харин", "эсвэл", "магадгүй", "сайхан", "сайн", "муу",
+  "бага", "маш", "шиг", "аваад", "авах", "ав", "явах", "яв", "ирэх", "ир", "хийх", "хий", "хэл",
+  "хэлэх", "хэлээч", "хэлж", "харуул", "харах", "нээ", "нээх", "дуу", "дууг", "тоглуул", "тоглуулах", "хайх",
+  "хай", "олох", "ол", "мэдэх", "мэдэхгүй", "мэдээ", "мэдээлэл", "цаг", "агаар", "агаарын", "цасан", "бороо",
+  "хүйтэн", "дулаан", "халуун", "салхи", "зам", "замын", "автобус", "автобусны", "такси", "машин", "буудал",
+  "буудлын", "хот", "хотын", "аймаг", "гудамж", "байр", "гэр", "ажил", "ажлын", "сургууль", "эмнэлэг", "дэлгүүр",
+  "баярлалаа", "уучлаарай", "зүгээр", "тийм", "үгүй", "за", "заа", "хаха", "ээж", "аав", "эмээ", "ах", "эгч",
+  "дүү", "найз", "мөнгө", "төгрөг", "хоол", "ус", "цай", "кино", "ном", "утас", "залга", "залгах", "мессеж",
+  "илгээ", "илгээх", "бич", "бичих", "код", "програм", "сануул", "сануулах", "хуанли", "уулзалт", "хэдийд",
+];
+// Russian-only words and endings (not used in Mongolian).
+const RU_MORE = [
+  "что", "это", "как", "где", "когда", "почему", "зачем", "кто", "мне", "меня", "мой", "моя", "мои", "тебя", "тебе",
+  "вас", "вам", "нам", "нас", "они", "она", "оно", "он", "его", "ее", "её", "их", "был", "была", "были", "будет",
+  "есть", "нет", "да", "очень", "уже", "еще", "ещё", "только", "тоже", "также", "сейчас", "потом", "здесь", "там",
+  "все", "всё", "весь", "можно", "нужно", "надо", "хочу", "хочешь", "пожалуйста", "спасибо", "привет", "погода",
+  "сегодня", "завтра", "вчера", "время", "сколько", "какой", "какая", "какие", "который", "этот", "эта", "эти",
+  "или", "но", "если", "чтобы", "потому", "для", "без", "под", "над", "при", "про", "через", "после", "перед",
+  "напиши", "написать", "письмо", "маме", "мама", "папа", "включи", "позвони", "найди", "открой", "покажи",
+  "скажи", "расскажи", "помоги", "сделай", "закажи", "поставь", "напомни", "давай", "хорошо", "ладно",
+];
+const MN_SET = new Set([...MN_WORDS, ...MN_MORE]);
+const RU_SET = new Set([...RU_WORDS, ...RU_MORE]);
+/** Mongolian morphology: case and verb endings, and the long vowels Russian words almost never have. */
+const MN_SUFFIX = /(аар|ээр|оор|өөр|ын|ийн|ний|тай|тэй|той|гүй|лаа|лээ|лоо|сан|сэн|сон|даг|дэг|дог|аад|ээд|оод|нэ|аач|ээч|оорой|аарай|ээрэй|руу|рүү|луу|лүү|аас|ээс|оос|өөс)$/;
+const MN_LONG_VOWEL = /аа|ээ|оо|уу|иа|иу|иэ/; // not "ий": Russian has it (который)
+const RU_SUFFIX = /(ого|его|ому|ему|ться|тся|ешь|ишь|ете|ите|ают|яют|ует|ают|ость|ение|ание|ский|ская|ское|ные|ный|ная|ное|ыми|ими|ами|ями)$/;
+
+/** Mongolian vs Russian for Cyrillic text: words, then grammar, then the person's own recent language. */
+function cyrillicLanguage(t: string, tokens: string[], hint?: Lang): Lang {
+  // ө and ү exist in Mongolian Cyrillic but not in Russian.
+  if (/[өү]/.test(t)) return "mn";
+  let mn = 0, ru = 0;
+  for (const w of tokens) {
+    if (MN_SET.has(w)) mn += 3;
+    if (RU_SET.has(w)) ru += 3;
+    if (w.length > 3 && MN_SUFFIX.test(w)) mn += 1;
+    if (w.length > 4 && RU_SUFFIX.test(w)) ru += 1;
+    if (MN_LONG_VOWEL.test(w)) mn += 1;
+    if (/ы/.test(w) && !/ын$/.test(w)) ru += 1; // ы mid-word: Russian; Mongolian has it mostly in -ын
+    if (/[щъ]/.test(w)) ru += 1;
+  }
+  if (mn > ru) return "mn";
+  if (ru > mn) return "ru";
+  // A tie: keep the language the person has been using; otherwise Mongolian (the home audience).
+  return hint === "ru" ? "ru" : "mn";
+}
+
+/** Detect the language of typed or transcribed text. `hint`: the person's recent language, for close calls. */
+export function detectTextLanguage(text: string, hint?: Lang): Lang {
   const greeting = greetingLanguage(text);
   if (greeting) return greeting;
 
@@ -84,13 +138,7 @@ export function detectTextLanguage(text: string): Lang {
 
   const tokens = t.split(/[^\p{L}]+/u).filter(Boolean);
 
-  if (/\p{Script=Cyrillic}/u.test(t)) {
-    // ө and ү exist in Mongolian Cyrillic but not in Russian.
-    if (/[өү]/.test(t)) return "mn";
-    const mn = countHits(MN_WORDS, tokens);
-    const ru = countHits(RU_WORDS, tokens);
-    return mn > ru ? "mn" : "ru";
-  }
+  if (/\p{Script=Cyrillic}/u.test(t)) return cyrillicLanguage(t, tokens, hint);
 
   // Latin script: transliterated Mongolian / Russian / Chinese, German or English.
   if (ZH_LATIN.some((w) => t.includes(w))) return "zh";
@@ -109,6 +157,7 @@ export function detectTextLanguage(text: string): Lang {
 export function chooseSpokenLanguage(
   transcript: string,
   probs: Partial<Record<string, number>> | undefined,
+  hint?: Lang,
 ): Lang {
   const greeting = greetingLanguage(transcript);
   if (greeting) return greeting;
@@ -129,9 +178,9 @@ export function chooseSpokenLanguage(
     }
     // Whisper often confuses Mongolian and Russian; let the words decide.
     if (best && (best === "ru" || best === "mn") && /\p{Script=Cyrillic}/u.test(transcript)) {
-      return detectTextLanguage(transcript);
+      return detectTextLanguage(transcript, hint);
     }
     if (best && bestP >= 0.3) return best;
   }
-  return detectTextLanguage(transcript);
+  return detectTextLanguage(transcript, hint);
 }

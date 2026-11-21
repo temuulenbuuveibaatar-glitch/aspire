@@ -139,3 +139,19 @@ export function useStill(): boolean {
   const reduced = useMedia("(prefers-reduced-motion: reduce)");
   return useCalm() || reduced;
 }
+
+/**
+ * °F/mph or °C/km/h. "auto" is imperial only where people actually use it: the device region is the US,
+ * Liberia or Myanmar AND the clock is in that region (an en-US browser in Mongolia gets °C).
+ */
+export function isImperial(units: UnitsPref): boolean {
+  if (units !== "auto") return units === "imperial";
+  if (typeof navigator === "undefined") return false;
+  const region = (navigator.language.split("-")[1] ?? "").toUpperCase();
+  let zone = "";
+  try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ""; } catch { /* no Intl */ }
+  if (region === "US") return /^(America|Pacific\/Honolulu|US)\//.test(zone) || zone === "Pacific/Honolulu";
+  if (region === "LR") return zone === "Africa/Monrovia";
+  if (region === "MM") return zone === "Asia/Yangon" || zone === "Asia/Rangoon";
+  return false;
+}
