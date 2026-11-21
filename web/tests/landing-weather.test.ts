@@ -6,6 +6,11 @@ import { safeKind } from "@/components/aspire/Sky";
 import { SKY_KINDS } from "@/lib/ambient-types";
 import { landingWeather, resetLandingWeather } from "@/lib/landing-weather";
 
+// Next's io(): resolved at once in a real request, hanging while a page is prerendered. `gate.wait`
+// stands in for the hanging one; null is a real request.
+const gate = vi.hoisted(() => ({ wait: null as Promise<void> | null }));
+vi.mock("next/cache", () => ({ io: () => gate.wait ?? Promise.resolve() }));
+
 const NOW = new Date("2026-11-21T15:20:00Z");
 const ERDENET_URL = "https://api.open-meteo.com/v1/forecast?latitude=49.0&longitude=104.1&current=temperature_2m,weather_code,is_day,cloud_cover,wind_speed_10m&timezone=auto";
 
@@ -37,6 +42,7 @@ const sent = (c: Call) => `${new URL(c.url).searchParams.get("latitude")},${new 
 
 beforeEach(() => {
   resetLandingWeather();
+  gate.wait = null;
   vi.setSystemTime(NOW);
 });
 afterEach(() => {
@@ -172,10 +178,10 @@ describe("one request per cell per 10 minutes", () => {
   it("sends one request for visitors who arrive together", async () => {
     let release: (body: unknown) => void = () => {};
     const calls = mockFetch(() => new Promise((ok) => (release = ok)));
-    const both = Promise.all([landingWeather(NONE), landingWeather(NONE, { sky: "rain" }), landingWeather(vercel("49.03", "104.08", "Erdenet"))]);
+    const three = Promise.all([landingWeather(NONE), landingWeather(NONE, { sky: "rain" }), landingWeather(vercel("49.03", "104.08", "Erdenet"))]);
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     release(SNOWY);
-    const [a, b, c] = await both;
+    const [a, b, c] = await three;
     expect(calls).toHaveLength(1);
     expect([a?.sky.kind, b?.sky.kind, c?.place]).toEqual(["snow", "rain", "Erdenet"]);
   });
@@ -292,7 +298,8 @@ describe("the preview switch (?sky= and ?hour=)", () => {
     // Typed by hand: case and stray spaces do not matter.
     expect(await landingWeather(NONE, { sky: " Rain " })).toMatchObject({ preview: true, sky: { kind: "rain" } });
     expect(await landingWeather(NONE, { hour: " 9 " })).toMatchObject({ preview: true, localHour: 9 });
-    expect((await landingWeather(NONE, { sky: ["rain", "storm"], hour: ["5", "22"] }))).toMatchObject({ preview: true, localHour: 5, sky: { kind: "rain" } });
+    // A repeated parameter: the first value counts.
+    expect(await landingWeather(NONE, { sky: ["rain", "storm"], hour: ["5", "22"] })).toMatchObject({ preview: true, localHour: 5, sky: { kind: "rain" } });
   });
 
   it("ignores everything else: the real reading, not called a preview", async () => {
@@ -310,6 +317,40 @@ describe("the preview switch (?sky= and ?hour=)", () => {
     // One valid half still previews.
     expect(await landingWeather(NONE, { sky: "banana", hour: "07" })).toMatchObject({ preview: true, localHour: 7, sky: { kind: "snow" } });
     expect(await landingWeather(NONE, { sky: "fog", hour: 23 })).toMatchObject({ preview: true, localHour: 23, sky: { kind: "fog" } });
+  });
+});
+
+// Cache Components with Partial Prefetching: reading the clock while a page is prerendered (the
+// static shell, or the per-session shell a link prefetch keeps) is an error in Next 16. io() is what
+// keeps this request-time work out of every prerender.
+describe("stays out of prerenders (Next's io)", () => {
+  it("reads nothing and asks nothing until io() lets request-time work run", async () => {
+    let open: () => void = () => {};
+    gate.wait = new Promise<void>((ok) => (open = ok));
+    const calls = mockFetch();
+    const headers = vercel("49.0278", "104.0445", "Erdenet");
+    const read = vi.spyOn(headers, "get");
+    let settled = false;
+    const pending = landingWeather(headers, { sky: "snow" }).finally(() => (settled = true));
+    await new Promise((later) => setTimeout(later, 25));
+    // A prerender ends here: the promise is still pending, so the page keeps its fallback.
+    expect([calls.length, read.mock.calls.length, settled]).toEqual([0, 0, false]);
+    open();
+    expect(await pending).toMatchObject({ place: "Erdenet", local: true, preview: true });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("gives null, not a throw, when the prerender ends while it waits", async () => {
+    gate.wait = Promise.reject(new Error("During prerendering, `io()` rejects when the prerender is complete."));
+    const calls = mockFetch();
+    await expect(landingWeather(NONE)).resolves.toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("the installed Next has io(), and outside Next it resolves at once", async () => {
+    const real = await vi.importActual<typeof import("next/cache")>("next/cache");
+    expect(typeof real.io).toBe("function");
+    await expect(Promise.race([real.io().then(() => "now"), new Promise((later) => setTimeout(() => later("late"), 200))])).resolves.toBe("now");
   });
 });
 
@@ -331,7 +372,7 @@ describe("the privacy policy says so", () => {
       const told = section.split(/<\/?(?:p|li)>/).find((part) => re.test(part));
       expect([id, told !== undefined]).toEqual([id, true]);
       // No dashes, arrows or emojis in what was added.
-      expect(told).not.toMatch(/[‒-―←-⇿]|\p{Extended_Pictographic}/u);
+      expect(told).not.toMatch(/[\u2012-\u2015\u2190-\u21FF]|\p{Extended_Pictographic}/u);
     }
   });
 });

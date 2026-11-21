@@ -108,14 +108,20 @@ export const APPS: readonly AppLink[] = [
   }),
   // Mainland China, where Google links may fail. URIs from the official docs: Amap (lbs.amap.com
   // iOS "poi" + uri.amap.com/search; callnative=1 hands over to the app on Android too) and Baidu
-  // (lbsyun.baidu.com place/search; src is the caller id). {q} stays last so the re-check holds.
+  // (lbsyun.baidu.com place/search; src is the caller id; region=全国, nationwide, or Baidu's web
+  // page drops the search). {q} stays last so the re-check holds. Bare "Baidu" / "百度" usually
+  // means the search engine, so it never resolves to the map app.
   app("amap", "Amap", "iosamap://", "https://www.amap.com", ["ios"], ["gaode", "gaode maps", "高德", "高德地图", "гаодэ", "гаоде", "амап"], {
     local: { zh: "高德地图" },
     target: { kind: "query", scheme: "iosamap://poi?sourceApplication=Aspire&name={q}", web: "https://uri.amap.com/search?src=aspire&callnative=1&keyword={q}" },
   }),
-  app("baidu-maps", "Baidu Maps", "baidumap://", "https://map.baidu.com", MOBILE, ["baidu", "baidu map", "百度地图", "百度", "байду", "байду карты"], {
+  app("baidu-maps", "Baidu Maps", "baidumap://", "https://map.baidu.com", MOBILE, ["baidu map", "百度地图", "байду карты"], {
     local: { zh: "百度地图" },
-    target: { kind: "query", scheme: "baidumap://map/place/search?src=webapp.aspire.city&query={q}", web: "https://api.map.baidu.com/place/search?output=html&src=webapp.aspire.city&query={q}" },
+    target: {
+      kind: "query",
+      scheme: "baidumap://map/place/search?src=webapp.aspire.city&region=%E5%85%A8%E5%9B%BD&query={q}",
+      web: "https://api.map.baidu.com/place/search?output=html&src=webapp.aspire.city&region=%E5%85%A8%E5%9B%BD&query={q}",
+    },
   }),
   // Opens the app only; no amount or payee is ever put in the link.
   app("alipay", "Alipay", "alipays://", "https://www.alipay.com", MOBILE, ["支付宝", "zhifubao", "алипэй", "алипей", "али пэй"], { local: { zh: "支付宝" } }),

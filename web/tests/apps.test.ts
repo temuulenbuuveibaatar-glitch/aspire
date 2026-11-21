@@ -104,6 +104,12 @@ describe("resolveApp", () => {
     expect(closeApps("cal", "en")).toEqual(expect.arrayContaining(["Calculator", "Calendar"]));
   });
 
+  it("bare Baidu (usually the search engine) is never taken for Baidu Maps", () => {
+    for (const q of ["打开百度", "百度", "Baidu", "open baidu", "открой байду"]) expect(resolveApp(q, "zh"), q).toBeNull();
+    expect(closeApps("Baidu", "zh")).toContain("百度地图");
+    expect(closeApps("байду", "ru")).toContain("Baidu Maps");
+  });
+
   it.each(["team", "room", "Lime", "Motion", "Sigma", "world", "work", "maid", "Snack", "Fiber", "stream"])(
     "does not guess from a one-letter typo of a short name: %s",
     (q) => {
@@ -147,8 +153,10 @@ describe("targets", () => {
     expect(amap.web).toBe(`https://uri.amap.com/search?src=aspire&callnative=1&keyword=${encodeURIComponent("火锅&callnative=0&keyword=x")}`);
     expect(amap.scheme.startsWith("iosamap://poi?sourceApplication=Aspire&name=")).toBe(true);
     const baidu = buildAppLink(appById("baidu-maps")!, "海底捞 上海");
-    expect(baidu.scheme).toBe("baidumap://map/place/search?src=webapp.aspire.city&query=%E6%B5%B7%E5%BA%95%E6%8D%9E%20%E4%B8%8A%E6%B5%B7");
-    expect(baidu.web.startsWith("https://api.map.baidu.com/place/search?")).toBe(true);
+    // region=全国 (nationwide): without it Baidu's web page drops the search (checked 2026-11-21).
+    expect(baidu.scheme).toBe("baidumap://map/place/search?src=webapp.aspire.city&region=%E5%85%A8%E5%9B%BD&query=%E6%B5%B7%E5%BA%95%E6%8D%9E%20%E4%B8%8A%E6%B5%B7");
+    expect(baidu.web).toBe("https://api.map.baidu.com/place/search?output=html&src=webapp.aspire.city&region=%E5%85%A8%E5%9B%BD&query=%E6%B5%B7%E5%BA%95%E6%8D%9E%20%E4%B8%8A%E6%B5%B7");
+    expect(new URL(baidu.web).searchParams.get("region")).toBe("全国");
     expect(buildAppLink(appById("alipay")!, "100 yuan to Li").targetError).toMatch(/does not take a target/);
     expect(appById("alipay")!.scheme).toBe("alipays://");
   });
@@ -322,6 +330,21 @@ describe("OpenAppCard", () => {
     expect(en).toContain('rel="noopener noreferrer"');
     for (const l of LANGS) expect(html(spotify, l)).toContain("Spotify");
     expect(html(spotify, "de")).toContain("Im Web öffnen");
+  });
+
+  it("Netflix: the https link opens in a new tab (the chat stays), with no second button to the same URL", () => {
+    const url = "https://www.netflix.com/search?q=Stranger%20Things";
+    const out = html({ type: "open_app", id: "netflix", name: "Netflix", scheme: url, web: url });
+    const links = out.match(/<a [^>]*>/g) ?? [];
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain(`href="${url}"`);
+    expect(links[0]).toContain('target="_blank"');
+    expect(links[0]).toContain('rel="noopener noreferrer"');
+    expect(out).toContain("Opens in a new tab");
+    expect(out).not.toContain("Open on the web");
+    expect(out).not.toContain("installed on this device");
+    // An app scheme keeps the plain link in the same tab.
+    expect(html(spotify)).toMatch(/<a href="spotify:search:queen" class=/);
   });
 
   it("omits the web button when there is none", () => {

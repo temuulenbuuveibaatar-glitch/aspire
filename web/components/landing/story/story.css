@@ -1,0 +1,978 @@
+/*
+ * The scroll story of the opening page (components/landing/Story.tsx and this folder): five pinned
+ * scenes, the city marquee and the feature index. Colours, radii, shadows and easings are the app's
+ * tokens (app/globals.css @theme); the card, chip, panel and HUD materials are the app's own classes.
+ *
+ * Rules sit in the components layer, so a Tailwind utility on the same element still wins. The
+ * layer order is repeated here so it holds whichever stylesheet the browser reads first.
+ *
+ * Every scene reads in normal flow by default: that is the server's HTML, a browser without
+ * JavaScript, reduced motion, Calm mode and a short screen. [data-live] is set by script alone
+ * (story/mode.ts): only then is a scene a tall strip with a stage pinned to the screen.
+ * Motion is transform, opacity and filter; will-change is on only while a scene is on screen.
+ */
+@layer theme, base, components, utilities;
+
+@layer components {
+  /* ---------------------------------------------------------------- */
+  /* A scene                                                           */
+  /* ---------------------------------------------------------------- */
+
+  .st-story {
+    position: relative;
+  }
+  .st-scene {
+    position: relative;
+    /* Screens the strip is tall while live: phones, then 768 px and up (set per scene in SceneFrame). */
+    --st-k: var(--st-k-s, 2);
+  }
+  @media (min-width: 48rem) {
+    .st-scene {
+      --st-k: var(--st-k-l, 2.4);
+    }
+  }
+  .st-stage {
+    position: relative;
+  }
+  .st-inner {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.25rem, 3vw, 2.25rem);
+    width: 100%;
+    max-width: 96rem;
+    margin-inline: auto;
+    padding-block: clamp(3rem, 9vw, 6.5rem);
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+  @media (min-width: 40rem) {
+    .st-inner {
+      padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+
+  /* Live: the strip is several screens tall and its stage stays on screen while it is scrolled
+     through. svh, so a phone's address bar sliding away changes nothing. */
+  .st-scene[data-live] {
+    height: calc(var(--st-k) * 100vh);
+    height: calc(var(--st-k) * 100svh);
+  }
+  .st-scene[data-live] > .st-stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    overflow: hidden;
+  }
+  .st-scene[data-live] .st-inner {
+    height: 100%;
+    gap: clamp(0.75rem, 2.2vh, 1.75rem);
+    padding-block: clamp(0.875rem, 3.5vh, 2.5rem);
+    transform-origin: 50% 40%;
+  }
+  .st-scene[data-live][data-active] .st-inner {
+    will-change: transform, opacity;
+  }
+  /* Light on the stage: a wide mint glow, placed where each scene's subject sits. Scene 03 has none:
+     there the sky is the light. */
+  .st-scene[data-live] > .st-stage::before {
+    content: "";
+    position: absolute;
+    top: var(--st-ly, 62%);
+    left: var(--st-lx, 50%);
+    width: 76vmax;
+    height: 76vmax;
+    margin: -38vmax 0 0 -38vmax;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(168 230 196 / 0.15), rgb(168 230 196 / 0.04) 48%, rgb(168 230 196 / 0) 72%);
+    pointer-events: none;
+  }
+  .st-scene[data-scene="ask"] {
+    --st-lx: 78%;
+    --st-ly: 44%;
+  }
+  .st-scene[data-scene="city"] {
+    --st-ly: 72%;
+  }
+  .st-scene[data-scene="weather"] > .st-stage::before {
+    display: none;
+  }
+  .st-scene[data-scene="languages"] {
+    --st-lx: 26%;
+    --st-ly: 82%;
+  }
+  .st-scene[data-scene="work"] {
+    --st-lx: 62%;
+    --st-ly: 84%;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* The head of a scene                                               */
+  /* ---------------------------------------------------------------- */
+
+  /* A line of type rises out of this. */
+  .st-mask {
+    display: block;
+    overflow: hidden;
+  }
+  .st-row {
+    display: block;
+  }
+
+  .st-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(0.625rem, 1.6vw, 1.5rem);
+  }
+  /* The index numeral: the display face, large. */
+  .st-num {
+    display: block;
+    font-size: clamp(2.75rem, min(7vw, 10vh), 6.5rem);
+    line-height: 0.82;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--color-accent);
+  }
+  /* Small labels: uppercase, wide-tracked, mint. (Chinese: no tracking, no caps, by the global rule.) */
+  .st-label {
+    padding-bottom: 0.3rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .st-rule {
+    position: relative;
+    flex: 1 1 1.5rem;
+    min-width: 1.5rem;
+    height: 1px;
+    margin-bottom: 0.7rem;
+    background-color: rgb(238 243 240 / 0.24);
+    transform-origin: left center;
+  }
+  .st-rule-fill {
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-accent);
+    transform-origin: left center;
+  }
+
+  /* The number of rows, at the end of the feature index's rule. */
+  .st-count {
+    display: none;
+    padding-bottom: 0.3rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    letter-spacing: 0.16em;
+    white-space: nowrap;
+    color: var(--color-ink);
+  }
+  @media (min-width: 26rem) {
+    .st-count {
+      display: block;
+    }
+  }
+
+  /* Giant type, tight leading. It follows the screen's width, and its height too, so two lines
+     always fit a pinned stage. */
+  .st-title {
+    font-size: clamp(2.5rem, min(8.4vw, 13vh), 9rem);
+    line-height: 0.95;
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    color: var(--color-ink);
+    hyphens: none;
+    text-wrap: balance;
+  }
+  /* Room inside the mask for accents above and descenders below. */
+  .st-title .st-mask {
+    margin-block: -0.1em -0.14em;
+    padding-block: 0.1em 0.14em;
+  }
+  .st-title:lang(zh) {
+    line-height: 1.1;
+  }
+  .st-line {
+    max-width: 34rem;
+    font-size: clamp(1rem, 0.9rem + 0.45vw, 1.375rem);
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+
+  /* Chinese labels are neither tracked nor capitalised (the app's global rule), so they are set a
+     little larger to carry the same weight. */
+  :is(.st-label, .st-count, .st-status, .st-code, .st-mq-label):lang(zh) {
+    font-size: 0.9375rem;
+  }
+
+  /* The label on everything that is not a live reading. Dashed, like the app's estimated minutes. */
+  .st-tag {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    border: 1px dashed var(--color-line-strong);
+    border-radius: 8px;
+    padding: 1px 8px;
+    background-color: rgb(11 19 17 / 0.78);
+    color: var(--color-ink-muted);
+    font-size: var(--text-meta);
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 01 Ask                                                            */
+  /* ---------------------------------------------------------------- */
+
+  .st-talk {
+    --st-orb: 4rem;
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  @media (min-width: 64rem) {
+    .st-talk {
+      --st-orb: clamp(9.5rem, 30vh, 17rem);
+      gap: 1.25rem;
+    }
+  }
+  .st-orb {
+    position: relative;
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+  }
+  /* A soft light behind the orb: there from the first paint, before the orb's canvas draws. */
+  .st-orb-glow {
+    position: absolute;
+    inset: -55%;
+    border-radius: 9999px;
+    background: radial-gradient(closest-side, rgb(168 230 196 / 0.3), rgb(168 230 196 / 0.08) 46%, rgb(168 230 196 / 0) 74%);
+    pointer-events: none;
+  }
+  .st-status {
+    min-height: 1.35em;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+  }
+  /* A bubble or a reply coming and going with the exchange. A state-driven transition, so
+     scrolling back and forth retargets it instead of restarting it. The way out is the shorter one. */
+  .st-pop {
+    transition:
+      opacity 320ms var(--ease-out-strong),
+      translate 320ms var(--ease-out-strong);
+  }
+  .st-pop[data-on="false"] {
+    opacity: 0;
+    translate: 0 10px;
+    transition-duration: 160ms;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 02 The city, live: the card stack                                 */
+  /* ---------------------------------------------------------------- */
+
+  /* Six cells with no gap between them (each pads its card), so "100% of a cell" is exactly one
+     step of the grid and the pile can be written in percent (story/math.ts stackPose). */
+  .st-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: -0.25rem;
+  }
+  .st-cell {
+    position: relative;
+    min-width: 0;
+    padding: 0.25rem;
+  }
+  @media (min-width: 40rem) {
+    .st-cards {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin: -0.375rem;
+    }
+    .st-cell {
+      padding: 0.375rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .st-cards {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
+  /* Live: the grid takes what is left of the stage (up to a cap) and sits at its foot; its rows
+     share that height, and each cell is a size container so a short card can drop its extras. */
+  .st-scene[data-live] .st-cards {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: 27rem;
+    margin-top: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  @media (min-width: 40rem) {
+    .st-scene[data-live] .st-cards {
+      max-height: 30rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .st-scene[data-live] .st-cards {
+      max-height: 20.5rem;
+    }
+  }
+  .st-scene[data-live] .st-cell {
+    container: st-cell / size;
+  }
+  .st-scene[data-live][data-active] .st-cell {
+    will-change: transform, opacity;
+  }
+
+  .st-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0.75rem;
+    transition:
+      translate 260ms var(--ease-out-strong),
+      border-color 200ms ease;
+  }
+  @media (min-width: 40rem) {
+    .st-card {
+      gap: 0.75rem;
+      padding: 1.125rem;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .st-cell:hover .st-card {
+      translate: 0 -6px;
+      border-color: var(--color-line-strong);
+    }
+  }
+  /* The Example label on a card is a short dashed mark; the word itself is shown once, in the key
+     beside the scene's line (SceneCity). Screen readers still get it on every card. */
+  .st-cards .st-tag {
+    width: 1.75rem;
+    height: 0.625rem;
+    overflow: hidden;
+    padding: 0;
+    color: transparent;
+    font-size: 0;
+  }
+  .st-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    color: var(--color-ink);
+    font-size: var(--text-meta);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+  .st-key-mark {
+    order: -1;
+    width: 1.75rem;
+    height: 0.625rem;
+    flex-shrink: 0;
+    border: 1px dashed var(--color-line-strong);
+    border-radius: 8px;
+    background-color: rgb(11 19 17 / 0.78);
+  }
+  /* A camera frame: the HUD's corner brackets, no picture. */
+  .st-cam {
+    --hb: linear-gradient(var(--color-hud), var(--color-hud));
+    background-image: var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb), var(--hb);
+    background-repeat: no-repeat;
+    background-size:
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px,
+      10px 1.5px,
+      1.5px 10px;
+    background-position:
+      left 5px top 5px,
+      left 5px top 5px,
+      right 5px top 5px,
+      right 5px top 5px,
+      left 5px bottom 5px,
+      left 5px bottom 5px,
+      right 5px bottom 5px,
+      right 5px bottom 5px;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 03 Real weather                                                   */
+  /* ---------------------------------------------------------------- */
+
+  .st-reel {
+    display: grid;
+    gap: clamp(0.5rem, 1.6vh, 1.25rem);
+    min-width: 0;
+  }
+  .st-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  .st-step {
+    display: inline-flex;
+  }
+  /* Four short bars: the one for the sky on screen is lit (SceneWeather Step). */
+  .st-step-dot {
+    width: 1.75rem;
+    height: 0.25rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background-color: var(--color-accent);
+  }
+  /* The four words share one place. */
+  .st-words {
+    display: grid;
+    align-items: end;
+    justify-items: start;
+    min-width: 0;
+  }
+  .st-words > * {
+    grid-area: 1 / 1;
+  }
+  /* Outlined: the sky behind the page shows through the letters (SceneWeather Outline). */
+  .st-word {
+    width: 100%;
+    font-size: calc(var(--st-fit, 1) * clamp(3.75rem, min(19vw, 27vh), 19rem));
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    transform-origin: 0 100%;
+  }
+  /* One em high with the baseline at 0.8: room below for descenders (the feet of a Cyrillic Д). */
+  /* From a tablet up the word is the picture: as wide as the stage allows. */
+  @media (min-width: 48rem) {
+    .st-word {
+      font-size: calc(var(--st-fit, 1) * clamp(3.75rem, min(21vw, 34vh), 24rem));
+    }
+  }
+  .st-outline {
+    display: block;
+    width: 100%;
+    height: 1em;
+    overflow: visible;
+  }
+  /* Half of this shows (the fill covers the inner half): a line of 1.5 to 3 px, by the size of the type. */
+  .st-outline text {
+    stroke-width: clamp(3px, 0.017em, 6px);
+  }
+  .st-scene[data-live][data-active] .st-word {
+    will-change: transform, opacity;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 04 Five languages                                                 */
+  /* ---------------------------------------------------------------- */
+
+  .st-codes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+  }
+  .st-code {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+  }
+  .st-code-name {
+    display: none;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+  @media (min-width: 40rem) {
+    .st-code-name {
+      display: inline;
+    }
+  }
+  /* The five lines share one place; the tallest sets its height, so the crossfade moves nothing. */
+  .st-says {
+    display: grid;
+    align-items: end;
+    min-width: 0;
+  }
+  .st-says > * {
+    grid-area: 1 / 1;
+  }
+  .st-say {
+    font-size: clamp(2.25rem, min(8.6vw, 15vh), 9.5rem);
+    line-height: 1.03;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--color-ink);
+    hyphens: none;
+    text-wrap: balance;
+    transform-origin: 0 100%;
+  }
+  .st-say:lang(zh) {
+    line-height: 1.15;
+  }
+  .st-scene[data-live][data-active] .st-say {
+    will-change: transform, opacity;
+  }
+  /* Still: the same five lines as a list. */
+  .st-lines {
+    display: grid;
+    gap: 0.625rem;
+  }
+  .st-lines-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.875rem;
+    font-size: clamp(1.375rem, 1rem + 2.2vw, 2.75rem);
+    line-height: 1.2;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+  .st-lines-code {
+    flex-shrink: 0;
+    min-width: 2.25rem;
+    font-size: 0.8125rem;
+    letter-spacing: 0.16em;
+    color: var(--color-accent);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 05 It does the work                                               */
+  /* ---------------------------------------------------------------- */
+
+  /* The reply and seven chips: four by two, or two by four on a phone. */
+  .st-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  @media (min-width: 64rem) {
+    .st-chips {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.875rem;
+    }
+  }
+  .st-scene[data-live] .st-chips {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: 24rem;
+    margin-top: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  @media (min-width: 64rem) {
+    .st-scene[data-live] .st-chips {
+      max-height: 17rem;
+    }
+  }
+  /* On a phone the icon sits above the word, so a long word (Напоминания, Erinnerungen) has the
+     whole chip to itself; from 640 px they sit side by side. */
+  .st-chip,
+  .st-ack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.25;
+    font-weight: 500;
+    color: var(--color-ink);
+    hyphens: auto;
+  }
+  @media (min-width: 40rem) {
+    .st-chip,
+    .st-ack {
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 1rem;
+      padding: 1.125rem 1.25rem;
+      font-size: 1.125rem;
+    }
+  }
+  /* Four across leaves a long word (Erinnerungen, Напоминания) little room until the screen is wide. */
+  @media (min-width: 80rem) {
+    .st-chip,
+    .st-ack {
+      font-size: 1.25rem;
+    }
+  }
+  .st-scene[data-live][data-active] .st-chip {
+    will-change: transform, opacity;
+  }
+  .st-chip-icon {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 9999px;
+    background-color: var(--color-surface-3);
+    color: var(--color-accent);
+  }
+  @media (min-width: 40rem) {
+    .st-chip-icon {
+      width: 3rem;
+      height: 3rem;
+    }
+  }
+  /* Who is speaking: the orb's ring, small. */
+  .st-ack-mark {
+    width: 1.375rem;
+    height: 1.375rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    border: 1.5px solid var(--color-accent);
+    box-shadow:
+      inset 0 0 0 4px rgb(11 19 17 / 0.9),
+      inset 0 0 0 12px var(--color-accent);
+  }
+  .st-ack-says {
+    min-width: 0;
+    font-weight: var(--font-weight-book);
+    overflow-wrap: anywhere;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* The city marquee                                                  */
+  /* ---------------------------------------------------------------- */
+
+  /* A solid band of the page colour, so the outlined names read as hollow (see .st-mq-item). */
+  .st-mq {
+    position: relative;
+    overflow: hidden;
+    overflow: clip;
+    border-block: 1px solid var(--color-line);
+    background-color: var(--color-bg);
+    padding-block: clamp(3.5rem, 9vw, 7rem);
+  }
+  .st-mq-label,
+  .st-mq-note {
+    max-width: 96rem;
+    margin-inline: auto;
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+  .st-mq-label {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .st-mq-note {
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+  .st-mq-rows {
+    display: grid;
+    gap: clamp(0.25rem, 1vw, 0.75rem);
+    margin-block: clamp(1.25rem, 3vw, 2.5rem);
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+  @media (min-width: 40rem) {
+    .st-mq-label,
+    .st-mq-note,
+    .st-mq-rows {
+      padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+  /* Still: the names wrap like any list, at half the size, so the list stays a screen or less. */
+  .st-mq-track {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.08em 0.4em;
+    font-size: clamp(2rem, 5.5vw, 5.25rem);
+    line-height: 1.04;
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    text-transform: uppercase;
+  }
+  /* Live: one long row of huge type, wider than the screen, that the scroll moves sideways. */
+  .st-mq[data-live] .st-mq-rows {
+    padding-inline: 0;
+  }
+  .st-mq[data-live] .st-mq-track {
+    flex-wrap: nowrap;
+    width: max-content;
+    font-size: clamp(2.75rem, 10.5vw, 10.5rem);
+  }
+  .st-mq[data-live][data-active] .st-mq-track {
+    will-change: transform;
+  }
+  /* Huge outlined type. The stroke is painted first and the fill (the band's own colour) over it:
+     that leaves the outer edge only, and hides the overlapping shapes a variable font has inside
+     its letters. Aspire's home city is the one filled in. */
+  .st-mq-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    white-space: nowrap;
+    color: var(--color-bg);
+    /* Half of this shows: a line of 1 to 1.5 px, by the size of the type. */
+    -webkit-text-stroke: clamp(2px, 0.03em, 3px) rgb(238 243 240 / 0.92);
+    paint-order: stroke fill;
+  }
+  .st-mq-item[data-home] {
+    color: var(--color-accent);
+    -webkit-text-stroke: 0;
+  }
+  /* Between two names: the orb's ring, small. Drawn, not typed, so it is never read out. */
+  .st-mq-item::after {
+    content: "";
+    width: 0.17em;
+    height: 0.17em;
+    flex-shrink: 0;
+    border: 2px solid var(--color-accent);
+    border-radius: 9999px;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* The feature index                                                 */
+  /* ---------------------------------------------------------------- */
+
+  .st-ix {
+    position: relative;
+    width: 100%;
+    max-width: 96rem;
+    margin-inline: auto;
+    padding-block: clamp(3rem, 8vw, 6.5rem);
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+  @media (min-width: 40rem) {
+    .st-ix {
+      padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+  .st-ix-head {
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(0.625rem, 1.6vw, 1.5rem);
+    margin-bottom: clamp(0.75rem, 2vw, 1.5rem);
+  }
+  .st-ix-rows {
+    border-bottom: 1px solid rgb(238 243 240 / 0.18);
+  }
+  /* Number, big title, one line: stacked on a phone, three columns from 1024 px. */
+  .st-ix-row {
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    border-top: 1px solid rgb(238 243 240 / 0.18);
+    padding-block: clamp(0.875rem, 2.2vw, 1.75rem);
+  }
+  .st-ix-num {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+  }
+  .st-ix-title {
+    font-size: clamp(1.75rem, 1rem + 3.6vw, 4.5rem);
+    line-height: 1.03;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--color-ink);
+    hyphens: none;
+    overflow-wrap: anywhere;
+  }
+  .st-ix-title:lang(zh) {
+    line-height: 1.15;
+  }
+  .st-ix-line {
+    grid-column: 2;
+    max-width: 30rem;
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+  @media (min-width: 64rem) {
+    .st-ix-row {
+      grid-template-columns: 5.5rem minmax(0, 1fr) minmax(0, 24rem);
+      column-gap: 2rem;
+    }
+    .st-ix-line {
+      grid-column: 3;
+    }
+  }
+  /* With a mouse: the row under the pointer steps forward and turns mint, the others fall back.
+     On the row's children, because the row's own opacity belongs to its entrance. */
+  @media (hover: hover) and (pointer: fine) {
+    .st-ix[data-live] .st-ix-row > * {
+      transition:
+        opacity 240ms var(--ease-out-strong),
+        translate 320ms var(--ease-out-strong),
+        color 200ms ease;
+    }
+    .st-ix[data-live] .st-ix-rows:hover .st-ix-row:not(:hover) > * {
+      opacity: 0.38;
+    }
+    .st-ix[data-live] .st-ix-row:hover .st-ix-title {
+      translate: 0.75rem 0;
+      color: var(--color-accent);
+    }
+  }
+  /* The picture that follows the pointer. Its position is a transform set by script; its coming and
+     going is a transition here (from 0.96, never from nothing; the way out is the shorter one). */
+  .st-ix-preview {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    width: 18rem;
+    pointer-events: none;
+  }
+  .st-ix-card {
+    position: relative;
+    height: 12rem;
+    opacity: 0;
+    scale: 0.96;
+    transition:
+      opacity 150ms ease-out,
+      scale 150ms ease-out;
+  }
+  .st-ix-card.hud {
+    background-color: rgb(18 28 25 / 0.97);
+  }
+  .st-ix-preview[data-on="true"] .st-ix-card {
+    opacity: 1;
+    scale: 1;
+    transition:
+      opacity 240ms var(--ease-out-strong),
+      scale 320ms var(--ease-out-strong);
+  }
+  .st-ix-pic {
+    position: absolute;
+    inset: 1rem 1rem 1.25rem;
+    opacity: 0;
+    transition: opacity 140ms ease-out;
+  }
+  .st-ix-pic[data-on="true"] {
+    opacity: 1;
+    transition: opacity 220ms var(--ease-out-strong) 60ms;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Preferences                                                       */
+  /* ---------------------------------------------------------------- */
+
+  /* Script never sets data-live when motion is off. Should the two ever disagree (the setting
+     changed between a render and a paint), the page still reads in normal flow. */
+  @media (prefers-reduced-motion: reduce) {
+    .st-scene[data-live] {
+      height: auto;
+    }
+    .st-scene[data-live] > .st-stage {
+      position: static;
+      height: auto;
+      overflow: visible;
+    }
+    .st-scene[data-live] .st-inner {
+      height: auto;
+    }
+    .st-pop,
+    .st-card,
+    .st-ix-card,
+    .st-ix-pic,
+    .st-ix-row > * {
+      transition: none;
+    }
+  }
+  :root[data-calm="true"] .st-scene[data-live] {
+    height: auto;
+  }
+  :root[data-calm="true"] .st-scene[data-live] > .st-stage {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  :root[data-calm="true"] .st-scene[data-live] .st-inner {
+    height: auto;
+  }
+  :root[data-calm="true"] :is(.st-pop, .st-card, .st-ix-card, .st-ix-pic, .st-ix-row > *) {
+    transition: none;
+  }
+
+  /* Windows high contrast: outlined type becomes plain type, hairlines stay visible. */
+  @media (forced-colors: active) {
+    .st-mq-item {
+      color: CanvasText;
+      -webkit-text-stroke: 0;
+    }
+    .st-word {
+      color: CanvasText;
+    }
+    .st-rule {
+      background-color: CanvasText;
+    }
+  }
+}
+
+/*
+ * A card in a short cell (a pinned stage on a phone or a low window) drops its extras, so its main
+ * figure and its Example label always fit: first the rows marked st-more, then st-less, and its
+ * name is kept to one line. Outside any layer on purpose: these must also beat a Tailwind display
+ * utility on the same element. They only apply inside a live scene's cells (the named container).
+ */
+/* Six in a row on a 1280 px laptop: a little less padding and a slightly smaller name, so the
+   longest card names (Дараагийн автобус) still fit on one line. */
+@media (min-width: 80rem) and (max-width: 89.99rem) {
+  .st-card {
+    gap: 0.625rem;
+    padding: 0.875rem;
+  }
+  .st-card h3 {
+    font-size: 0.875rem;
+  }
+}
+
+@container st-cell (max-height: 16rem) {
+  .st-more {
+    display: none;
+  }
+}
+@container st-cell (max-height: 9.5rem) {
+  .st-less {
+    display: none;
+  }
+  .st-card {
+    gap: 0.375rem;
+    padding: 0.625rem;
+  }
+  /* The name alone on one line, a little smaller: "Ближайший автобус" then fits half a phone. */
+  .st-card h3 {
+    font-size: 0.8125rem;
+  }
+  .st-card h3 > span:first-child {
+    display: none;
+  }
+  .st-card h3 > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

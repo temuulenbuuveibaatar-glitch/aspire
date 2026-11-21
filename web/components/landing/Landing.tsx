@@ -1,36 +1,37 @@
-// Public homepage for signed-out visitors. A server component: no auth, no hooks, no client JS
-// (the FAQ uses <details>, the language switcher is plain ?lang= links).
+// The opening page for signed-out visitors, top to bottom: a short intro (first visit only), the
+// hero (the app's voice orb inside its rings, the headline, the visitor's own sky and four real
+// readings in the corners), the scroll story, the city marquee and the numbered index (./Story),
+// then how it works, run it yourself, the questions, the closing call to action and the footer.
+//
+// A server component: every word is in the HTML and readable with no JavaScript. The client parts
+// (Intro, HeroScene, SkyLayer, Cta, Cursor and the story) only add motion on top of what is already there.
+//
 // Wiring (app/page.tsx): `generateMetadata` -> landingMetadata(lang, bare), and
-// <Landing lang={...} /> when there is no session (?lang=, else Accept-Language).
-import {
-  Bus,
-  ChevronDown,
-  Download,
-  Globe,
-  KeyRound,
-  Languages,
-  Laptop,
-  MapPin,
-  MessagesSquare,
-  Mic,
-  Radio,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react";
+// <Landing lang={...} weather={landingWeather(...)} /> when there is no session. The weather is a
+// promise that is NOT awaited: the headline and everything else render at once, and the places that
+// show the reading (the sky behind the page, the corner readings, the story) read it inside
+// <Suspense>. Until it arrives, and when there is none, the page keeps its plain dark look and the
+// corners stay empty: nothing is ever made up.
+import "./landing.css";
+import { ChevronDown, Download, KeyRound, Laptop, Server } from "lucide-react";
 import type { Metadata } from "next";
-import { Suspense, type CSSProperties } from "react";
+import { Fragment, Suspense, use, type CSSProperties } from "react";
+import { PROVIDER } from "@/components/v6/Card";
+import { textFor } from "@/components/v6/text";
 import { HTML_LANG, isLang, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
-import { SITE_URL as ORIGIN } from "@/lib/site";
 import type { LandingWeather } from "@/lib/landing-weather";
+import { SITE_URL as ORIGIN } from "@/lib/site";
+import { temp } from "@/lib/utils";
+import { Cta } from "./Cta";
+import { Cursor } from "./Cursor";
+import { HeroScene, MotionSwitch, PlaceTime } from "./HeroScene";
+import { Intro } from "./Intro";
 import { LANDING_TEXT, type LandingText } from "./LandingCopy";
-import { LandingSky } from "./LandingSky";
-import { Reveal } from "./Reveal";
-import "./landing-motion.css";
+import { landingScene, usableWeather } from "./scene";
+import { SkyLayer } from "./SkyLayer";
+import { FeatureIndex, Marquee, Story } from "./Story";
 
 const OG_LOCALE: Record<Lang, string> = { mn: "mn_MN", zh: "zh_CN", en: "en_US", ru: "ru_RU", de: "de_DE" };
-const FEATURE_ICONS = [Radio, Languages, WandSparkles, Sparkles, MessagesSquare, ShieldCheck];
 const SELF_ICONS = [Laptop, KeyRound, Server];
 
 export const DESKTOP_URL = "https://github.com/temuulenbuuveibaatar-glitch/aspire/releases";
@@ -64,7 +65,7 @@ export function landingMetadata(lang?: unknown, bare = false): Metadata {
   return {
     metadataBase: new URL(ORIGIN),
     title: { absolute: title },
-    description: t.lead,
+    description: t.description,
     alternates: {
       canonical: url,
       languages: { ...Object.fromEntries(LANGS.map((x) => [HTML_LANG[x], `/?lang=${x}`])), "x-default": "/" },
@@ -73,21 +74,20 @@ export function landingMetadata(lang?: unknown, bare = false): Metadata {
       type: "website",
       siteName: "Aspire",
       title,
-      description: t.lead,
+      description: t.description,
       url,
       locale: OG_LOCALE[l],
       alternateLocale: LANGS.filter((x) => x !== l).map((x) => OG_LOCALE[x]),
     },
     // Images come from app/opengraph-image.tsx; Twitter inherits them from Open Graph.
-    twitter: { card: "summary_large_image", title, description: t.lead },
+    twitter: { card: "summary_large_image", title, description: t.description },
   };
 }
 
 /** schema.org WebSite + SoftwareApplication for search results (rendered as JSON-LD on the page). */
 export function landingJsonLd(lang?: unknown) {
   const l = landingLang(lang);
-  const t = LANDING_TEXT[l];
-  const description = t.lead;
+  const description = LANDING_TEXT[l].description;
   const url = `${ORIGIN}/`;
   const inLanguage = LANGS.map((x) => HTML_LANG[x]);
   return {
@@ -112,7 +112,7 @@ export function landingJsonLd(lang?: unknown) {
         applicationCategory: "LifestyleApplication",
         operatingSystem: "Web, Windows, macOS",
         downloadUrl: DESKTOP_URL,
-        featureList: ["Voice assistant", "Live buses", "Traffic", "Weather", "Air quality", "Street cameras", "News", "Chat bots", "Open apps", "Desktop actions"],
+        featureList: ["Voice assistant", "Live buses", "Traffic", "Weather", "Air quality", "Street cameras", "City map", "News", "Reminders", "Reading text in photos", "Chat bots", "Open apps", "Desktop actions"],
         // Free: during the Orkhon Hackathon, and always with your own keys.
         offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       },
@@ -123,299 +123,312 @@ export function landingJsonLd(lang?: unknown) {
 // "<" escaped so text in the data can never close the <script> element.
 const jsonLdHtml = (l: Lang) => JSON.stringify(landingJsonLd(l)).replace(/</g, "\\u003c");
 
-const PRIMARY =
-  "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-accent px-6 font-semibold text-on-accent shadow-accent hover:bg-accent-2";
-const SECONDARY =
-  "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-line-strong bg-surface-2 px-6 font-medium text-ink hover:bg-surface-3";
-const H2 = "text-greeting text-ink";
-/** Order in a staggered entrance or reveal (landing-motion.css reads --i). */
-const at = (i: number) => ({ "--i": i }) as CSSProperties;
+// In the theme layer on purpose: Tailwind's reset hides [hidden] with !important from the base
+// layer, and among !important rules an earlier layer wins.
+const NO_SCRIPT_CSS = "@layer theme{div[hidden]:has(> .lp-root){display:block!important}}body>main:empty,.lp-header button{display:none}";
 
-export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<LandingWeather | null> }) {
-  const l = landingLang(lang);
-  const t = LANDING_TEXT[l];
+type Reading = Promise<LandingWeather | null> | undefined;
+/** The reading with the minute the server read its clock at, so the corner clock is in the HTML. */
+type Stamped = Promise<{ w: LandingWeather; minute: number } | null> | undefined;
+
+const minuteNow = () => Math.floor(Date.now() / 60_000);
+/** Custom properties for landing.css: the place in a staggered entrance, the headline's width. */
+const vars = (v: Record<`--${string}`, string | number>) => v as CSSProperties;
+
+/**
+ * How wide a headline line sets, in em (the sans at display size with tight tracking). An estimate
+ * on the generous side: landing.css divides the screen width by it to size the type, so every
+ * language gets the largest headline that still fits on its two lines.
+ */
+function lineEm(line: string): number {
+  let em = 0;
+  for (const ch of line) {
+    if (/[⺀-鿿豈-﫿＀-￯]/.test(ch)) em += 1;
+    else if (ch === " ") em += 0.24;
+    else if (/[.,:;!?']/.test(ch)) em += 0.26;
+    else if (/[iljtfrIJ]/.test(ch)) em += 0.34;
+    else if (/[mwMWЖШЩЮЫжшщюыф]/.test(ch)) em += 0.82;
+    else if (/\p{Lu}/u.test(ch)) em += 0.68;
+    else em += 0.57;
+  }
+  return em;
+}
+
+/** The visitor's sky behind the whole page (SkyLayer). No reading: nothing is drawn. */
+function PageSky({ weather }: { weather: Reading }) {
+  const w = weather ? use(weather) : null;
+  return <SkyLayer base={w ? landingScene(w) : null} />;
+}
+
+/** Room for the corner readings on small screens, where they sit in the flow under the buttons. */
+function HudSpace() {
+  return <div aria-hidden className="lp-hud-space" />;
+}
+
+/**
+ * The four readings in the hero's corners: the place, the time there, the temperature with the sky
+ * in words, and who measured it. Real values only. A reading changed by ?sky= or ?hour= is called
+ * a preview and never the current weather; without the visitor's own place it names Erdenet as
+ * Aspire's home city.
+ */
+function Hud({ l, t, weather }: { l: Lang; t: LandingText; weather: Stamped }) {
+  const got = weather ? use(weather) : null;
+  if (!got) return <HudSpace />;
+  const { w, minute } = got;
+  const v = textFor(l);
+  const scene = landingScene(w);
+  const place = w.local && w.place.trim() ? w.place.trim().slice(0, 80) : t.erdenet;
   return (
-    <div lang={HTML_LANG[l]} data-landing className="lm min-h-dvh overflow-x-clip text-ink">
-      <Reveal />
-      {/* The root layout renders <html lang="en">; set the document language for JS clients
-          (screen readers, Google). The div lang above covers clients without JS. */}
-      <script dangerouslySetInnerHTML={{ __html: `document.documentElement.lang=${JSON.stringify(HTML_LANG[l])}` }} />
-      {/* The visitor's own sky behind the whole page. The headline never waits for it. */}
-      {weather && (
-        <Suspense fallback={null}>
-          <LandingSky weather={weather} />
-        </Suspense>
-      )}
-      <a href="#main" className="skip-link">
-        {t.skip}
-      </a>
-
-      <header className="relative z-10 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-6 pt-[max(1rem,env(safe-area-inset-top))]">
-        <a href={`/?lang=${l}`} className="inline-flex min-h-12 items-center font-display text-wordmark text-ink uppercase no-underline">
-          Aspire
-        </a>
-        {/* Phone: wordmark + Sign in on one row, the languages on the next. */}
-        <div className="contents sm:flex sm:items-center sm:gap-2">
-          <nav aria-label={t.langLabel} className="order-last w-full sm:order-none sm:w-auto">
-            <ul className="flex gap-1">
-              {LANGS.map((x) => (
-                <li key={x}>
-                  <a
-                    href={`/?lang=${x}`}
-                    lang={HTML_LANG[x]}
-                    hrefLang={HTML_LANG[x]}
-                    aria-current={x === l ? "true" : undefined}
-                    className={`press inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-label no-underline ${
-                      x === l ? "bg-surface-3 text-ink underline decoration-accent decoration-2 underline-offset-4" : "text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    {/* Accessible name "MN Монгол": starts with the visible code (voice control). */}
-                    <span>{LANG_NAMES[x].code}</span>
-                    <span className="sr-only"> {LANG_NAMES[x].native}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
-          <a href="/login" className="press inline-flex min-h-11 items-center rounded-full border border-line-strong px-4 text-label text-ink no-underline hover:bg-surface-2">
-            {t.signIn}
-          </a>
+    <div role="group" aria-label={v.weather} className="lp-hud" data-weather={w.preview ? "preview" : w.local ? "local" : "home"}>
+      <dl>
+        <div data-at="tl" style={vars({ "--i": 0 })}>
+          <dt>{w.preview ? t.hud.preview : w.local ? t.hud.near : t.hud.home}</dt>
+          <dd title={place}>{place}</dd>
         </div>
-      </header>
-
-      <main id="main" tabIndex={-1} className="relative z-10 mx-auto max-w-6xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pb-16 outline-none sm:px-6">
-        {/* 1. Hero */}
-        <section aria-labelledby="hero-title" className="grid items-center gap-10 py-10 sm:py-16 md:grid-cols-[1.15fr_0.85fr]">
-          <div>
-            {weather && (
-              <Suspense fallback={null}>
-                <SkyChip weather={weather} />
-              </Suspense>
-            )}
-            <p className="lm-rise text-reply font-semibold text-accent" style={at(1)}>
-              {t.eyebrow}
-            </p>
-            {/* The brand sits in the h1 so "Aspire" + keyword searches match title, h1 and body. */}
-            <h1 id="hero-title" className="lm-rise mt-3 text-city text-ink" style={at(2)}>
-              <span className="sr-only">Aspire</span>{" "}
-              {t.title}
-            </h1>
-            <p className="lm-rise mt-5 max-w-[38rem] text-lead text-ink-muted" style={at(3)}>
-              {t.lead}
-            </p>
-            <div className="lm-rise mt-8 flex flex-wrap gap-3" style={at(4)}>
-              <a href="/login" className={`${PRIMARY} no-underline`}>
-                {t.cta}
-              </a>
-              <a href="#how" className={`${SECONDARY} no-underline`}>
-                {t.how}
-              </a>
-            </div>
+        {!w.preview && w.timeZone && (
+          <div data-at="tr" style={vars({ "--i": 1 })}>
+            <dt>{t.hud.time}</dt>
+            <dd className="num">
+              <PlaceTime timeZone={w.timeZone} minute={minute} />
+            </dd>
           </div>
-          <HudMock t={t} />
-        </section>
-
-        {/* 2. What it does */}
-        <section id="features" aria-labelledby="features-title" className="scroll-mt-6 py-10">
-          <h2 id="features-title" className={H2} data-reveal>
-            {t.featuresTitle}
-          </h2>
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {t.features.map((f, i) => {
-              const Icon = FEATURE_ICONS[i];
-              return (
-                <li key={f.title} className="lm-card v6-card p-5" data-reveal style={at(i % 3)}>
-                  <span className="inline-flex size-11 items-center justify-center rounded-full bg-surface-3 text-accent">
-                    <Icon className="size-5" aria-hidden />
-                  </span>
-                  <h3 className="mt-4 text-body font-semibold text-ink">{f.title}</h3>
-                  <p className="mt-1.5 text-small text-ink-muted">{f.body}</p>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        {/* 3. How it works */}
-        <section id="how" aria-labelledby="how-title" className="scroll-mt-6 py-10">
-          <h2 id="how-title" className={H2} data-reveal>
-            {t.howTitle}
-          </h2>
-          <ul className="mt-6 grid gap-4 md:grid-cols-3">
-            {t.steps.map((s, i) => (
-              <li key={s.title} className="lm-card v6-card flex gap-4 p-5" data-reveal style={at(i)}>
-                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-body font-semibold text-on-accent">
-                  {i + 1}
-                </span>
-                <div>
-                  <h3 className="text-body font-semibold text-ink">{s.title}</h3>
-                  <p className="mt-1 text-small text-ink-muted">{s.body}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* 4. Cities */}
-        <section id="cities" aria-labelledby="cities-title" className="scroll-mt-6 py-10">
-          <h2 id="cities-title" className={H2} data-reveal>
-            {t.citiesTitle}
-          </h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {[
-              { Icon: MapPin, ...t.erdenet },
-              { Icon: Globe, ...t.world },
-            ].map(({ Icon, title, body }, i) => (
-              <div key={title} className="lm-card v6-card flex gap-4 p-5" data-reveal style={at(i)}>
-                <Icon className="mt-0.5 size-6 shrink-0 text-accent" aria-hidden />
-                <div>
-                  <h3 className="text-body font-semibold text-ink">{title}</h3>
-                  <p className="mt-1 text-small text-ink-muted">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 5. Run it yourself: Aspire Desktop, own keys, own server. */}
-        <section id="self-host" aria-labelledby="self-title" className="scroll-mt-6 py-10">
-          <h2 id="self-title" className={H2} data-reveal>
-            {t.selfTitle}
-          </h2>
-          <p className="mt-3 max-w-[44rem] text-body text-ink-muted">{t.selfLead}</p>
-          <ul className="mt-6 grid gap-4 md:grid-cols-3">
-            {t.self.map((s, i) => {
-              const Icon = SELF_ICONS[i];
-              return (
-                <li key={s.title} className="lm-card v6-card p-5" data-reveal style={at(i)}>
-                  <span className="inline-flex size-11 items-center justify-center rounded-full bg-surface-3 text-accent">
-                    <Icon className="size-5" aria-hidden />
-                  </span>
-                  <h3 className="mt-4 text-body font-semibold text-ink">{s.title}</h3>
-                  <p className="mt-1.5 text-small text-ink-muted">{s.body}</p>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a href={DESKTOP_URL} rel="noopener" className={`${PRIMARY} no-underline`}>
-              <Download className="size-5" aria-hidden />
-              {t.download}
-            </a>
-          </div>
-        </section>
-
-        {/* 6. FAQ */}
-        <section id="faq" aria-labelledby="faq-title" className="scroll-mt-6 py-10">
-          <h2 id="faq-title" className={H2} data-reveal>
-            {t.faqTitle}
-          </h2>
-          <div className="mt-6 space-y-3">
-            {t.faq.map((item, i) => (
-              <details key={item.q} className="group v6-card" data-reveal style={at(i)}>
-                <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-body font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                  {item.q}
-                  <ChevronDown className="size-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180 still:transition-none" aria-hidden />
-                </summary>
-                <p className="px-5 pb-5 text-small text-ink-muted">
-                  {item.a}
-                  {/* The two privacy answers end with a link to the full policy. */ (i === 1 || i === 3) && (
-                    <>
-                      {" "}
-                      <a href={`/privacy#${l}`} className="text-accent underline">
-                        {t.privacy}
-                      </a>
-                    </>
-                  )}
-                </p>
-              </details>
-            ))}
-          </div>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <a href="/login" className={`${PRIMARY} no-underline`}>
-              {t.cta}
-            </a>
-          </div>
-        </section>
-      </main>
-
-      {/* 7. Footer */}
-      <footer className="relative z-10 border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-8 pb-[max(2rem,env(safe-area-inset-bottom))] text-small text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <nav aria-label={t.legal} className="flex gap-2">
-            <a href={`/privacy#${l}`} className="inline-flex min-h-11 items-center px-1 text-ink-muted underline hover:text-ink">
-              {t.privacy}
-            </a>
-            <a href={`/terms#${l}`} className="inline-flex min-h-11 items-center px-1 text-ink-muted underline hover:text-ink">
-              {t.terms}
-            </a>
-          </nav>
-          <p>{t.built}</p>
+        )}
+        <div data-at="bl" style={vars({ "--i": 2 })}>
+          <dt>{w.preview ? t.hud.notLive : v.now}</dt>
+          <dd>
+            <data value={w.tempC} className="num">
+              {temp(w.tempC, false)}
+            </data>{" "}
+            <span aria-hidden>·</span> {v.kinds[scene.kind]}
+          </dd>
         </div>
-      </footer>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(l) }} />
+        {!w.preview && (
+          <div data-at="br" style={vars({ "--i": 3 })}>
+            <dt>{t.hud.source}</dt>
+            <dd>{PROVIDER[w.source] ?? PROVIDER["open-meteo"]}</dd>
+          </div>
+        )}
+      </dl>
     </div>
   );
 }
 
-/** What the background shows: the real reading for the visitor's area (or a preview via ?sky= and ?hour=). */
-async function SkyChip({ weather }: { weather: Promise<LandingWeather | null> }) {
-  const w = await weather;
-  if (!w) return null;
-  const t = Math.round(w.tempC);
+export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<LandingWeather | null> }) {
+  const l = landingLang(lang);
+  const t = LANDING_TEXT[l];
+  // One promise for every place that shows the reading. A rejected one counts as no reading.
+  const reading = weather?.then(usableWeather, () => null);
+  const stamped = reading?.then((w) => (w ? { w, minute: minuteNow() } : null));
+  const titleEm = Math.max(4, ...t.hero.title.map(lineEm));
   return (
-    <p className="lm-rise v6-chip mb-4 w-fit gap-2 px-3 py-1 text-meta text-ink">
-      <span aria-hidden className="size-1.5 rounded-full bg-accent" />
-      <span>{w.place}</span>
-      <span className="num">{`${t < 0 ? "−" : ""}${Math.abs(t)}°`}</span>
-      <span className="text-ink-muted">{w.preview ? "Preview" : "Open-Meteo"}</span>
-    </p>
-  );
-}
+    // suppressHydrationWarning: the intro's script marks this element before React sees it.
+    <div lang={HTML_LANG[l]} className="lp-root" suppressHydrationWarning>
+      {/* No JavaScript: this page is streamed into a hidden holder that a script would move into
+          place (the Suspense boundary in app/page.tsx), so without scripts nothing would show at
+          all. Show the holder itself, drop the empty placeholder it was meant to replace, and hide
+          the pause button, which could do nothing. */}
+      <noscript>
+        <style>{NO_SCRIPT_CSS}</style>
+      </noscript>
+      <a href="#main" className="skip-link">
+        {t.skip}
+      </a>
 
-/** CSS-only sketch of the app screen. Labelled as an illustration: none of its numbers are live. */
-function HudMock({ t }: { t: LandingText }) {
-  const m = t.mock;
-  const skyline = [38, 62, 46, 78, 54, 30, 66, 42, 58, 34];
-  return (
-    <figure className="lm-arrive mx-auto w-full max-w-[20rem]">
-      <div role="img" aria-label={m.label} className="rounded-[2.5rem] border border-line-strong bg-surface p-2.5 shadow-lift">
-        <div className="overflow-hidden rounded-[2rem] bg-bg">
-          {/* "City photo": a gradient sky and a block skyline, no real image. */}
-          <div className="relative h-56 bg-[linear-gradient(180deg,#22403f_0%,#3f6b62_48%,#8fb8a6_100%)]">
-            <div className="absolute inset-x-0 bottom-0 flex h-24 items-end gap-1 px-2" aria-hidden>
-              {skyline.map((h, i) => (
-                <div key={i} className="flex-1 rounded-t-sm bg-bg/80" style={{ height: `${h}%` }} />
+      {/* The page's one inline script. It sets the document language (the root layout renders
+          <html lang="en">; the div lang above covers clients without JS) and plays the intro. It
+          has to stay a direct child of the root: that is the element it marks. */}
+      <Intro line={t.intro} lang={l} />
+
+      <Suspense fallback={<SkyLayer base={null} />}>
+        <PageSky weather={reading} />
+      </Suspense>
+
+      <div className="lp-page">
+        <header className="lp-header lp-wrap">
+          {/* lang: the brand keeps its capitals and tracking on the Chinese page too. */}
+          <a href={`/?lang=${l}`} lang="en" className="lp-wordmark v6-on-photo">
+            Aspire
+          </a>
+          {/* Phone: wordmark + Sign in on one row, the languages on the next. */}
+          <div className="contents sm:flex sm:items-center sm:gap-2">
+            <nav aria-label={t.langLabel} className="order-last w-full sm:order-none sm:w-auto">
+              {/* The app's own tab strip (the agent, map and news tabs). */}
+              <ul className="flex w-fit gap-1 rounded-[var(--radius-md)] border border-line bg-surface-2 p-1">
+                {LANGS.map((x) => (
+                  <li key={x}>
+                    <a
+                      href={`/?lang=${x}`}
+                      lang={HTML_LANG[x]}
+                      hrefLang={HTML_LANG[x]}
+                      aria-current={x === l ? "true" : undefined}
+                      className={`press inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-sm)] px-2 text-label no-underline ${
+                        x === l ? "bg-surface-3 text-ink shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-ink-muted hover:text-ink"
+                      }`}
+                    >
+                      {/* Accessible name "MN Монгол": starts with the visible code (voice control). */}
+                      <span>{LANG_NAMES[x].code}</span>
+                      <span className="sr-only"> {LANG_NAMES[x].native}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            <div className="flex items-center gap-2">
+              <MotionSwitch pause={t.motion.pause} play={t.motion.play} />
+              <a href="/login" className="press v6-chip min-h-11 px-4 text-label no-underline">
+                {t.signIn}
+              </a>
+            </div>
+          </div>
+        </header>
+
+        <main id="main" tabIndex={-1} className="outline-none">
+          {/* 1. Hero: the core, the headline, the visitor's sky and its readings. */}
+          <HeroScene
+            lang={l}
+            hint={t.hero.scroll}
+            hud={
+              <Suspense fallback={<HudSpace />}>
+                <Hud l={l} t={t} weather={stamped} />
+              </Suspense>
+            }
+          >
+            {/* The brand sits in the h1 (for readers and search), the wordmark above shows it. The
+                headline is plain server text: it waits for nothing. */}
+            <h1 id="hero-title" className="lp-title" style={vars({ "--w": titleEm.toFixed(2) })}>
+              <span className="sr-only">Aspire </span>
+              {t.hero.title.map((line, i) => (
+                <Fragment key={line}>
+                  {i > 0 && " "}
+                  <span className="lp-line">
+                    <span style={vars({ "--i": i })}>{line}</span>
+                  </span>
+                </Fragment>
               ))}
+            </h1>
+            <p className="lp-lead lp-rise" style={vars({ "--i": 3 })}>
+              {t.hero.lead}
+            </p>
+            <div className="lp-actions lp-rise" style={vars({ "--i": 4 })}>
+              <a href="/login" data-on-accent className="press lp-button lp-button-primary">
+                {t.hero.cta}
+              </a>
+              <a href="#how" className="press lp-button lp-button-ghost">
+                {t.hero.how}
+              </a>
             </div>
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgb(11_19_17/0.55)_0%,transparent_45%,rgb(11_19_17/0.7)_100%)]" />
-            <span className="absolute top-4 left-4 text-card text-ink">{m.city}</span>{" "}
-            <div className="absolute bottom-4 left-4">
-              <span className="block text-[3.25rem] leading-none font-light tracking-tight text-ink">{"−12°"}</span>{" "}
-              <span className="text-copy text-ink-muted">{m.sky}</span>
-            </div>
+          </HeroScene>
+
+          {/* 2. The scroll story, the cities and the index of what Aspire does. */}
+          <Story lang={l} weather={reading} />
+          <Marquee lang={l} />
+          <FeatureIndex lang={l} />
+
+          <div className="lp-deck">
+            {/* 3. How it works */}
+            <section id="how" aria-labelledby="how-title" className="lp-section">
+              <div className="lp-wrap">
+                <p className="lp-label lp-in">{t.how.label}</p>
+                <h2 id="how-title" className="lp-h2 lp-in">
+                  {t.how.title}
+                </h2>
+                <ul className="lp-steps">
+                  {t.how.steps.map((s, i) => (
+                    <li key={s.title} className="lp-in" style={vars({ "--i": i })}>
+                      <span aria-hidden className="numeral lp-step-n">
+                        0{i + 1}
+                      </span>
+                      <h3>{s.title}</h3>
+                      <p>{s.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            {/* 4. Run it yourself: Aspire Desktop, own keys, own server. */}
+            <section id="self-host" aria-labelledby="self-title" className="lp-section">
+              <div className="lp-wrap lp-split">
+                <div className="lp-in">
+                  <p className="lp-label">{t.self.label}</p>
+                  <h2 id="self-title" className="lp-h2">
+                    {t.self.title}
+                  </h2>
+                  <p className="lp-section-lead">{t.self.lead}</p>
+                  <a href={DESKTOP_URL} rel="noopener" data-on-accent className="press lp-button lp-button-primary">
+                    <Download aria-hidden />
+                    {t.self.download}
+                  </a>
+                </div>
+                <ul className="lp-points">
+                  {t.self.points.map((s, i) => {
+                    const Icon = SELF_ICONS[i];
+                    return (
+                      <li key={s.title} className="lp-in" style={vars({ "--i": i })}>
+                        <span aria-hidden className="lp-point-icon">
+                          <Icon />
+                        </span>
+                        <div>
+                          <h3>{s.title}</h3>
+                          <p>{s.body}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </section>
+
+            {/* 5. Questions */}
+            <section id="faq" aria-labelledby="faq-title" className="lp-section">
+              <div className="lp-wrap lp-split">
+                <div className="lp-in">
+                  <p className="lp-label">{t.faq.label}</p>
+                  <h2 id="faq-title" className="lp-h2">
+                    {t.faq.title}
+                  </h2>
+                </div>
+                <div className="lp-faq">
+                  {t.faq.items.map((item, i) => (
+                    <details key={item.q} name="lp-faq" className="lp-in" style={vars({ "--i": i })}>
+                      <summary>
+                        <span>{item.q}</span>
+                        <ChevronDown aria-hidden />
+                      </summary>
+                      <p>
+                        {item.a}
+                        {/* The two privacy answers end with a link to the full policy. */ (i === 1 || i === 3) && (
+                          <>
+                            {" "}
+                            <a href={`/privacy#${l}`}>{t.privacy}</a>
+                          </>
+                        )}
+                      </p>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            </section>
           </div>
-          <div className="space-y-2.5 p-3">
-            <div className="lm-step flex items-center gap-3 rounded-[1rem] border border-line bg-surface px-3 py-2.5" style={{ "--at": "1500ms" } as CSSProperties}>
-              <span className="inline-flex size-9 items-center justify-center rounded-full bg-surface-3 text-accent">
-                <Bus className="size-4" />
-              </span>
-              <span className="flex-1 text-card text-ink">{m.bus}</span>{" "}
-              <span className="font-mono text-value-sm text-sched">{m.mins}</span>
-            </div>
-            <div className="lm-step ml-auto w-fit max-w-[85%] rounded-[1rem] rounded-br-sm bg-surface-2 px-3 py-2 text-copy text-ink" style={{ "--at": "900ms" } as CSSProperties}>
-              {m.ask}
-            </div>
-            <div className="flex justify-center pt-1">
-              <span className="inline-flex size-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-accent">
-                <Mic className="size-5" />
-              </span>
-            </div>
+
+          {/* 6. The close: one line, the button, the wordmark across the screen. */}
+          <Cta label={t.end.label} line={t.end.line} cta={t.hero.cta} />
+        </main>
+
+        {/* 7. Footer: its own solid band, so the small print never sits on the sky. */}
+        <footer className="lp-footer">
+          <div className="lp-wrap">
+            <nav aria-label={t.legal}>
+              <a href={`/privacy#${l}`}>{t.privacy}</a>
+              <a href={`/terms#${l}`}>{t.terms}</a>
+            </nav>
+            <p>{t.built}</p>
           </div>
-        </div>
+        </footer>
       </div>
-      <figcaption className="mt-3 text-center text-small text-ink-faint">{m.note}</figcaption>
-    </figure>
+      <Cursor />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(l) }} />
+    </div>
   );
 }
 

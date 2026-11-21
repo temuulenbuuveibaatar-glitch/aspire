@@ -9,6 +9,7 @@
 // - ?sky= and ?hour= (/?sky=snow&hour=22) replace the sky or the hour, so a look can be checked
 //   without waiting for that weather. The answer then says `preview: true`: never call it live.
 import "server-only";
+import { io } from "next/cache";
 import { locate, wmoSky } from "@/lib/ambient";
 import { SKY_KINDS, type SkyKind } from "@/lib/ambient-types";
 import { UA } from "@/lib/site";
@@ -62,7 +63,7 @@ export function resetLandingWeather(): void {
 
 const finite = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 /** One decimal, about 11 km: all Open-Meteo is told and all the cache is keyed by ("49.0", never "-0.0"). */
-const cell = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
+const oneDecimal = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
 /** Day or night from a clock hour when no reading says (as lib/ambient.ts does). */
 const daylight = (hour: number) => hour >= 6 && hour < 18;
 
@@ -119,7 +120,7 @@ function readingFor(lat: string, lng: string): Promise<Reading | null> {
 const cityName = (s: string | null) => (s && /\p{L}/u.test(s) && !/%[0-9a-f]{2}/i.test(s) ? s : null);
 
 /** A repeated query parameter arrives as an array: the first value counts. */
-const first = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const first = (v: unknown): unknown => (Array.isArray(v) ? v[0] : v);
 
 /**
  * ?sky=: one of the app's sky kinds, else ignored. The same list safeKind (components/aspire/Sky.tsx)
@@ -147,11 +148,15 @@ const PREVIEW_CODE: Record<SkyKind, number> = { clear: 0, partly: 2, cloudy: 3, 
  */
 export async function landingWeather(headers: Headers, override?: { sky?: unknown; hour?: unknown }): Promise<LandingWeather | null> {
   try {
+    // Request-time work (the clock, an uncached read). io() keeps it out of every prerender of the
+    // page, the per-session shell that link prefetching keeps included: Next 16 reports a clock read
+    // there as an error. In a real request, and outside Next, it resolves at once.
+    await io();
     // No device position and no typed city: the network location only.
     const net = await locate(new URLSearchParams(), headers);
     const city = cityName(net.city);
     const here = net.coords && city ? { place: city, ...net.coords, timeZone: net.timeZone, local: true } : { ...ERDENET, local: false };
-    const r = await readingFor(cell(here.lat), cell(here.lng));
+    const r = await readingFor(oneDecimal(here.lat), oneDecimal(here.lng));
     if (!r) return null;
     const kind = previewKind(override?.sky);
     const hour = previewHour(override?.hour);

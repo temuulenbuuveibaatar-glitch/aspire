@@ -7,11 +7,13 @@
 //       Quebec, Taiwan; docs/design/camera-feeds.md). A source that needs a free key is skipped
 //       silently until its env var is set,
 //   (d) YouTube live streams posted with a location (YouTube Data API v3, same Google key), with
-//       game streams (Gaming category, GTA roleplay and the like) and non-camera streams left out,
+//       game streams (Gaming category, GTA roleplay and the like) and non-camera streams (Music
+//       category, no camera word) left out,
 //   (e) webcams people mapped on OpenStreetMap (Overpass), as https links only.
 // Never Insecam-style lists of private or unsecured cameras. Every URL passes safeCameraUrl.
-// A source that fails is named in `unavailable` and simply adds nothing. Server only: the Google
-// key goes in the x-goog-api-key header, never in a URL, log or error.
+// A source that fails is named in `unavailable` and simply adds nothing; a regional list or an
+// Overpass cell that failed rests 10 minutes, and no source holds the answer past DEADLINE_MS.
+// Server only: the Google key goes in the x-goog-api-key header, never in a URL, log or error.
 import "server-only";
 import { ERDENET_CENTER, ERDENET_CREDIT, haversineKm, type LatLng } from "@/lib/geo";
 import { stripHtml } from "@/lib/news";
@@ -40,6 +42,8 @@ const DAY = 24 * 60 * 60_000;
 const PER_SOURCE = 12;
 const MAX_CAMERAS = 40;
 const TIMEOUT_MS = 10_000;
+/** The longest findCameras waits for every source together (YouTube and TDX make two calls each). */
+const DEADLINE_MS = 10_000;
 
 const CREDIT = {
   ub: "ЗХУТ",
@@ -98,7 +102,7 @@ export function clearCameraCache(): void {
   ytUsage = { day: "", count: 0 };
   ytPerUser.clear();
   caltransBox.clear();
-  osmFailed.clear();
+  failed.clear();
 }
 
 async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
@@ -115,6 +119,19 @@ async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Pr
     .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
+}
+
+/** Upstreams that failed lately (a regional list, an Overpass cell): named as unavailable, not asked again for 10 minutes. */
+const failed = new Map<string, number>();
+
+function resting<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const down = failed.get(key);
+  if (down !== undefined && Date.now() - down < OVERPASS_FAIL_MS) return Promise.reject(new Error("failed recently"));
+  return load().catch((e: unknown) => {
+    failed.set(key, Date.now());
+    if (failed.size > 500) failed.delete(failed.keys().next().value as string);
+    throw e;
+  });
 }
 
 async function get(url: string, init: RequestInit = {}): Promise<Response> {
@@ -306,11 +323,13 @@ const SRC = {
  * One camera, or null when its id, position or URL does not pass. Images (stills, or Taiwan's
  * MJPEG stream, which an <img> plays) must be on the allow-list; links must be public https.
  * No updatedAt: these pictures are rewritten in place, the list time is not the picture's.
+ * Taiwan's stream never ends, so it is no thumbnail.
  */
 function spot(s: Src, rawId: unknown, name: string, lat: unknown, lng: unknown, raw: unknown, kind: "image" | "link" = "image"): Spot | null {
   const id = ident(rawId), la = num(lat), ln = num(lng), url = safeCameraUrl(kind, raw);
   if (!id || la === null || ln === null || !validLatLng(la, ln) || !url) return null;
-  return { id: `${s.prefix}-${id}`, name: name || id, lat: la, lng: ln, kind, url, ...(kind === "image" ? { thumb: url } : {}), source: s.source, credit: s.credit };
+  const thumb = kind === "image" && s.source !== "tdx-tw" ? { thumb: url } : {};
+  return { id: `${s.prefix}-${id}`, name: name || id, lat: la, lng: ln, kind, url, ...thumb, source: s.source, credit: s.credit };
 }
 
 /** Fintraffic weathercam stations: the first preset in collection of each gathering station. */
@@ -415,26 +434,14 @@ export const parseTdxFreeway = (data: unknown): Spot[] =>
 const getJson = async (url: string, headers: Record<string, string> = {}): Promise<unknown> =>
   (await get(url, { headers: { Accept: "application/json", ...headers } })).json();
 
-/** Optional TDX client (free registration) for a higher quota than anonymous calls; the secret only goes in the POST body. */
-const tdxToken = (id: string, secret: string) =>
-  cached("tdx-token", 12 * 60 * 60_000, async () => {
-    const res = await get("https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }).toString(),
-    });
-    const token = obj(await res.json()).access_token;
-    if (typeof token !== "string" || !/^[\w.~+/=-]{10,4000}$/.test(token)) throw new Error("tdx token");
-    return token;
-  });
-
 interface Regional {
   src: Src;
   /** Where its cameras are, [S, W, N, E], from the lists on 2026-11-21: fetched only within 60 km of one. */
   boxes: readonly Box[];
-  /** A free key the owner registers for: without it the source is skipped silently (not an outage). */
-  need?: string;
-  load: () => Promise<Spot[]>;
+  /** Free keys the owner registers for, by env name: without all of them the source is skipped silently (not an outage). */
+  need?: readonly string[];
+  /** Gets the values of `need`, in order. */
+  load: (keys: string[]) => Promise<Spot[]>;
 }
 
 /** Each list is cached a day per server instance; cameras are shown within 60 km, nearest 12. */
@@ -450,13 +457,17 @@ const REGIONAL: readonly Regional[] = [
   },
   { src: SRC.is, boxes: [[63.45, -23.86, 66.33, -13.85]], load: async () => parseVegagerdin(await getJson("https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1")) },
   {
-    src: SRC.qld, boxes: [[-28.17, 145.74, -16.95, 153.52]], need: "QLDTRAFFIC_API_KEY",
+    src: SRC.qld, boxes: [[-28.17, 145.74, -16.95, 153.52]], need: ["QLDTRAFFIC_API_KEY"],
     // QLDTraffic takes its key as a query parameter; get() errors name only the host.
-    load: async () => parseQldTraffic(await getJson(`https://api.qldtraffic.qld.gov.au/v1/webcams?apikey=${encodeURIComponent(env("QLDTRAFFIC_API_KEY"))}`)),
+    load: async ([key]) => parseQldTraffic(await getJson(`https://api.qldtraffic.qld.gov.au/v1/webcams?apikey=${encodeURIComponent(key)}`)),
   },
   { src: SRC.bc, boxes: [[48.39, -132.14, 60.0, -114.71]], load: async () => parseDriveBc(await getJson("https://www.drivebc.ca/api/webcams/")) },
   { src: SRC.wa, boxes: [[45.57, -124.33, 49.0, -117.05]], load: async () => parseWsdot(await getJson("https://data.wsdot.wa.gov/mobile/Cameras.json")) },
-  { src: SRC.or, boxes: [[41.38, -124.49, 46.9, -116.78]], load: async () => parseTripCheck(await getJson("https://tripcheck.com/Scripts/map/data/cctvinventory.js")) },
+  {
+    src: SRC.or, boxes: [[41.38, -124.49, 46.9, -116.78]],
+    // Served as application/javascript: TripCheck answers 406 to a JSON-only Accept.
+    load: async () => parseTripCheck(await getJson("https://tripcheck.com/Scripts/map/data/cctvinventory.js", { Accept: "application/json, */*" })),
+  },
   {
     src: SRC.ia, boxes: [[40.39, -96.48, 43.45, -90.17]],
     load: async () => parseIowaDot(await getJson("https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0/query?where=1%3D1&outFields=Desc_,ImageURL,latitude,longitude&f=json")),
@@ -471,11 +482,18 @@ const REGIONAL: readonly Regional[] = [
     load: async () => parseQuebec511(await getJson("https://ws.mapserver.transports.gouv.qc.ca/swtq?service=wfs&version=2.0.0&request=getfeature&typename=ms:infos_cameras&outputformat=geojson&srsName=EPSG:4326")),
   },
   {
-    src: SRC.tw, boxes: [[21.9, 120.0, 25.35, 122.0]],
-    load: async () => {
-      const id = env("TDX_CLIENT_ID"), secret = env("TDX_CLIENT_SECRET");
-      const auth: Record<string, string> = id && secret ? { Authorization: `Bearer ${await tdxToken(id, secret)}` } : {};
-      return parseTdxFreeway(await getJson("https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CCTV/Freeway?%24format=JSON", auth));
+    // TDX answers 401 without a key. A client-credentials token (the secret only in the POST body),
+    // fetched with the list, which is cached a day.
+    src: SRC.tw, boxes: [[21.9, 120.0, 25.35, 122.0]], need: ["TDX_CLIENT_ID", "TDX_CLIENT_SECRET"],
+    load: async ([id, secret]) => {
+      const res = await get("https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }).toString(),
+      });
+      const token = obj(await res.json()).access_token;
+      if (typeof token !== "string" || !/^[\w.~+/=-]{10,4000}$/.test(token)) throw new Error("tdx token");
+      return parseTdxFreeway(await getJson("https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CCTV/Freeway?%24format=JSON", { Authorization: `Bearer ${token}` }));
     },
   },
 ];
@@ -503,35 +521,51 @@ interface YtSnippet { title?: unknown; description?: unknown; channelTitle?: unk
 interface YtSearch { items?: { id?: { videoId?: unknown }; snippet?: YtSnippet & { thumbnails?: { medium?: { url?: unknown } } } }[] }
 interface YtVideos { items?: { id?: unknown; snippet?: YtSnippet; recordingDetails?: { location?: { latitude?: unknown; longitude?: unknown } } }[] }
 
-/** YouTube's "Gaming" video category. */
-const YT_GAMING = "20";
-/** Game streams (GTA roleplay and the like), matched as whole words in the five app languages. */
-const GAME_WORDS = [
-  "gta(?:\\s?(?:v|vi|iv|[4-6]|online|rp))?", "grand\\s?theft\\s?auto", "role-?\\s?play(?:ing)?", "rp", "fivem", "nopixel",
-  "minecraft", "fortnite", "roblox", "gameplay", "gaming", "gamer", "playthrough", "walkthrough", "let[’'`]?s\\s?play",
-  "ets\\s?2", "euro\\s?truck\\p{L}*", "cit(?:y|ies):?\\s?skylines", "simulators?", "msfs", "cyberpunk(?:\\s?2077)?",
-  "watch\\s?dogs", "the\\s?sims", "v-?tubers?", "stream\\s?snip\\p{L}*", "speed\\s?run\\p{L}*", "twitch", "valorant",
-  "pubg", "cs2", "cs:?go", "apex(?:\\s?legends)?", "warzone", "call\\s?of\\s?duty",
-  "игр(?:а|ы|у|е|ой|ам|ами|ах|ов\\p{L}*)?", "летсплей", "прохождение", // ru
-  "тоглоом\\p{L}*", // mn
-  "(?:computer|video)?spiel(?:e|en)?", "zock\\p{L}*", // de
+/** YouTube's "Music" and "Gaming" video categories: never a camera on a place (24/7 mixes say "city" too). */
+const YT_NOT_CAMERA = new Set(["10", "20"]);
+const wholeWords = (ws: string[]) => `(?<![\\p{L}\\p{N}])(?:${ws.join("|")})(?![\\p{L}\\p{N}])`;
+/** Game names and game-only words (GTA roleplay and the like): a game stream wherever they appear. */
+const GAME_NAMES = [
+  // GTA, GTA V, GTA 5 RP, GTA5RP, GTAVRP, GTA Online, GTAO, #gtarp (not GTAA; no bare "Los Santos", a real town name)
+  "gta(?:\\s?(?:v|vi|iv|[4-6]))?(?:\\s?(?:online|o|rp))?", "grand\\s?theft\\s?auto", "role-?\\s?play(?:ing)?", "fivem", "nopixel", "lspd", "redm",
+  "minecraft", "fortnite", "roblox", "gameplay", "playthrough", "let[’'`]?s\\s?play",
+  "ets\\s?2", "euro\\s?truck\\p{L}*", "cities:?\\s?skylines", "beamng\\p{L}*", "msfs", "cyberpunk\\s?2077",
+  "the\\s?sims", "v-?tubers?", "stream\\s?snip\\p{L}*", "speed\\s?run\\p{L}*", "valorant",
+  "pubg", "cs2", "cs:?go", "apex\\s?legends", "call\\s?of\\s?duty",
+  "летсплей", // ru
 ];
-const GAME = new RegExp(`(?<![\\p{L}\\p{N}])(?:${GAME_WORDS.join("|")})(?![\\p{L}\\p{N}])|游戏|遊戲|游戲|电竞|電競`, "iu");
-/** A positive sign the stream is a camera on a place, not a show. */
+/**
+ * Game words that also mean other things ("Las Vegas gaming", "live on Twitch", "in a warzone",
+ * Olympic игры): a game stream only in the title, channel or tags, never the description.
+ */
+const GAME_WORDS = [
+  "gaming", "gamer", "walkthrough", "simulators?", "twitch", "warzone", "watch[\\s_]?dogs",
+  "игр(?:а|ы|у|е|ой|ам|ами|ах)?", "игров\\p{L}*(?!\\s?площадк)", "прохождение", // ru, not a playground (игровая площадка)
+  "тоглоом\\p{L}*(?!\\s?талбай)", // mn, not a playground (тоглоомын талбай)
+  "(?:computer|video)spiel(?:e|en)?", "(?<!(?:dem|vom|zum|beim)\\s)spiel(?:e|en)?", "zock\\p{L}*", // de, not a match ("vor dem Spiel")
+];
+const GAME = new RegExp(`${wholeWords(GAME_NAMES)}|电竞|電競`, "iu");
+const GAME_WORD = new RegExp(`${wholeWords(GAME_WORDS)}|游戏|遊戲|游戲`, "iu");
+/**
+ * A positive sign the stream is a camera on a place, not a show (cámara, câmera, caméra, telecamera,
+ * Wetterkamera, kelikamera, kamery, カメラ, 카메라, 即時影像 too).
+ */
 const CAMERA_WORDS = new RegExp(
-  "(?<![\\p{L}\\p{N}])(?:live\\s?cams?|web\\s?cams?|cams?|cameras?|cctv|streets?|traffic|city|panorama\\p{L}*|kameras?|веб-?камер\\p{L}*|камер\\p{L}*)(?![\\p{L}\\p{N}])|镜头|鏡頭|摄像|攝像|监控|監控",
+  "(?<![\\p{L}\\p{N}])(?:live\\s?cams?|web\\s?cams?|cams?|c[aáâ]m[eaé]ras?|tele\\s?camer[ae]|cctv|streets?|traffic|city|panorama\\p{L}*|\\p{L}*kamer(?:as?|y)|веб-?камер\\p{L}*|камер\\p{L}*)(?![\\p{L}\\p{N}])|镜头|鏡頭|摄像|攝像|监控|監控|即時影像|即时影像|实时影像|實時影像|カメラ|카메라|라이브\\s?캠",
   "iu",
 );
 
 /**
- * A live stream that is a camera on a place: not in YouTube's Gaming category, no game word in its
- * title, description, channel or tags, and a camera word in its title or description.
+ * A live stream that is a camera on a place: not in YouTube's Music or Gaming category, no game
+ * name in its title, description, channel or tags, no other game word in its title, channel or
+ * tags, and a camera word in its title or description.
  */
 export function isCameraStream(s: YtSnippet): boolean {
-  if (String(s.categoryId ?? "") === YT_GAMING) return false;
+  if (YT_NOT_CAMERA.has(String(s.categoryId ?? ""))) return false;
   const tags = Array.isArray(s.tags) ? s.tags.filter((t): t is string => typeof t === "string").join(" | ") : "";
-  const say = [text(s.title, 300), text(s.description, 5000)].join(" \n ");
-  return !GAME.test([say, text(s.channelTitle, 200), text(tags, 2000)].join(" \n ")) && CAMERA_WORDS.test(say);
+  const title = text(s.title, 300), about = text(s.description, 5000);
+  const label = [title, text(s.channelTitle, 200), text(tags, 2000)].join(" \n ");
+  return !GAME.test(`${label} \n ${about}`) && !GAME_WORD.test(label) && CAMERA_WORDS.test(`${title} \n ${about}`);
 }
 
 /**
@@ -617,15 +651,11 @@ export function parseOverpass(data: unknown): Spot[] {
   return out;
 }
 
-/** Cells whose Overpass lookup failed lately (Overpass is shared and free: not asked again for 10 minutes). */
-const osmFailed = new Map<string, number>();
-
+/** A cell whose Overpass lookup failed rests (Overpass is shared and free: not asked again for 10 minutes). */
 function overpass(at: LatLng): Promise<Spot[]> {
   const c = { lat: cell(at.lat), lng: cell(at.lng) };
   const key = `osm:${c.lat},${c.lng}`;
-  const down = osmFailed.get(key);
-  if (down !== undefined && Date.now() - down < OVERPASS_FAIL_MS) return Promise.reject(new Error("overpass failed recently"));
-  return cached(key, DAY, async () => {
+  return resting(key, () => cached(key, DAY, async () => {
     // 33 km around the cell centre covers 25 km around any point in the cell; filtered below.
     const around = `(around:33000,${c.lat.toFixed(1)},${c.lng.toFixed(1)})`;
     // Server timeout under the client's 10 s; `out 400` so the distance sort sees every candidate.
@@ -653,11 +683,7 @@ function overpass(at: LatLng): Promise<Spot[]> {
       }
     }
     throw last;
-  }).catch((e: unknown) => {
-    osmFailed.set(key, Date.now());
-    if (osmFailed.size > 500) osmFailed.delete(osmFailed.keys().next().value as string);
-    throw e;
-  });
+  }));
 }
 
 // ---- all together -----------------------------------------------------------------------------
@@ -676,13 +702,20 @@ export async function findCameras(at: LatLng, opts: { userId?: string } = {}): P
   const districts = caltransDistricts(at);
   if (districts.length) jobs.push(["caltrans", Promise.all(districts.map(caltrans)).then((s) => nearest(s.flat(), at, GOV_RADIUS_KM))]);
   if (nearBox(at, NZ_BOX, GOV_RADIUS_KM)) jobs.push(["nzta", nzta().then((s) => nearest(s, at, GOV_RADIUS_KM))]);
-  for (const r of REGIONAL)
-    if ((!r.need || env(r.need)) && r.boxes.some((b) => nearBox(at, b, GOV_RADIUS_KM)))
-      jobs.push([r.src.source, cached(r.src.source, DAY, r.load).then((s) => nearest(s, at, GOV_RADIUS_KM))]);
+  for (const r of REGIONAL) {
+    const keys = (r.need ?? []).map(env);
+    if (keys.every(Boolean) && r.boxes.some((b) => nearBox(at, b, GOV_RADIUS_KM)))
+      jobs.push([r.src.source, resting(r.src.source, () => cached(r.src.source, DAY, () => r.load(keys))).then((s) => nearest(s, at, GOV_RADIUS_KM))]);
+  }
   jobs.push(["youtube", youtube(at, opts.userId).then((s) => nearest(s, at, 50, 8))]);
   jobs.push(["osm", overpass(at).then((s) => nearest(s, at, 25))]);
 
-  const settled = await Promise.allSettled(jobs.map(([, p]) => p));
+  // A source still loading at the deadline is named; its load goes on and fills the cache for a later ask.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("camera source too slow"), { name: "TimeoutError" })), DEADLINE_MS);
+  });
+  const settled = await Promise.allSettled(jobs.map(([, p]) => Promise.race([p, late]))).finally(() => clearTimeout(timer));
   const unavailable: Camera["source"][] = [];
   const all = [...cityPages(at)];
   settled.forEach((r, i) => {

@@ -60,7 +60,8 @@ export const findCamerasTool: Tool = {
       // Only the web app has the panel: bots, cron and any other caller never claim it.
       note: found.cameras.length
         ? (ctx.source !== "web" ? "The camera panel is only in the Aspire app: name a few cameras and say they can be watched there." : "The camera panel is open on screen and shows each camera's own name.") +
-          " Images are snapshots, not live video, except kind 'video' and 'embed'."
+          " Images are snapshots, not live video, except kind 'video' and 'embed'." +
+          (found.cameras.some((c) => c.source === "tdx-tw") ? " Taiwan freeway images (MOTC Freeway Bureau) are live MJPEG video streams, not snapshots." : "")
         : found.unavailable.length
         ? `Some camera sources did not answer (${found.unavailable.join(", ")}). Say the cameras could not all be checked right now; do not say there are none.`
         : "No public cameras are known near here. Say exactly that; do not suggest private or unsecured cameras.",

@@ -182,22 +182,20 @@ const REGIONS: Region[] = [
     ids: ["qc-3998"],
     first: { kind: "link", name: "Aut. 540 (westward) at boul. Wilfrid-Hamel", url: "https://www.quebec511.info/Carte/Fenetres/FenetreVideo.html?id=3998", credit: expect.stringContaining("Québec 511") },
   },
-  {
-    source: "tdx-tw", host: "tdx.transportdata.tw", at: { lat: 25.13, lng: 121.74 },
-    body: { UpdateTime: "2026-11-21T01:17:52+08:00", CCTVs: [
-      { CCTVID: "CCTV-N1-S-0.000-M", VideoStreamURL: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", PositionLon: 121.735695, PositionLat: 25.1229931, RoadName: "國道1號", RoadDirection: "S", LocationMile: "0K+000" },
-      { CCTVID: "CCTV-N1-N-0.500-M", VideoStreamURL: "http://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10001", PositionLon: 121.73, PositionLat: 25.12, RoadName: "國道1號" },
-    ] },
-    ids: ["tw-CCTV-N1-S-0.000-M"],
-    first: { name: "國道1號 0K+000 S", url: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", credit: expect.stringContaining("Freeway Bureau") },
-  },
 ];
+// The two keyed lists (QLDTraffic, TDX) have their own tests below.
 const QLD_BODY = { type: "FeatureCollection", features: [
   { type: "Feature", geometry: { type: "Point", crs: { type: "name", properties: { name: "EPSG:7844" } }, coordinates: [153.0086975, -27.5551796] }, properties: { id: 1, description: "Archerfield - Ipswich Motorway & Granard Rd - North", image_url: "https://cameras.qldtraffic.qld.gov.au/Metropolitan/Archerfield_Ipswich_Mwy_sth.jpg" } },
   { type: "Feature", geometry: { type: "Point", coordinates: [153.0, -27.5] }, properties: { id: 2, description: "Other host", image_url: "https://evil.example/x.jpg" } },
 ] };
 const BRISBANE = { lat: -27.47, lng: 153.03 };
-const regionBody = (host: string) => (host === "api.qldtraffic.qld.gov.au" ? QLD_BODY : REGIONS.find((r) => r.host === host)?.body);
+const TDX_BODY = { UpdateTime: "2026-11-21T01:17:52+08:00", CCTVs: [
+  { CCTVID: "CCTV-N1-S-0.000-M", VideoStreamURL: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", PositionLon: 121.735695, PositionLat: 25.1229931, RoadName: "國道1號", RoadDirection: "S", LocationMile: "0K+000" },
+  { CCTVID: "CCTV-N1-N-0.500-M", VideoStreamURL: "http://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10001", PositionLon: 121.73, PositionLat: 25.12, RoadName: "國道1號" },
+] };
+const KEELUNG = { lat: 25.13, lng: 121.74 };
+const regionBody = (host: string) =>
+  host === "api.qldtraffic.qld.gov.au" ? QLD_BODY : host === "tdx.transportdata.tw" ? TDX_BODY : REGIONS.find((r) => r.host === host)?.body;
 
 const ytSearch = { items: [
   { id: { videoId: "AAAAAAAAAAA" }, snippet: { title: "City &amp; harbour live", channelTitle: "Harbour Cam", thumbnails: { medium: { url: "https://i.ytimg.com/vi/AAAAAAAAAAA/mqdefault.jpg" } } } },
@@ -223,9 +221,12 @@ beforeEach(() => {
   at = ERDENET;
   fail = new Set();
   vi.stubEnv("GOOGLE_MAPS_API_KEY", KEY);
-  fetchMock = vi.fn(async (url: string) => {
+  fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(url);
     if (fail.has(u.host)) return new Response("down", { status: 503 });
+    // As the real TripCheck answers (2026-11-21): its .js file is not application/json.
+    const accept = String((init?.headers as Record<string, string> | undefined)?.Accept ?? "");
+    if (u.host === "tripcheck.com" && !accept.includes("*/*")) return new Response("Not Acceptable", { status: 406 });
     if (u.host === "api.tfl.gov.uk") return Response.json(tflBody);
     if (u.host === "api.data.gov.sg") return Response.json(sgBody);
     if (u.host === "static.data.gov.hk") return new Response(hkXml);
@@ -573,11 +574,61 @@ describe("findCameras regional open-data lists", () => {
     expect(new URL(hits("data.austintexas.gov")[0][0]).searchParams.get("camera_status")).toBe("TURNED_ON");
   });
 
+  it("ODOT: asks TripCheck for any type, as it needs (406 to a JSON-only Accept)", async () => {
+    at = { lat: 45.52, lng: -122.68 }; // Portland
+    const r = await findCameras(at);
+    expect((hits("tripcheck.com")[0][1]?.headers as Record<string, string>).Accept).toBe("application/json, */*");
+    expect(r.unavailable).toEqual([]);
+  });
+
   it("a regional list that fails is named, the rest still show", async () => {
     at = { lat: 49.28, lng: -123.12 };
     fail = new Set(["www.drivebc.ca"]);
     const r = await findCameras(at);
     expect(r.unavailable).toEqual(["drivebc"]);
+  });
+
+  it("a regional list that fails rests 10 minutes: named, not asked again meanwhile", async () => {
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+    at = { lat: 49.28, lng: -123.12 };
+    fail = new Set(["www.drivebc.ca"]);
+    expect((await findCameras(at)).unavailable).toEqual(["drivebc"]);
+    fail = new Set();
+    clock.mockReturnValue(t0 + 5 * 60_000);
+    expect((await findCameras(at)).unavailable).toEqual(["drivebc"]);
+    expect(hits("www.drivebc.ca")).toHaveLength(1);
+    clock.mockReturnValue(t0 + 11 * 60_000);
+    const r = await findCameras(at);
+    expect(r.unavailable).toEqual([]);
+    expect(r.cameras.some((c) => c.source === "drivebc")).toBe(true);
+    expect(hits("www.drivebc.ca")).toHaveLength(2);
+  });
+
+  it("a source slower than the shared 10 s deadline is named; its load goes on and fills the cache", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      at = { lat: 49.28, lng: -123.12 };
+      let finish!: () => void;
+      const slow = new Promise<void>((resolve) => (finish = resolve));
+      const normal = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (url, init) => {
+        if (new URL(url).host === "www.drivebc.ca") await slow;
+        return normal(url, init);
+      });
+      const pending = findCameras(at);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const r = await pending;
+      expect(r.unavailable).toEqual(["drivebc"]);
+      expect(r.cameras.some((c) => c.source === "osm")).toBe(true); // the others still show
+      finish();
+      const again = await findCameras(at); // joins the load still running: no second fetch
+      expect(again.unavailable).toEqual([]);
+      expect(again.cameras.some((c) => c.source === "drivebc")).toBe(true);
+      expect(hits("www.drivebc.ca")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("QLDTraffic: skipped silently without QLDTRAFFIC_API_KEY", async () => {
@@ -603,22 +654,47 @@ describe("findCameras regional open-data lists", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain("qld_test_key_456");
   });
 
-  it("TDX: anonymous by default; with a client, a bearer token from the secret sent in the POST body only", async () => {
-    at = { lat: 25.13, lng: 121.74 };
-    await findCameras(at);
-    expect((hits("tdx.transportdata.tw")[0][1]?.headers as Record<string, string>).Authorization).toBeUndefined();
-    clearCameraCache();
-    fetchMock.mockClear();
+  it("TDX: skipped silently without both TDX_CLIENT_ID and TDX_CLIENT_SECRET (anonymous calls get 401)", async () => {
+    at = KEELUNG;
+    expect((await findCameras(KEELUNG)).unavailable).toEqual([]);
+    vi.stubEnv("TDX_CLIENT_ID", "tdx-id");
+    expect((await findCameras(KEELUNG)).unavailable).toEqual([]);
+    expect(hits("tdx.transportdata.tw")).toHaveLength(0);
+  });
+
+  it("TDX: a bearer token from the secret (POST body only) with each list load; live streams, no thumbnail, cached a day", async () => {
+    at = KEELUNG;
     vi.stubEnv("TDX_CLIENT_ID", "tdx-id");
     vi.stubEnv("TDX_CLIENT_SECRET", "tdx_secret_789");
-    const r = await findCameras(at);
+    const r = await findCameras(KEELUNG);
     const [tokenCall, listCall] = hits("tdx.transportdata.tw");
     expect(new URL(tokenCall[0]).pathname).toBe("/auth/realms/TDXConnect/protocol/openid-connect/token");
+    expect(tokenCall[1]?.method).toBe("POST");
     expect(tokenCall[0]).not.toContain("tdx_secret_789");
     expect(String(tokenCall[1]?.body)).toContain("client_secret=tdx_secret_789");
     expect(listCall[0]).not.toContain("tdx_secret_789");
     expect((listCall[1]?.headers as Record<string, string>).Authorization).toBe("Bearer tdx_test_token_abcdef");
-    expect(r.cameras.some((c) => c.source === "tdx-tw")).toBe(true);
+    expect(listCall[1]?.redirect).toBe("error");
+    const tw = r.cameras.filter((c) => c.source === "tdx-tw");
+    expect(tw).toEqual([expect.objectContaining({ // the http stream is dropped
+      id: "tw-CCTV-N1-S-0.000-M", name: "國道1號 0K+000 S", kind: "image",
+      url: "https://cctvn.freeway.gov.tw/abs2mjpg/bmjpg?camera=10000", credit: expect.stringContaining("Freeway Bureau"),
+    })]);
+    expect(tw[0].thumb).toBeUndefined(); // an endless MJPEG stream is no thumbnail
+    expect(r.unavailable).toEqual([]);
+    await findCameras({ lat: 25.14, lng: 121.74 });
+    expect(hits("tdx.transportdata.tw")).toHaveLength(2); // token and list once: one cache for both
+  });
+
+  it("TDX: a token that fails names Taiwan, and the secret is never logged", async () => {
+    at = KEELUNG;
+    vi.stubEnv("TDX_CLIENT_ID", "tdx-id");
+    vi.stubEnv("TDX_CLIENT_SECRET", "tdx_secret_789");
+    fail = new Set(["tdx.transportdata.tw"]);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await findCameras(KEELUNG)).unavailable).toEqual(["tdx-tw"]);
+    expect(hits("tdx.transportdata.tw")).toHaveLength(1); // no list call without a token
+    expect(JSON.stringify(log.mock.calls)).not.toContain("tdx_secret_789");
   });
 
   it("allow-list: each new image host, camera paths only", () => {
@@ -675,6 +751,22 @@ describe("YouTube: game streams are not cameras", () => {
     ["German", { title: "Spiel live: Stadt Kamera", categoryId: "24" }],
     ["Mongolian", { title: "Тоглоом шууд: хотын камер", categoryId: "24" }],
     ["no camera word", { title: "Late night talk show LIVE", categoryId: "24" }],
+    ["not camera, camaraderie", { title: "Camaraderie live talk", categoryId: "24" }],
+    // Seen live near Los Angeles (2026-11-21): 24/7 mixes in the Music category say "city" in the description.
+    ["a music mix", { title: "Deep House Mix 2026 - Late Night Drive LA Vibes", description: "Late night drive through the city.", categoryId: "10" }],
+    // GTA roleplay spellings and other game worlds dressed up as city cameras.
+    ["GTA5RP", { title: "GTA5RP | Los Santos city patrol LIVE", categoryId: "24" }],
+    ["GTAVRP", { title: "GTAVRP city life live", categoryId: "24" }],
+    ["GTAO", { title: "GTAO city cruise live", categoryId: "24" }],
+    ["GTA Online", { title: "GTA Online city cam live", categoryId: "24" }],
+    ["GTA VI", { title: "GTA VI city streets live", categoryId: "24" }],
+    ["LSPD", { title: "LSPD patrol live | city streets", categoryId: "24" }],
+    ["RedM", { title: "RedM | Saint Denis city streets live", categoryId: "24" }],
+    ["Watch_Dogs", { title: "Watch_Dogs 2 live: San Francisco city cams", categoryId: "24" }],
+    ["BeamNG", { title: "BeamNG.drive live city traffic", categoryId: "24" }],
+    ["a game word in the tags", { title: "City streets live", tags: ["gaming"], categoryId: "24" }],
+    ["a game word in the channel", { title: "City streets live", channelTitle: "Night Owl Gaming", categoryId: "24" }],
+    ["Russian gaming stream", { title: "Игровой стрим: город, камера", categoryId: "24" }],
   ])("drops %s", async (_, snippet) => {
     expect(await run(snippet)).toEqual([]);
   });
@@ -689,6 +781,35 @@ describe("YouTube: game streams are not cameras", () => {
     ["Chinese", { title: "台北101 即時影像 直播 鏡頭", categoryId: "19" }],
     ["description only", { title: "Venice live", description: "Live cam on the Grand Canal", categoryId: "19" }],
     ["Beispiel is not Spiel", { title: "Stadt Kamera live, zum Beispiel der Marktplatz", categoryId: "19" }],
+    // Words that also mean other things are not game streams.
+    ["Apex, NC", { title: "Apex, NC downtown live cam", categoryId: "19" }],
+    ["Apex Mountain Resort", { title: "Apex Mountain Resort live webcam", categoryId: "19" }],
+    ["a cyberpunk city", { title: "Tokyo Shinjuku live cam - cyberpunk city at night", categoryId: "19" }],
+    ["city skylines in the description", { title: "Hong Kong Victoria Harbour live cam", description: "Enjoy great city skylines day and night.", categoryId: "19" }],
+    ["gaming in the description", { title: "Las Vegas Strip live cam", description: "The heart of Las Vegas gaming and shows.", categoryId: "19" }],
+    ["Twitch in the description", { title: "Venice Grand Canal live cam", description: "Also live on Twitch.", categoryId: "19" }],
+    ["warzone in the description", { title: "Kyiv Maidan live cam", description: "A city in a warzone, live.", categoryId: "19" }],
+    ["German match day", { title: "Webcam Volksparkstadion live: vor dem Spiel", categoryId: "19" }],
+    ["Russian playground", { title: "Веб-камера: детская игровая площадка", categoryId: "19" }],
+    ["Olympic Games in the description", { title: "Сочи веб-камера онлайн", description: "Олимпийский парк, где прошли Олимпийские игры 2014.", categoryId: "19" }],
+    ["Mongolian playground", { title: "Хүүхдийн тоглоомын талбай шууд камер", categoryId: "19" }],
+    ["Sejm RP", { title: "Warszawa kamera na żywo - Sejm RP", categoryId: "19" }],
+    ["GTAA airport", { title: "GTAA airport cam live", categoryId: "19" }],
+    ["Los Santos, Panama", { title: "Los Santos, Panama live cam", categoryId: "19" }],
+    ["Times Square cam", { title: "Times Square live cam", categoryId: "19" }],
+    ["Stuttgart", { title: "Stuttgart live cam", categoryId: "19" }],
+    // Camera words in more languages.
+    ["Japanese", { title: "【LIVE】大阪 道頓堀 ライブカメラ", categoryId: "19" }],
+    ["Korean", { title: "서울 광화문 라이브캠", categoryId: "19" }],
+    ["Spanish", { title: "Cámara en vivo Plaza Mayor Madrid", categoryId: "19" }],
+    ["Portuguese", { title: "Câmera ao vivo Copacabana Rio", categoryId: "19" }],
+    ["French", { title: "Caméra en direct - Vieux-Port de Marseille", categoryId: "19" }],
+    ["Italian", { title: "Telecamera in diretta Piazza San Marco", categoryId: "19" }],
+    // Seen live and dropped before (2026-11-21): Taoyuan airport, a Finnish weather camera.
+    ["Taiwanese 即時影像", { title: "TPE 4K桃園國際機場 南跑道觀景台即時影像", categoryId: "19" }],
+    ["Finnish compound", { title: "Larukite kelikamera", categoryId: "17" }],
+    ["German compound", { title: "Wetterkamera Zugspitze live", categoryId: "19" }],
+    ["Polish plural", { title: "Kamery Kraków na żywo", categoryId: "19" }],
   ])("keeps %s", async (_, snippet) => {
     expect(await run(snippet)).toHaveLength(1);
   });
@@ -759,6 +880,16 @@ describe("find_cameras tool", () => {
       const out = (await findCamerasTool.run({}, ctx({ ...where, source }))) as { note: string };
       expect(out.note).toContain("only in the Aspire app");
     }
+  });
+
+  it("tells the model Taiwan's freeway images are live streams, only when they are shown", async () => {
+    vi.stubEnv("TDX_CLIENT_ID", "tdx-id");
+    vi.stubEnv("TDX_CLIENT_SECRET", "tdx_secret_789");
+    at = KEELUNG;
+    const taiwan = (await findCamerasTool.run({}, ctx({ source: "web", device: { memory: {}, reminders: [], location: KEELUNG } }))) as { note: string };
+    expect(taiwan.note).toContain("Taiwan freeway images (MOTC Freeway Bureau) are live MJPEG video streams");
+    const erdenet = (await findCamerasTool.run({}, ctx({ source: "web", device: { memory: {}, reminders: [], location: ERDENET } }))) as { note: string };
+    expect(erdenet.note).not.toContain("Taiwan");
   });
 
   it("never says 'no cameras' when a source did not answer", async () => {
