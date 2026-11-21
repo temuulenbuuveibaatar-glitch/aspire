@@ -20,9 +20,12 @@ import {
   WandSparkles,
 } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { HTML_LANG, isLang, LANG_NAMES, LANGS, type Lang } from "@/lib/lang";
 import { SITE_URL as ORIGIN } from "@/lib/site";
+import type { LandingWeather } from "@/lib/landing-weather";
 import { LANDING_TEXT, type LandingText } from "./LandingCopy";
+import { LandingSky } from "./LandingSky";
 
 const OG_LOCALE: Record<Lang, string> = { mn: "mn_MN", zh: "zh_CN", en: "en_US", ru: "ru_RU", de: "de_DE" };
 const FEATURE_ICONS = [Radio, Languages, WandSparkles, Sparkles, MessagesSquare, ShieldCheck];
@@ -124,7 +127,7 @@ const SECONDARY =
   "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-line-strong bg-surface-2 px-6 font-medium text-ink hover:bg-surface-3";
 const H2 = "text-greeting text-ink";
 
-export function Landing({ lang }: { lang?: Lang }) {
+export function Landing({ lang, weather }: { lang?: Lang; weather?: Promise<LandingWeather | null> }) {
   const l = landingLang(lang);
   const t = LANDING_TEXT[l];
   return (
@@ -132,6 +135,12 @@ export function Landing({ lang }: { lang?: Lang }) {
       {/* The root layout renders <html lang="en">; set the document language for JS clients
           (screen readers, Google). The div lang above covers clients without JS. */}
       <script dangerouslySetInnerHTML={{ __html: `document.documentElement.lang=${JSON.stringify(HTML_LANG[l])}` }} />
+      {/* The visitor's own sky behind the whole page. The headline never waits for it. */}
+      {weather && (
+        <Suspense fallback={null}>
+          <LandingSky weather={weather} />
+        </Suspense>
+      )}
       <a href="#main" className="skip-link">
         {t.skip}
       </a>
@@ -173,10 +182,15 @@ export function Landing({ lang }: { lang?: Lang }) {
         {/* 1. Hero */}
         <section aria-labelledby="hero-title" className="grid items-center gap-10 py-10 sm:py-16 md:grid-cols-[1.15fr_0.85fr]">
           <div>
+            {weather && (
+              <Suspense fallback={null}>
+                <SkyChip weather={weather} />
+              </Suspense>
+            )}
             <p className="text-label text-accent">{t.eyebrow}</p>
             {/* The brand sits in the h1 so "Aspire" + keyword searches match title, h1 and body. */}
             <h1 id="hero-title" className="mt-3 text-city text-ink">
-              <span className="block font-display text-wordmark text-accent uppercase">Aspire</span>{" "}
+              <span className="sr-only">Aspire</span>{" "}
               {t.title}
             </h1>
             <p className="mt-5 max-w-[38rem] text-lead text-ink-muted">{t.lead}</p>
@@ -332,6 +346,21 @@ export function Landing({ lang }: { lang?: Lang }) {
       </footer>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(l) }} />
     </div>
+  );
+}
+
+/** What the background shows: the real reading for the visitor's area (or a preview via ?sky= and ?hour=). */
+async function SkyChip({ weather }: { weather: Promise<LandingWeather | null> }) {
+  const w = await weather;
+  if (!w) return null;
+  const t = Math.round(w.tempC);
+  return (
+    <p className="v6-chip mb-4 w-fit gap-2 px-3 py-1 text-meta text-ink">
+      <span aria-hidden className="size-1.5 rounded-full bg-accent" />
+      <span>{w.place}</span>
+      <span className="num">{`${t < 0 ? "−" : ""}${Math.abs(t)}°`}</span>
+      <span className="text-ink-muted">{w.preview ? "Preview" : "Open-Meteo"}</span>
+    </p>
   );
 }
 

@@ -41,7 +41,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     signIn: "Sign in",
     eyebrow: "A voice assistant for your city",
     title: "Your city, in the moment.",
-    lead: "Ask Aspire anything — live buses, weather, traffic, news — by voice in Mongolian, English, Chinese, Russian or German.",
+    lead: "Ask Aspire anything: live buses, weather, traffic, news, by voice in Mongolian, English, Chinese, Russian or German.",
     cta: "Get started",
     how: "See how it works",
     mock: {
@@ -115,7 +115,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     signIn: "Нэвтрэх",
     eyebrow: "Таны хотын дуут туслах",
     title: "Таны хот, яг одоо.",
-    lead: "Aspire-аас юу ч асуу — автобус, цаг агаар, замын хөдөлгөөн, мэдээ — монгол, англи, хятад, орос, герман хэлээр дуугаар.",
+    lead: "Aspire-аас юу ч асуу: автобус, цаг агаар, замын хөдөлгөөн, мэдээ, монгол, англи, хятад, орос, герман хэлээр дуугаар.",
     cta: "Эхлэх",
     how: "Хэрхэн ажилладгийг үзэх",
     mock: {
@@ -189,7 +189,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     signIn: "登录",
     eyebrow: "你所在城市的语音助手",
     title: "你的城市，此时此刻。",
-    lead: "向 Aspire 问任何事——实时公交、天气、交通、新闻——用蒙古语、英语、中文、俄语或德语开口即可。",
+    lead: "向 Aspire 问任何事：实时公交、天气、交通、新闻，用蒙古语、英语、中文、俄语或德语开口即可。",
     cta: "开始使用",
     how: "了解工作原理",
     mock: {
@@ -262,8 +262,8 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     langLabel: "Язык",
     signIn: "Войти",
     eyebrow: "Голосовой помощник для вашего города",
-    title: "Ваш город — прямо сейчас.",
-    lead: "Спросите Aspire о чём угодно — автобусы в реальном времени, погода, пробки, новости — голосом на монгольском, английском, китайском, русском или немецком.",
+    title: "Ваш город прямо сейчас.",
+    lead: "Спросите Aspire о чём угодно: автобусы в реальном времени, погода, пробки, новости, голосом на монгольском, английском, китайском, русском или немецком.",
     cta: "Начать",
     how: "Как это работает",
     mock: {
@@ -337,7 +337,7 @@ export const LANDING_TEXT: Record<Lang, LandingText> = {
     signIn: "Anmelden",
     eyebrow: "Ein Sprachassistent für deine Stadt",
     title: "Deine Stadt, genau jetzt.",
-    lead: "Frag Aspire alles — Busse live, Wetter, Verkehr, Nachrichten — per Stimme auf Mongolisch, Englisch, Chinesisch, Russisch oder Deutsch.",
+    lead: "Frag Aspire alles: Busse live, Wetter, Verkehr, Nachrichten, per Stimme auf Mongolisch, Englisch, Chinesisch, Russisch oder Deutsch.",
     cta: "Loslegen",
     how: "So funktioniert es",
     mock: {

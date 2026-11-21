@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Assistant from "@/components/Assistant";
 import { Landing, landingLang, landingMetadata } from "@/components/landing/Landing";
 import { requireUser } from "@/lib/auth";
+import { landingWeather } from "@/lib/landing-weather";
 import { langFrom, type Lang } from "@/lib/lang";
 
 // "/" is public (lib/auth.ts isPublicPath): signed-out visitors and search engines get the landing
@@ -30,6 +31,9 @@ export default function Home({ searchParams }: PageProps<"/">) {
 
 async function Gate({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   if (await requireUser()) return <Assistant />;
-  const { lang } = await pageLang(searchParams);
-  return <Landing lang={lang} />;
+  const [{ lang }, { sky, hour }, head] = await Promise.all([pageLang(searchParams), searchParams, headers()]);
+  // The weather where the visitor roughly is (lib/landing-weather.ts; ?sky= and ?hour= preview a look).
+  // Started here and passed on WITHOUT awaiting it: the headline never waits for it, Landing reads
+  // the promise inside its own Suspense boundary.
+  return <Landing lang={lang} weather={landingWeather(head, { sky, hour })} />;
 }

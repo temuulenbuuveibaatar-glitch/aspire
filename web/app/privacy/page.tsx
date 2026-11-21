@@ -79,6 +79,12 @@ export default function Privacy() {
           байршлыг <b>Орхон ТКХДТ</b>-ийн нээлттэй мэдээллээс авна; тэд руу таны байршил огт илгээгдэхгүй. Төхөөрөмжийн байршлыг
           Тохиргоо эсвэл хөтчийн тохиргооноос хэзээ ч унтрааж болно.
         </p>
+        <p>
+          <b>Нэвтрэхээс өмнөх нүүр хуудас</b> таны байгаа орчмын цаг агаарыг харуулна. Үүнд зөвхөн сүлжээний ойролцоо байршлыг (IP
+          хаягаас Vercel тодорхойлсон хот) ашиглана: ойролцоогоор 11 км хүртэл бөөрөнхийлсөн байршлыг цаг агаарын мэдээ авахын тулд
+          Open-Meteo руу илгээнэ. Энэ байршлыг хадгалахгүй, тантай холбохгүй; цаг агаарын мэдээ нь серверийн санах ойд 10 минут хүртэл
+          байгаад устана. Сүлжээний байршил тодорхойгүй бол Эрдэнэт хотын цаг агаарыг харуулна.
+        </p>
 
         <h2>Гудамжны хаяг</h2>
         <p>
@@ -306,6 +312,13 @@ export default function Privacy() {
           positions in Erdenet come from the open feed of <b>Орхон ТКХДТ</b>, the city&apos;s traffic camera service; your location
           is never sent to it. You can turn device location off at any time in Settings or in your browser settings.
         </p>
+        <p>
+          <b>The opening page</b> (the public home page you see before you sign in) shows the weather for your approximate area. It
+          uses only your approximate network location (the city Vercel derives from your IP address): the position, rounded to about
+          11 km, is sent to Open-Meteo to get the weather reading. It is not stored and not linked to you; the reading itself stays in
+          server memory for up to 10 minutes and is then discarded. If your network location is not known, the page shows the weather
+          in Erdenet instead.
+        </p>
 
         <h2>Street address</h2>
         <p>
@@ -491,6 +504,11 @@ export default function Privacy() {
             Google 的位置约为 1 公里精度；开启位置共享并询问路线或附近地点时，Google 会收到约 100 米精度的位置。背景照片是按城市名在 Wikimedia Commons 上找到的城市照片，并注明作者；额尔登特的实时公交数据来自 Орхон ТКХДТ。
           </li>
           <li>
+            登录前看到的首页会显示您所在大致区域的天气。这里只使用网络大致位置（Vercel 根据您的 IP 地址判断的城市）：只把约 11
+            公里精度的位置发送给 Open-Meteo 以获取天气数据。该位置不会保存，也不会与您关联；天气数据在服务器内存中最多保留 10
+            分钟。无法判断网络位置时，显示额尔登特的天气。
+          </li>
+          <li>
             公共交通数据来自 Transitous（附近发车只发送约 1 公里精度的位置，路线的起点和终点约 100 米精度）。街道地址由 Google Geocoding 或
             OpenStreetMap Nominatim 根据约 11 米精度的位置查询，不保存到数据库。新闻来自 newsdata.io。
           </li>
@@ -542,6 +560,13 @@ export default function Privacy() {
             передаётся позиция с точностью около 1 км; если при включённой передаче местоположения вы спрашиваете маршрут или места
             рядом, Google получает позицию с точностью около 100 м. Фоновое фото города находится на Wikimedia Commons по названию города
             и подписывается автором; данные об автобусах Эрдэнэта предоставляет Орхон ТКХДТ.
+          </li>
+          <li>
+            Главная страница, которую вы видите до входа, показывает погоду для вашего примерного района. Для этого используется только
+            приблизительное сетевое местоположение (город, который Vercel определяет по вашему IP-адресу): в Open-Meteo отправляется
+            позиция, округлённая примерно до 11 км, чтобы получить данные о погоде. Она не хранится и не связывается с вами; сами
+            данные о погоде остаются в памяти сервера не дольше 10 минут. Если сетевое местоположение неизвестно, показывается погода
+            в Эрдэнэте.
           </li>
           <li>
             Общественный транспорт: Transitous (для ближайших отправлений позиция с точностью около 1 км, для маршрута начало и конец
@@ -601,6 +626,12 @@ export default function Privacy() {
             an Google ein auf etwa 1 km gerundeter Standort; fragen Sie bei eingeschalteter Standortfreigabe nach Routen oder Orten in der
             Nähe, erhält Google Ihren Standort auf etwa 100 m genau. Das Hintergrundfoto der Stadt wird auf Wikimedia Commons über den
             Stadtnamen gefunden, mit Nennung des Urhebers; die Live-Busdaten für Erdenet liefert Орхон ТКХДТ.
+          </li>
+          <li>
+            Die Startseite, die Sie vor der Anmeldung sehen, zeigt das Wetter für Ihre ungefähre Umgebung. Dafür wird nur der ungefähre
+            Netzwerkstandort genutzt (die Stadt, die Vercel aus Ihrer IP-Adresse ableitet): Der auf etwa 11 km gerundete Standort geht
+            an Open-Meteo, um die Wetterdaten abzurufen. Er wird nicht gespeichert und nicht mit Ihnen verknüpft; die Wetterdaten selbst
+            bleiben höchstens 10 Minuten im Serverspeicher. Ist der Netzwerkstandort unbekannt, zeigt die Seite das Wetter in Erdenet.
           </li>
           <li>
             Nahverkehr: Transitous (für Abfahrten in der Nähe ein auf etwa 1 km gerundeter Standort, für Routen Start und Ziel auf etwa
